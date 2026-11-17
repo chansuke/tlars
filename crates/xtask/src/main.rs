@@ -31,6 +31,7 @@ enum Task {
     BenchRun(bench::RunArgs),
     BenchCompare { baseline: PathBuf, candidate: PathBuf },
     Jj2rsSurvey(PathBuf),
+    Jj2rsEmit(PathBuf),
 }
 
 const USAGE: &str = "usage: xtask gen-fidelity [--check]\n       xtask bench run [--engine tlc|tlars] [--workers N] [--repeat N] [--filter TEXT] [--timeout SECS]\n       xtask bench compare <baseline.jsonl> <candidate.jsonl>";
@@ -42,6 +43,7 @@ fn parse_args(args: &[String]) -> Result<Task, String> {
         ["gen-fidelity", "--check"] => Ok(Task::GenFidelity { check: true }),
         ["bench", "compare", a, b] => Ok(Task::BenchCompare { baseline: a.into(), candidate: b.into() }),
         ["jj2rs", "survey", file] => Ok(Task::Jj2rsSurvey(file.into())),
+        ["jj2rs", "emit", dir] => Ok(Task::Jj2rsEmit(dir.into())),
         ["bench", "run", rest @ ..] => parse_bench_run(rest).map(Task::BenchRun),
         _ => Err(USAGE.into()),
     }
@@ -158,6 +160,7 @@ fn main() {
         Task::BenchRun(args) => bench::run(&workspace_root(), &args),
         Task::BenchCompare { baseline, candidate } => bench::compare(&baseline, &candidate),
         Task::Jj2rsSurvey(file) => jj2rs::survey(&file),
+        Task::Jj2rsEmit(dir) => jj2rs::emit(&dir, &tlaplus_src()?, &workspace_root().join("crates/tlars-sany/src/parser/generated.rs")),
     });
     if let Err(e) = result {
         eprintln!("{e}");

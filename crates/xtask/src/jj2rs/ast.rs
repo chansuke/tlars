@@ -12,17 +12,20 @@ pub(crate) struct Method {
     pub(crate) ret: Type,
     pub(crate) params: Vec<(Type, String)>,
     pub(crate) body: Vec<Stmt>,
-    pub(crate) line: usize,
+    pub(crate) is_static: bool,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) enum Stmt {
-    Local { ty: Type, vars: Vec<(String, Option<Expr>)> },
+    /// `T a, b[] = ...;`: each variable carries its own extra array dimensions.
+    Local { ty: Type, vars: Vec<Var> },
     Expr(Expr),
     If { cond: Expr, then: Box<Stmt>, els: Option<Box<Stmt>> },
     While { cond: Expr, body: Box<Stmt> },
     DoWhile { body: Box<Stmt>, cond: Expr },
     For { init: Vec<Stmt>, cond: Option<Expr>, update: Vec<Expr>, body: Box<Stmt> },
+    /// `for (T x : array)`.
+    ForEach { ty: Type, name: String, iter: Expr, body: Box<Stmt> },
     Switch { scrutinee: Expr, arms: Vec<SwitchArm> },
     Labeled { label: String, body: Box<Stmt> },
     Break(Option<String>),
@@ -32,6 +35,13 @@ pub(crate) enum Stmt {
     Try { body: Vec<Stmt>, catches: Vec<(Type, String, Vec<Stmt>)>, finally: Option<Vec<Stmt>> },
     Block(Vec<Stmt>),
     Empty,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct Var {
+    pub(crate) name: String,
+    pub(crate) extra_dims: usize,
+    pub(crate) init: Option<Expr>,
 }
 
 /// `case A: case B: stmts` (labels empty for `default:`).
@@ -64,5 +74,4 @@ pub(crate) enum Expr {
     Binary(&'static str, Box<Expr>, Box<Expr>),
     Assign(&'static str, Box<Expr>, Box<Expr>),
     Cond(Box<Expr>, Box<Expr>, Box<Expr>),
-    InstanceOf(Box<Expr>, Type),
 }
