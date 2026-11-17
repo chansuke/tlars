@@ -209,6 +209,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 ## Risks
 
 - jj2rs の snippet 表 (約 300) が扱える量か。M1 冒頭で spike。
+  - spike 結果 (2026-11-17): JavaCC 4.0 で生成した 6 ファイル (17,562 行) の全 618 メソッドを Java 部分集合パーサーで AST 化できた (`xtask jj2rs survey`)。手書きは `.jj` 冒頭のヘルパー 19 メソッド (847 行) と semantic action が呼ぶ約 45 の API (SyntaxTreeNode、OperatorStack、JunctionListContext、proof level 等) に限られる。snippet 表方式はやめ、semantic action も同じ変換器で Rust に落とす方針に変更。
 - `Arc` トラフィックが JIT 済み TLC に対し許容できるか。M3.5 で計測。
 - stack overflow の深さは `-Xss2m` の frame サイズ依存で一致させられない見込み。
 
