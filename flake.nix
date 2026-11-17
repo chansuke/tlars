@@ -9,9 +9,14 @@
       url = "github:tlaplus/tlaplus/bc1b506bdcad80bb518bf3776a9161c34ff0fc4c";
       flake = false;
     };
+    # Benchmark and smoke-test models with recorded state counts (MIT). Read by `xtask bench`.
+    tlaplus-examples = {
+      url = "github:tlaplus/Examples/334c3983a2f44ac78fce89d1d20aa79ceb3e6987";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, tlaplus }:
+  outputs = { self, nixpkgs, flake-utils, tlaplus, tlaplus-examples }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -31,9 +36,12 @@
             tlc
             # Profiling: `cargo build --profile profiling`, then `samply record` or `perf record`.
             pkgs.samply
+            # GNU time: `xtask bench` records peak RSS with it.
+            pkgs.time
           ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.perf ];
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
           TLAPLUS_SRC = "${tlaplus}";
+          TLAPLUS_EXAMPLES = "${tlaplus-examples}";
         };
 
         packages.tlc = tlc;

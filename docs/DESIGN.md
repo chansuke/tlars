@@ -230,6 +230,8 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 - `nix develop`: Rust、JDK 21、samply/perf、bc1b506 から組み立てた `tlc`/`tla2tools-java`、`TLAPLUS_SRC`。
 - `cargo run -p xtask -- gen-fidelity [--check]`: FP64.Polys、EC/MP カタログ、SANY ErrorCode を固定版ソースから生成。
 - golden の再生成手順は `tools/golden/*` の先頭コメント。
+- ベンチマーク: `cargo run --release -p xtask -- bench run --engine tlc|tlars [--workers N] [--repeat N] [--filter TEXT]`。対象は `bench/suite.txt` (tlaplus/Examples の cfg パス)、期待値は Examples の manifest から読み、結果は `bench/results/*.jsonl` (git 管理外)。`bench compare <base> <cand>` で比較。基準値は `bench/baselines/` に置く。
+- プロファイル: `cargo build --profile profiling -p tlars` の後に `samply record` か `perf record`。
 
 ## Next implementation step
 

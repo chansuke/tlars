@@ -5,7 +5,10 @@
 //!   xtask gen-fidelity [--check]   class-static UniqueStrings, BuiltInOperators, Operators +
 //!                                  synonyms, SyntaxTreeConstants names, StandardModules/*.tla,
 //!                                  FP64.Polys, EC/MP catalogue cross-check
-//! Implemented so far: `gen-fidelity` (FP64.Polys, EC/MP message catalog, SANY ErrorCode). Planned:
+//!   xtask bench run|compare      end-to-end benchmarks over tlaplus/Examples (see bench.rs)
+//!
+//! Implemented so far: `gen-fidelity` (FP64.Polys, EC/MP message catalog, SANY ErrorCode)
+//! and `bench`. Planned:
 //!   xtask jj2rs [--check]          TLAplusParser.java -> tlars-sany/src/parser/generated.rs
 //!                                  (+ jj_la1 expected-token tables); unknown semantic-action
 //!                                  snippets fail generation.
@@ -16,23 +19,58 @@
 //!   xtask intern-dump-diff <dump>  compare tlars's intern sequence with an instrumented TLC
 //!                                  InternTable dump for a spec
 
+mod bench;
 mod catalog;
+mod json;
 
 use std::path::{Path, PathBuf};
 
 enum Task {
     GenFidelity { check: bool },
+    BenchRun(bench::RunArgs),
+    BenchCompare { baseline: PathBuf, candidate: PathBuf },
 }
 
+const USAGE: &str = "usage: xtask gen-fidelity [--check]\n       xtask bench run [--engine tlc|tlars] [--workers N] [--repeat N] [--filter TEXT] [--timeout SECS]\n       xtask bench compare <baseline.jsonl> <candidate.jsonl>";
+
 fn parse_args(args: &[String]) -> Result<Task, String> {
-    match args {
-        [cmd, rest @ ..] if cmd == "gen-fidelity" => match rest {
-            [] => Ok(Task::GenFidelity { check: false }),
-            [flag] if flag == "--check" => Ok(Task::GenFidelity { check: true }),
-            _ => Err("usage: xtask gen-fidelity [--check]".into()),
-        },
-        _ => Err("usage: xtask gen-fidelity [--check]".into()),
+    let strs: Vec<&str> = args.iter().map(String::as_str).collect();
+    match strs.as_slice() {
+        ["gen-fidelity"] => Ok(Task::GenFidelity { check: false }),
+        ["gen-fidelity", "--check"] => Ok(Task::GenFidelity { check: true }),
+        ["bench", "compare", a, b] => Ok(Task::BenchCompare { baseline: a.into(), candidate: b.into() }),
+        ["bench", "run", rest @ ..] => parse_bench_run(rest).map(Task::BenchRun),
+        _ => Err(USAGE.into()),
     }
+}
+
+fn parse_bench_run(mut rest: &[&str]) -> Result<bench::RunArgs, String> {
+    let mut args = bench::RunArgs {
+        engine: bench::Engine::Tlc,
+        workers: 1,
+        repeat: 1,
+        filter: None,
+        timeout: std::time::Duration::from_secs(600),
+    };
+    let number = |v: &str| v.parse::<u64>().map_err(|e| format!("{v}: {e}"));
+    while let [flag, value, tail @ ..] = rest {
+        match *flag {
+            "--engine" => {
+                args.engine = match *value {
+                    "tlc" => bench::Engine::Tlc,
+                    "tlars" => bench::Engine::Tlars,
+                    _ => return Err(format!("unknown engine {value}")),
+                }
+            }
+            "--workers" => args.workers = number(value)? as usize,
+            "--repeat" => args.repeat = number(value)?.max(1) as usize,
+            "--filter" => args.filter = Some(value.to_string()),
+            "--timeout" => args.timeout = std::time::Duration::from_secs(number(value)?),
+            _ => return Err(USAGE.into()),
+        }
+        rest = tail;
+    }
+    if rest.is_empty() { Ok(args) } else { Err(USAGE.into()) }
 }
 
 /// The pinned tlaplus checkout. The flake's devShell sets it from `flake.lock`.
@@ -114,6 +152,8 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = parse_args(&args).and_then(|task| match task {
         Task::GenFidelity { check } => gen_fidelity(&tlaplus_src()?, check),
+        Task::BenchRun(args) => bench::run(&workspace_root(), &args),
+        Task::BenchCompare { baseline, candidate } => bench::compare(&baseline, &candidate),
     });
     if let Err(e) = result {
         eprintln!("{e}");

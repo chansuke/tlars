@@ -1,0 +1,20 @@
+# End-to-end benchmark suite: model .cfg paths in tlaplus/Examples (flake input
+# `tlaplus-examples`). Module, expected result and state counts come from the Examples
+# manifests. Chosen for size (TLC seconds to a minute), variety of value kinds and actions,
+# and no CommunityModules or TLAPS dependency (neither ships with TLC). Excluded for that
+# reason: Bakery-Boulangerie/MCBakery, TeachingConcurrency/SimpleRegular (EXTENDS TLAPS).
+specifications/transaction_commit/PaxosCommit.cfg
+specifications/lamport_mutex/MCLamportMutex.cfg
+specifications/NanoBlockchain/MCNanoMedium.cfg
+specifications/CoffeeCan/CoffeeCan1000Beans.cfg
+specifications/btree/MCbtree.cfg
+specifications/MultiPaxos-SMR/MultiPaxos_MC_small.cfg
+specifications/SlushProtocol/SlushSmall.cfg
+specifications/Disruptor/MCDisruptor_MPMC.cfg
+specifications/dag-consensus/TLCSailfish1.cfg
+specifications/GameOfLife/GameOfLife.cfg
+specifications/acp/ACP_SB_TLC.cfg
+specifications/ewd426/TokenRing.cfg
+specifications/Chameneos/Chameneos.cfg
+specifications/SimplifiedFastPaxos/FastPaxos.cfg
+specifications/allocator/AllocatorImplementation.cfg
