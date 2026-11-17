@@ -1,0 +1,56 @@
+-workers
+-workers	0
+-workers	x
+-workers	-1	Spec.tla
+-fp	131
+-fp	-1
+-fp	abc
+-fp
+-fpbits	31
+-fpbits	x
+-fpmem	-1
+-fpmem	abc
+-depth	x
+-seed	1.5
+-aril
+-maxSetSize	0
+-maxSetSize	x
+-coverage	-1
+-coverage	x
+-checkpoint	x
+-dfid	-2
+-dfid	x
+-config
+-lncheck
+-metadir
+-recover
+-userFile
+-teSpecOutDir
+-suppressMessages
+-suppressMessages	99999
+-suppressMessages	abc
+-suppressMessages	2189,
+-suppressMessages	4003
+-messagesAsErrors	x
+-suppressMessages	2189,2110	-messagesAsErrors	2110,2189
+-suppressMessages	2201,2189,2185,2110,1000	-messagesAsErrors	1000,2201,2110,2185,2189
+-nowarning	-suppressMessages	2189
+-bogus
+-tool	-bogus
+-bogus	-tool
+A.tla	B.tla
+-tool
+-invlevel	x
+-postCondition	Foo
+-postCondition	!Op
+-postCondition	M.x!Op
+-postCondition	M!
+-postCondition	M!a.b
+-postCondition	a!b!c
+-loadTrace	xml	f
+-loadTrace	tlc
+-dumpTrace	xml	f
+-dumpTrace	json
+-dump	class,foo.Bar
+-simulate	file=x
+-inv

@@ -1,0 +1,56 @@
+-workers1TLC2 Version 2026.11.17.132207\nError: Error: expect an integer or 'auto' for -workers option.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-workers	01TLC2 Version 2026.11.17.132207\nError: Error: at least one worker required.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-workers	x1TLC2 Version 2026.11.17.132208\nError: Error: worker number or 'auto' required. But encountered x\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-workers	-1	Spec.tla1TLC2 Version 2026.11.17.132208\nError: Error: at least one worker required.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-fp	1311TLC2 Version 2026.11.17.132208\nError: Error: The number for -fp must be between 0 and 130 (inclusive).\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-fp	-11TLC2 Version 2026.11.17.132208\nError: Error: The number for -fp must be between 0 and 130 (inclusive).\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-fp	abc1TLC2 Version 2026.11.17.132208\nError: Error: A number for -fp is required. But encountered abc\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-fp1TLC2 Version 2026.11.17.132209\nError: Error: expect an integer for -fp option.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-fpbits	311TLC2 Version 2026.11.17.132209\nError: Error: Value in interval [0, 30] for fpbits required. But encountered 31\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-fpbits	x1TLC2 Version 2026.11.17.132209\nError: Error: An integer for fpbits required. But encountered x\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-fpmem	-11TLC2 Version 2026.11.17.132209\nError: Error: An positive integer or a fraction for fpset memory size/percentage required. But encountered -1\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-fpmem	abc1TLC2 Version 2026.11.17.132210\nError: Error: An positive integer or a fraction for fpset memory size/percentage required. But encountered abc\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-depth	x1TLC2 Version 2026.11.17.132210\nError: Error: An integer for trace length required. But encountered x\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-seed	1.51TLC2 Version 2026.11.17.132210\nError: Error: An integer for seed required. But encountered 1.5\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-aril1TLC2 Version 2026.11.17.132210\nError: Error: aril required.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-maxSetSize	01TLC2 Version 2026.11.17.132210\nError: Error: Value in interval [0, 2147483647] for maxSetSize required. But encountered 0\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-maxSetSize	x1TLC2 Version 2026.11.17.132211\nError: Error: An integer for maxSetSize required. But encountered x\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-coverage	-11TLC2 Version 2026.11.17.132211\nError: Error: expect a nonnegative integer for -coverage option.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-coverage	x1TLC2 Version 2026.11.17.132211\nError: Error: An integer for coverage report interval required. But encountered x\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-checkpoint	x1TLC2 Version 2026.11.17.132211\nError: Error: An integer for checkpoint interval is required. But encountered x\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-dfid	-21TLC2 Version 2026.11.17.132211\nError: Error: expect a nonnegative integer for -dfid option.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-dfid	x1TLC2 Version 2026.11.17.132212\nError: Error: expect a nonnegative integer for -dfid option. But encountered x\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-config1TLC2 Version 2026.11.17.132212\nError: Error: expect a file name for -config option.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-lncheck1TLC2 Version 2026.11.17.132212\nError: Error: expect a strategy such as final for -lncheck option.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-metadir1TLC2 Version 2026.11.17.132212\nError: Error: need to specify the metadata directory.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-recover1TLC2 Version 2026.11.17.132212\nError: Error: need to specify the metadata directory for recovery.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-userFile1TLC2 Version 2026.11.17.132213\nError: Error: need to specify the full qualified file.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-teSpecOutDir1TLC2 Version 2026.11.17.132213\nError: Error: expected a path for -teSpecOutDir option.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-suppressMessages1TLC2 Version 2026.11.17.132213\nError: Error: -suppressMessages requires a comma-separated list of message codes.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-suppressMessages	999991TLC2 Version 2026.11.17.132213\nError: Error: unknown message code: 99999\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-suppressMessages	abc1TLC2 Version 2026.11.17.132213\nError: Error: For input string: "abc"\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-suppressMessages	2189,1TLC2 Version 2026.11.17.132214\nError: Error: Missing input TLA+ module.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-suppressMessages	40031TLC2 Version 2026.11.17.132214\nError: Error: code 4003 is an error and cannot be suppressed.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-messagesAsErrors	x1TLC2 Version 2026.11.17.132214\nError: Error: For input string: "x"\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-suppressMessages	2189,2110	-messagesAsErrors	2110,21891TLC2 Version 2026.11.17.132214\nError: Error: The following codes were set to both -suppressMessages and -messagesAsErrors: [2189, 2110]\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-suppressMessages	2201,2189,2185,2110,1000	-messagesAsErrors	1000,2201,2110,2185,21891TLC2 Version 2026.11.17.132214\nError: Error: The following codes were set to both -suppressMessages and -messagesAsErrors: [1000, 2201, 2185, 2189, 2110]\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-nowarning	-suppressMessages	21891TLC2 Version 2026.11.17.132215\nError: Error: -nowarning already suppresses all warnings, making -suppressMessages redundant. Remove -nowarning to suppress only the specified messages, or remove -suppressMessages to suppress all warnings.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-bogus1TLC2 Version 2026.11.17.132215\nError: Error: unrecognized option: -bogus\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-tool	-bogus1@!@!@STARTMSG 2262:0 @!@!@\nTLC2 Version 2026.11.17.132215\n@!@!@ENDMSG 2262 @!@!@\n@!@!@STARTMSG 1102:1 @!@!@\nError: unrecognized option: -bogus\nUsage: java tlc2.TLC [-help] [-option] inputfile\n@!@!@ENDMSG 1102 @!@!@\n
+-bogus	-tool1TLC2 Version 2026.11.17.132215\nError: Error: unrecognized option: -bogus\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+A.tla	B.tla1TLC2 Version 2026.11.17.132215\nError: Error: more than one input files: A and B.tla\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-tool1@!@!@STARTMSG 2262:0 @!@!@\nTLC2 Version 2026.11.17.132216\n@!@!@ENDMSG 2262 @!@!@\n@!@!@STARTMSG 1102:1 @!@!@\nError: Missing input TLA+ module.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n@!@!@ENDMSG 1102 @!@!@\n
+-invlevel	x1TLC2 Version 2026.11.17.132216\nError: Error: An integer for -invlevel required. But encountered x\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-postCondition	Foo1TLC2 Version 2026.11.17.132216\nError: Module!Operator for postCondition required. Encountered: Foo\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-postCondition	!Op1TLC2 Version 2026.11.17.132216\nError: Module name for postCondition required. Encountered: !Op\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-postCondition	M.x!Op1TLC2 Version 2026.11.17.132217\nError: Module name for postCondition must not contain a dot. Encountered: M.x\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-postCondition	M!1TLC2 Version 2026.11.17.132217\nError: Module!Operator for postCondition must be of the form module!operator. Encountered: M!\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-postCondition	M!a.b1TLC2 Version 2026.11.17.132217\nError: Operator name for postCondition must not contain a dot. Encountered: a.b\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-postCondition	a!b!c1TLC2 Version 2026.11.17.132217\nError: Module!Operator for postCondition must be of the form module!operator. Encountered: a!b!c\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-loadTrace	xml	f1TLC2 Version 2026.11.17.132217\nError: Error: Unknown format xml given to -loadTrace.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-loadTrace	tlc1TLC2 Version 2026.11.17.132218\nError: Error: A format and a file name for loading traces required.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-dumpTrace	xml	f1TLC2 Version 2026.11.17.132218\nError: Error: Unknown format xml given to -dumpTrace.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-dumpTrace	json1TLC2 Version 2026.11.17.132218\nError: Error: A format and a file name for dumping traces required.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-dump	class,foo.Bar1TLC2 Version 2026.11.17.132218\nError: Trying to instantiate a custom IStateWriter implementation foo.Bar.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-simulate	file=x1TLC2 Version 2026.11.17.132218\nError: Error: You need to specify a 'num' argument when using the 'file' argument, for example: '"num=5,file=test.txt"'.\nUsage: java tlc2.TLC [-help] [-option] inputfile\n
+-inv1
