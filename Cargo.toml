@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/tlars-java",
+    "crates/tlars-msg",
+    "crates/tlars-sany",
+    "crates/tlars-tool",
+    "crates/tlars-check",
+    "crates/tlars",
+    "crates/tlars-conformance",
+    "crates/xtask",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+
+# std only: no [workspace.dependencies] beyond path crates.
+
+# Release code with symbols, for samply/perf (`cargo build --profile profiling`).
+[profile.profiling]
+inherits = "release"
+debug = true

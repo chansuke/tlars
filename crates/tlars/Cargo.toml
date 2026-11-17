@@ -1,0 +1,12 @@
+[package]
+name = "tlars"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "tlars"
+path = "src/main.rs"
+
+[dependencies]
+tlars-check = { path = "../tlars-check" }

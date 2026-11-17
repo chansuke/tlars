@@ -1,0 +1,11 @@
+[package]
+name = "tlars-check"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tlars-java = { path = "../tlars-java" }
+tlars-msg = { path = "../tlars-msg" }
+tlars-sany = { path = "../tlars-sany" }
+tlars-tool = { path = "../tlars-tool" }

@@ -1,0 +1,51 @@
+//! Java's exception taxonomy as values. TLC uses exceptions for control flow
+//! (`InvariantViolatedException` thrown out of `addElement`), so the generators return
+//! [`Flow`] and sinks stop generation with [`Halt::Stop`].
+
+use tlars_msg::Ec;
+use tlars_sany::graph::Loc;
+
+/// What kind of Java throwable TLC would have seen; decides which message and exit code
+/// `ModelChecker.doNextFailed` / `Worker` choose.
+#[derive(Clone, Debug)]
+pub enum EvalErrorKind {
+    /// `Assert.TLCRuntimeException` (most `Assert.fail(ec, ...)`).
+    Runtime,
+    /// `EvalException` (has its own error code, e.g. `TLC_VALUE_ASSERT_FAILED`).
+    Eval,
+    /// `FingerprintException`: a chain of value sources, printed as a nested-expression trace.
+    Fingerprint { sources: Vec<Loc> },
+    /// `StackOverflowError`: raised by `Ev`'s depth guard, never by the native stack.
+    StackOverflow,
+    /// `AssertionError` → `TLC_BUG`.
+    Assertion,
+}
+
+/// A failed evaluation. `message` is already TLC's text (`tlars_msg::render` at the throw
+/// site, as `Assert.fail` builds it).
+#[derive(Clone, Debug)]
+pub struct EvalError {
+    pub ec: Ec,
+    pub message: String,
+    pub loc: Option<Loc>,
+    pub kind: EvalErrorKind,
+}
+
+pub type EvalResult<T> = Result<T, EvalError>;
+
+/// Why state generation stopped early.
+#[derive(Debug)]
+pub enum Halt {
+    /// A sink decided to stop (violation recorded, `-continue` off). Not an error here.
+    Stop,
+    /// Evaluation failed; the caller reports it.
+    Eval(EvalError),
+}
+
+impl From<EvalError> for Halt {
+    fn from(e: EvalError) -> Self {
+        Halt::Eval(e)
+    }
+}
+
+pub type Flow = Result<(), Halt>;

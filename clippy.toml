@@ -1,0 +1,8 @@
+# Determinism guard (DESIGN.md "Determinism", rule 2). Iterating std hash containers
+# would leak a random order into TLC-visible output. CI runs clippy with -D warnings.
+# The two sanctioned exceptions (Interner lookup index, FcnRcd index) carry a local
+# #[allow(clippy::disallowed_types)] with a comment saying why order cannot leak.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order leaks into output; use BTreeMap or tlars_java::Hashtable" },
+    { path = "std::collections::HashSet", reason = "iteration order leaks into output; use BTreeSet" },
+]
