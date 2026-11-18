@@ -81,7 +81,7 @@ pub enum CfgError {
 
 /// Parse a cfg file. Interns into `interner` in the order TLC's parser does.
 pub fn parse(text: &str, file: &Path, interner: &Interner) -> Result<ModelConfig, CfgError> {
-    // TODO: crate::lexer::TokenManager::new(text + "\n", LexState::Cfg); keyword table from
+    // TODO: the translated `TLAplusParserTokenManager` in lexical state 2 over `text + "\n"`; keyword table from
     // ModelConfig.java:59-89; `configTbl.get(image) != null` terminates lists.
     todo!()
 }

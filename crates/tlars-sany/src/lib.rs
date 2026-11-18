@@ -14,7 +14,6 @@ mod error_codes;
 pub mod graph;
 mod fidelity;
 mod intern;
-mod lexer;
 mod modules;
 mod parser;
 mod pcal;

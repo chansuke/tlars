@@ -61,19 +61,45 @@ struct InternTable {
     index: std::collections::HashMap<Arc<str>, Atom>,
 }
 
+impl Default for Interner {
+    fn default() -> Self {
+        Interner::new()
+    }
+}
+
 impl Interner {
     /// Fresh table at TLC process start (no strings yet: the cfg is parsed first).
     pub fn new() -> Self {
-        todo!()
+        Interner {
+            table: RwLock::new(InternTable { texts: Vec::new(), index: Default::default() }),
+            initialised: Mutex::new([false; JavaClass::COUNT]),
+        }
     }
 
-    /// `UniqueString.uniqueStringOf`.
+    /// `UniqueString.uniqueStringOf`: the first string gets token 1 (`++tokenCnt`).
     pub fn intern(&self, s: &str) -> Atom {
-        todo!()
+        if let Some(a) = self.table.read().expect("intern table").index.get(s) {
+            return *a;
+        }
+        let mut t = self.table.write().expect("intern table");
+        if let Some(a) = t.index.get(s) {
+            return *a;
+        }
+        let text: Arc<str> = Arc::from(s);
+        t.texts.push(text.clone());
+        let a = Atom(u32::try_from(t.texts.len()).expect("intern table overflow"));
+        t.index.insert(text, a);
+        a
+    }
+
+    /// `UniqueString.uidToUniqueString`: the atom with token `tok`, if handed out.
+    pub fn uid_to_atom(&self, tok: i32) -> Option<Atom> {
+        let n = self.len();
+        usize::try_from(tok).ok().filter(|t| (1..=n).contains(t)).map(|t| Atom(t as u32))
     }
 
     pub fn text(&self, a: Atom) -> Arc<str> {
-        todo!()
+        self.table.read().expect("intern table").texts[a.0 as usize - 1].clone()
     }
 
     /// `UniqueString.hashCode()` == `String.hashCode()`; feeds `tlars_java::Hashtable`.
@@ -89,6 +115,10 @@ impl Interner {
 
     /// Number of tokens handed out; runtime strings created during search come after this.
     pub fn len(&self) -> usize {
-        todo!()
+        self.table.read().expect("intern table").texts.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
