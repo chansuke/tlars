@@ -49,7 +49,8 @@ public class ParseGolden {
                 List<String> log = new ArrayList<>();
                 SanyOutput out = new SanyOutput() {
                     public void log(LogLevel level, String format, Object... a) {
-                        if (level != LogLevel.TRACE) log.add(level + " " + String.format(format, a));
+                        // As TLC's SimpleSanyOutput: no arguments, no String.format.
+                        if (level != LogLevel.TRACE) log.add(level + " " + (a.length == 0 ? format : String.format(format, a)));
                     }
                     public java.io.PrintStream getStream(LogLevel level) { return System.out; }
                 };

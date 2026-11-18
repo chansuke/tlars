@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Records what TLC's SANY reports (tools/golden/SemanticGolden.java) into
 # crates/tlars-sany/tests/golden/semantic-examples.txt for the tlaplus/Examples specs listed
-# in tools/golden/semantic_examples.txt. With --all, writes target/semantic-all.txt for every
+# in tools/golden/semantic_examples.txt, and semantic-fixtures.txt for
+# crates/tlars-sany/tests/semantic/*.tla. With --all, writes target/semantic-all.txt for every
 # module in tlaplus/Examples as a root instead (too large to check in; the ignored test
 # `parser::semantic_tests::semantic_all_examples` compares against it).
 # Run inside `nix develop` from the repository root.
 set -euo pipefail
+# The explorer's dump re-indents its whole text per nesting level, one character at a time,
+# so its cost grows fast with DEPTH; --all uses a smaller one.
 DEPTH=8
 mkdir -p crates/tlars-sany/tests/golden target
 javac -d target/golden -cp "$TLA2TOOLS_JAR" tools/golden/SemanticGolden.java
@@ -28,3 +31,5 @@ if [[ "${1:-}" == --all ]]; then
 fi
 mapfile -t files < tools/golden/semantic_examples.txt
 run crates/tlars-sany/tests/golden/semantic-examples.txt "$TLAPLUS_EXAMPLES" "${files[@]}"
+mapfile -t files < <(cd crates/tlars-sany/tests/semantic && ls *.tla | LC_ALL=C sort)
+run crates/tlars-sany/tests/golden/semantic-fixtures.txt crates/tlars-sany/tests/semantic "${files[@]}"

@@ -39,8 +39,8 @@ const SETTINGS: SanySettings = SanySettings {
     strict_error_codes: false,
     semantic_analysis: true,
     level_checking: true,
-    linting: false,
-    validate_pcal_translation: false,
+    linting: true,
+    validate_pcal_translation: true,
     suppressed_codes: Vec::new(),
     messages_as_error_codes: Vec::new(),
 };
@@ -192,6 +192,12 @@ fn on_big_stack(f: impl FnOnce() + Send + 'static) {
     std::thread::Builder::new().stack_size(1 << 28).spawn(f).expect("thread").join().unwrap_or_else(|e| std::panic::resume_unwind(e));
 }
 
+/// Specs that exercise the linter, in `tests/semantic`.
+#[test]
+fn semantic_fixtures_match_tlc() {
+    on_big_stack(|| check(&crate_dir().join("tests/golden/semantic-fixtures.txt"), &crate_dir().join("tests/semantic")));
+}
+
 #[test]
 fn semantic_examples_match_tlc() {
     on_big_stack(|| check(&crate_dir().join("tests/golden/semantic-examples.txt"), &examples()));
@@ -202,4 +208,116 @@ fn semantic_examples_match_tlc() {
 #[ignore]
 fn semantic_all_examples() {
     on_big_stack(|| check(&crate_dir().join("../../target/semantic-all.txt"), &examples()));
+}
+
+/// The golden's lines for one spec, by tag.
+struct GoldenSpec {
+    file: String,
+    exit: String,
+    lines: Vec<String>,
+}
+
+fn golden_specs(golden: &Path) -> Vec<GoldenSpec> {
+    let text = std::fs::read_to_string(golden).unwrap_or_else(|e| panic!("{}: {e}", golden.display()));
+    let mut specs: Vec<GoldenSpec> = Vec::new();
+    for line in text.lines() {
+        if let Some(f) = line.strip_prefix("== ") {
+            specs.push(GoldenSpec { file: f.to_string(), exit: String::new(), lines: Vec::new() });
+        } else if let Some(spec) = specs.last_mut() {
+            if let Some(e) = line.strip_prefix("exit ") {
+                spec.exit = e.to_string();
+            }
+            spec.lines.push(line.to_string());
+        }
+    }
+    specs
+}
+
+#[derive(Default)]
+struct Console(Vec<String>);
+
+impl crate::SanyOut for Console {
+    fn line(&mut self, text: &str) {
+        self.0.push(format!("out {}", esc(&normalize(text))));
+    }
+    fn err_line(&mut self, text: &str) {
+        self.0.push(format!("err {}", esc(text)));
+    }
+}
+
+/// `crate::load` against the goldens: the console lines are TLC's log and `ToolIO` lines,
+/// and for specs SANY accepts, the graph's modules, definitions and levels are TLC's.
+fn check_load(golden: &Path, root: &Path) {
+    for spec in golden_specs(golden) {
+        let path = root.join(&spec.file);
+        let dir = path.parent().expect("parent").to_path_buf();
+        let name = path.file_name().expect("file name").to_string_lossy().into_owned();
+        let interner = Arc::new(Interner::new());
+        let mut console = Console::default();
+        let req = crate::LoadRequest {
+            root_file: &name,
+            user_dir: Some(&dir),
+            library_paths: &[],
+            interner: interner.clone(),
+            extra_root_extends: &[],
+            suppressed_codes: &[],
+            messages_as_errors: &[],
+        };
+        let result = crate::load(req, &mut console);
+        // The golden keeps SANY's messages and ToolIO's lines apart; both reach the console.
+        let mut expected: Vec<String> = spec
+            .lines
+            .iter()
+            .filter_map(|l| {
+                let l = l.strip_prefix("log ")?;
+                let (_, msg) = l.split_once(' ')?;
+                Some(format!("out {msg}"))
+            })
+            .collect();
+        expected.extend(spec.lines.iter().filter_map(|l| l.strip_prefix("toolio ")).map(|l| {
+            let (stream, msg) = l.split_once(' ').unwrap_or((l, ""));
+            format!("{stream} {msg}")
+        }));
+        // The golden drops empty `ToolIO` lines.
+        let mut actual: Vec<String> = console.0.iter().filter(|l| *l != "out " && *l != "err ").cloned().collect();
+        expected.sort();
+        actual.sort();
+        assert_eq!(actual, expected, "{}: console lines (sorted)", spec.file);
+        match (&result, spec.exit.as_str()) {
+            (Ok(graph), "0") => {
+                let expected_levels: Vec<&String> = spec.lines.iter().filter(|l| l.starts_with("level ")).collect();
+                let mut levels = Vec::new();
+                let externals = spec.lines.iter().filter(|l| l.starts_with("log INFO Semantic processing of module ")).count();
+                for (_, m) in graph.modules().take(externals) {
+                    for d in m.op_defs.iter() {
+                        let level = graph.op_level(*d) as i32;
+                        levels.push(format!(
+                            "level {} {} {level}",
+                            interner.text(m.name),
+                            interner.text(graph.op_def(*d).name)
+                        ));
+                    }
+                }
+                let levels: Vec<&String> = levels.iter().collect();
+                assert_eq!(levels, expected_levels, "{}: definitions and levels", spec.file);
+            }
+            (Err(_), "0") => panic!("{}: SANY accepted the spec, load failed: {result:?}", spec.file, result = result.as_ref().err()),
+            (Ok(_), exit) => panic!("{}: SANY failed (exit {exit}), load succeeded", spec.file),
+            (Err(_), _) => {}
+        }
+    }
+}
+
+#[test]
+fn load_matches_tlc() {
+    check_load(&crate_dir().join("tests/golden/semantic-fixtures.txt"), &crate_dir().join("tests/semantic"));
+    check_load(&crate_dir().join("tests/golden/semantic-examples.txt"), &examples());
+}
+
+/// `load` for every module in tlaplus/Examples as a root; needs
+/// `tools/golden/semantic_golden.sh --all`.
+#[test]
+#[ignore]
+fn load_all_examples() {
+    check_load(&crate_dir().join("../../target/semantic-all.txt"), &examples());
 }

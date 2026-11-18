@@ -6,8 +6,8 @@
 //   java -cp target/golden:$TLA2TOOLS_JAR tla2sany.drivers.SemanticGolden OUT ROOT DEPTH FILE...
 //
 // Each FILE (relative to ROOT) is a root module, resolved as TLC does: the user directory is
-// the file's directory. Settings: no strict error codes, semantic analysis and level checking
-// on, linting and PlusCal validation off. The first line is "depth DEPTH". Per file: "== <FILE>", "exit <code>" (or "exit
+// the file's directory. Settings: no strict error codes; semantic analysis, level checking,
+// linting and PlusCal validation on. The first line is "depth DEPTH". Per file: "== <FILE>", "exit <code>" (or "exit
 // FrontEndException"), "errorLevel <n>", "log <LEVEL> <message>" for each message above
 // TRACE ("Parsing file <path>[ (<url>)]" reduced to the file's name), "toolio <out|err>
 // <line>" for lines printed to ToolIO, "intern <tok> <string>" for each string interned
@@ -76,14 +76,15 @@ public class SemanticGolden {
                 List<String> log = new ArrayList<>();
                 SanyOutput out = new SanyOutput() {
                     public void log(LogLevel level, String format, Object... a) {
-                        if (level != LogLevel.TRACE) log.add(level + " " + normalize(String.format(format, a)));
+                        // As TLC's SimpleSanyOutput: no arguments, no String.format.
+                        if (level != LogLevel.TRACE) log.add(level + " " + normalize(a.length == 0 ? format : String.format(format, a)));
                     }
                     public PrintStream getStream(LogLevel level) { return System.out; }
                 };
                 ToolIO.setUserDir(file.getParent().toString());
                 String name = file.getFileName().toString();
                 SpecObj spec = new SpecObj(name, new SimpleFilenameToStream());
-                SanySettings settings = new SanySettings(false, true, true, false, false, Set.of(), Set.of());
+                SanySettings settings = new SanySettings(false, true, true, true, true, Set.of(), Set.of());
                 String exit;
                 try {
                     exit = Integer.toString(SANY.parse(spec, name, out, settings).code());
