@@ -42,6 +42,7 @@ name = "tlars-sany"
 version = "0.0.0"
 dependencies = [
  "tlars-java",
+ "tlars-msg",
 ]
 
 [[package]]

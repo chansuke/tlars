@@ -4,7 +4,9 @@
 
 #![allow(non_snake_case)]
 
-use super::generated::{self, SimpleCharStream, TLAplusParser, TLAplusParserConstants};
+use super::generated::{
+    self, ChildrenVisitor, LevelConstants, ParamAndPosition, SemanticNodeObj, SimpleCharStream, TLAplusParser, TLAplusParserConstants,
+};
 use super::java::*;
 use crate::{Atom, Interner};
 use std::cell::RefCell;
@@ -23,6 +25,7 @@ pub(crate) fn enter(interner: &Arc<Interner>) {
     if !same {
         generated::reset_all_statics();
         LOCATION_UNKNOWN.with(|u| *u.borrow_mut() = None);
+        LOCATION_NULL.with(|l| *l.borrow_mut() = None);
         INTERNER.with(|i| *i.borrow_mut() = Some(interner.clone()));
     }
 }
@@ -41,12 +44,28 @@ impl Integer {
 
     /// A malformed number is `NumberFormatException`, which TLC does not catch here.
     #[track_caller]
-    pub(crate) fn parseInt(s: JStr) -> i32 {
+    pub(crate) fn parseInt_1(s: JStr) -> i32 {
         tlars_java::parse_int(s.as_str()).unwrap_or_else(|e| panic!("java.lang.NumberFormatException: {e:?}"))
     }
 
+    /// `Integer.parseInt(s, radix)`; `NumberFormatException` is caught by the callers.
+    pub(crate) fn parseInt_2(s: JStr, radix: i32) -> JResult<i32> {
+        let t = s.as_str();
+        // `from_str_radix` accepts what Java does: an optional sign, then at least one digit.
+        let parsed = if (2..=36).contains(&radix) { i32::from_str_radix(t, radix as u32).ok() } else { None };
+        parsed.ok_or_else(|| JThrow::new_extern("NumberFormatException", JStr::of(&format!("For input string: \"{t}\""))))
+    }
+
+    pub(crate) fn valueOf(i: i32) -> JInteger {
+        JInteger::of(i)
+    }
+
+    pub(crate) fn toString_1(i: i32) -> JStr {
+        JStr::of(&i.to_string())
+    }
+
     /// `Integer.toString(i, radix)`: lowercase digits, `-` for negatives.
-    pub(crate) fn toString(i: i32, radix: i32) -> JStr {
+    pub(crate) fn toString_2(i: i32, radix: i32) -> JStr {
         let radix = if (2..=36).contains(&radix) { radix as u32 } else { 10 };
         let mut n = i64::from(i).unsigned_abs();
         let mut digits = Vec::new();
@@ -61,6 +80,237 @@ impl Integer {
             digits.push('-');
         }
         JStr::of(&digits.iter().rev().collect::<String>())
+    }
+}
+
+pub(crate) struct Long;
+
+impl Long {
+    /// `Long.parseLong`; overflow is `NumberFormatException`, which `DecimalNode` catches.
+    pub(crate) fn parseLong(s: JStr) -> JResult<i64> {
+        tlars_java::parse_long(s.as_str())
+            .map_err(|_| JThrow::new_extern("NumberFormatException", JStr::of(&format!("For input string: \"{}\"", s.as_str()))))
+    }
+    pub(crate) fn toString(v: i64) -> JStr {
+        JStr::of(&v.to_string())
+    }
+}
+
+pub(crate) struct Math;
+
+impl Math {
+    pub(crate) fn max(a: i32, b: i32) -> i32 {
+        a.max(b)
+    }
+    pub(crate) fn min(a: i32, b: i32) -> i32 {
+        a.min(b)
+    }
+}
+
+pub(crate) struct Boolean;
+
+impl Boolean {
+    pub(crate) fn valueOf(b: bool) -> bool {
+        b
+    }
+}
+
+pub(crate) struct Arrays;
+
+impl Arrays {
+    /// `Arrays.equals(Object[], Object[])`: element-wise `equals`, `null` arrays equal only
+    /// each other.
+    pub(crate) fn equals(a: JArr<J<Object>>, b: JArr<J<Object>>) -> bool {
+        if a.is_null() || b.is_null() {
+            return a.is_null() && b.is_null();
+        }
+        let (a, b) = (a.jget(), b.jget());
+        a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| if x.is_null() { y.is_null() } else { x.java_equals(y) })
+    }
+    pub(crate) fn copyOf(a: JArr<i32>, n: i32) -> JArr<i32> {
+        let mut v = a.jget().clone();
+        v.resize(index(n), 0);
+        J::new(v)
+    }
+}
+
+/// `java.util.concurrent.atomic.AtomicInteger`, shared by clones (the static `uid` counter).
+#[derive(Clone, Default)]
+pub(crate) struct AtomicInteger(std::rc::Rc<std::cell::Cell<i32>>);
+
+impl AtomicInteger {
+    pub(crate) fn new_0() -> AtomicInteger {
+        AtomicInteger::default()
+    }
+    pub(crate) fn getAndIncrement(&self) -> i32 {
+        let v = self.0.get();
+        self.0.set(v.wrapping_add(1));
+        v
+    }
+}
+
+impl JNull for AtomicInteger {
+    fn null() -> Self {
+        AtomicInteger::default()
+    }
+}
+
+/// `java.math.BigInteger`, only as `NumeralNode` uses it: built from digits, printed.
+#[derive(Clone, Default)]
+pub(crate) struct BigInteger(JStr);
+
+impl BigInteger {
+    pub(crate) fn is_null(&self) -> bool {
+        self.0.is_null()
+    }
+}
+
+impl BigInteger {
+    /// `new BigInteger(digits, radix)` for an unsigned numeral; printed in decimal.
+    pub(crate) fn new_2(digits: JStr, radix: i32) -> BigInteger {
+        // Little-endian base-10^9 limbs.
+        let mut limbs: Vec<u64> = vec![0];
+        for c in digits.as_str().chars() {
+            let d = u64::from(c.to_digit(radix as u32).unwrap_or_else(|| panic!("java.lang.NumberFormatException: {}", digits.as_str())));
+            let mut carry = d;
+            for l in limbs.iter_mut() {
+                let v = *l * radix as u64 + carry;
+                *l = v % 1_000_000_000;
+                carry = v / 1_000_000_000;
+            }
+            while carry > 0 {
+                limbs.push(carry % 1_000_000_000);
+                carry /= 1_000_000_000;
+            }
+        }
+        let mut out = limbs.last().expect("limb").to_string();
+        for l in limbs.iter().rev().skip(1) {
+            out.push_str(&format!("{l:09}"));
+        }
+        BigInteger(JStr::of(&out))
+    }
+    pub(crate) fn toString(&self) -> JStr {
+        self.0.clone()
+    }
+}
+
+impl JNull for BigInteger {
+    fn null() -> Self {
+        BigInteger::default()
+    }
+}
+
+/// `java.math.BigDecimal`, only as `DecimalNode` uses it: built from `"digits.digits"`,
+/// printed with `BigDecimal.toString` (scientific notation when the adjusted exponent is
+/// below -6).
+#[derive(Clone, Default)]
+pub(crate) struct BigDecimal(JStr);
+
+impl BigDecimal {
+    pub(crate) fn is_null(&self) -> bool {
+        self.0.is_null()
+    }
+}
+
+impl BigDecimal {
+    pub(crate) fn new_1(s: JStr) -> BigDecimal {
+        let text = s.as_str();
+        let (int, frac) = text.split_once('.').unwrap_or((text, ""));
+        let digits = format!("{int}{frac}");
+        let unscaled = digits.trim_start_matches('0');
+        let unscaled = if unscaled.is_empty() { "0" } else { unscaled };
+        let scale = frac.len() as i64;
+        let adjusted = -scale + (unscaled.len() as i64 - 1);
+        let out = if adjusted >= -6 {
+            if scale == 0 {
+                unscaled.to_string()
+            } else if (unscaled.len() as i64) > scale {
+                let (a, b) = unscaled.split_at(unscaled.len() - scale as usize);
+                format!("{a}.{b}")
+            } else {
+                format!("0.{}{unscaled}", "0".repeat((scale as usize) - unscaled.len()))
+            }
+        } else {
+            let (first, rest) = unscaled.split_at(1);
+            let mantissa = if rest.is_empty() { first.to_string() } else { format!("{first}.{rest}") };
+            format!("{mantissa}E{adjusted}")
+        };
+        BigDecimal(JStr::of(&out))
+    }
+    pub(crate) fn toString(&self) -> JStr {
+        self.0.clone()
+    }
+}
+
+impl JNull for BigDecimal {
+    fn null() -> Self {
+        BigDecimal::default()
+    }
+}
+
+/// `java.lang.Class`, by simple name.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct JClass(pub(crate) &'static str);
+
+impl JClass {
+    pub(crate) fn same(&self, other: &JClass) -> bool {
+        self == other
+    }
+    pub(crate) fn is_null(&self) -> bool {
+        false
+    }
+    pub(crate) fn isInstance(&self, o: J<Object>) -> bool {
+        o.java_instance_of(self.0)
+    }
+    pub(crate) fn getName(&self) -> JStr {
+        JStr::of(generated::java_class_name(self.0))
+    }
+}
+
+impl JNull for JClass {
+    fn null() -> Self {
+        JClass("null")
+    }
+}
+
+impl JValue for JClass {
+    fn is_java_null(&self) -> bool {
+        false
+    }
+    fn object_string(&self) -> String {
+        format!("class {}", generated::java_class_name(self.0))
+    }
+    fn java_hash(&self) -> i32 {
+        tlars_java::string_hash_code(self.0)
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+/// `Object.toString()`: `getClass().getName() + "@" + Integer.toHexString(hashCode())`.
+pub(crate) fn object_to_string(class: &str, hash: i32) -> String {
+    format!("{}@{:x}", generated::java_class_name(class), hash as u32)
+}
+
+/// `tlc2.output.MP`.
+pub(crate) struct MP;
+
+impl MP {
+    /// `MP.getMessage(code)`: the bare message (class NONE, no parameters).
+    pub(crate) fn getMessage(code: i32) -> JStr {
+        let ec = tlars_msg::Ec::from_code(code).unwrap_or(tlars_msg::Ec::UNKNOWN);
+        let cx = tlars_msg::RenderCx { class: tlars_msg::MsgClass::None, tool_mode: false, now: String::new(), debug: false };
+        JStr::of(&tlars_msg::render(ec, &[], &cx))
+    }
+}
+
+/// `tlc2.tool.BuiltInOPs`: TLC's operator codes, used by TLC on the semantic graph.
+pub(crate) struct BuiltInOPs;
+
+impl BuiltInOPs {
+    pub(crate) fn getOpCode(_name: UniqueString) -> i32 {
+        todo!("M2: TLC's BuiltInOPs table")
     }
 }
 
@@ -95,12 +345,18 @@ impl System {
         dest.jget_mut()[d..d + n].clone_from_slice(&tmp);
     }
 
-    /// Only the property the parser reads; TLC runs with Linux's line separator.
-    pub(crate) fn getProperty(key: JStr, default: JStr) -> JStr {
+    /// Only `line.separator` is set (Linux); TLC runs without the `-D` switches SANY reads.
+    pub(crate) fn getProperty_2(key: JStr, default: JStr) -> JStr {
         match key.as_str() {
             "line.separator" => JStr::of("\n"),
             _ => default,
         }
+    }
+    pub(crate) fn getProperty_1(key: JStr) -> JStr {
+        Self::getProperty_2(key, JStr::null())
+    }
+    pub(crate) fn currentTimeMillis() -> i64 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
     }
 }
 
@@ -172,22 +428,16 @@ impl JToString for J<StringBuffer> {
 
 // ---- java.util ----
 
-/// Java's `==` on references and interned values, used where collections compare elements.
-pub(crate) trait JSame {
-    fn jsame(&self, other: &Self) -> bool;
-}
+/// A key as Java tables see it: `hashCode` and `equals` from [`JValue`].
+#[derive(Clone)]
+struct Key<K>(K);
 
-impl<T> JSame for J<T> {
-    fn jsame(&self, other: &Self) -> bool {
-        self.same(other)
+impl<K: JValue> PartialEq for Key<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.java_equals(&other.0)
     }
 }
-
-impl JSame for UniqueString {
-    fn jsame(&self, other: &Self) -> bool {
-        self == other
-    }
-}
+impl<K: JValue> Eq for Key<K> {}
 
 /// `java.util.Vector` and `tla2sany.utilities.Vector` (same behaviour for what the parser
 /// uses).
@@ -227,7 +477,7 @@ impl<E: Clone> J<Vector<E>> {
     pub(crate) fn isEmpty(&self) -> bool {
         self.jget().0.is_empty()
     }
-    /// A snapshot; the parser never mutates a vector while enumerating it.
+    /// A snapshot; the translated code never mutates a collection while enumerating it.
     pub(crate) fn elements(&self) -> J<Enumeration<E>> {
         J::new(Enumeration { items: self.jget().0.clone(), next: 0 })
     }
@@ -252,78 +502,288 @@ impl<E: Clone> J<Enumeration<E>> {
     }
 }
 
-/// Keys of a `Hashtable`: Java's `hashCode` decides the enumeration order.
-pub(crate) trait JKey: Clone + Eq {
-    fn java_hash(&self) -> i32;
+/// `java.util.Iterator` over a snapshot (no `remove`; the sources never use it).
+pub(crate) struct Iterator<E> {
+    items: Vec<E>,
+    next: usize,
 }
 
-impl JKey for UniqueString {
-    fn java_hash(&self) -> i32 {
-        interner().java_hash(self.atom())
+impl<E> Iterator<E> {
+    fn over(items: Vec<E>) -> J<Iterator<E>> {
+        J::new(Iterator { items, next: 0 })
     }
 }
 
-pub(crate) struct Hashtable<K, V>(tlars_java::Hashtable<K, V>);
+impl<E: Clone> J<Iterator<E>> {
+    pub(crate) fn hasNext(&self) -> bool {
+        let it = self.jget();
+        it.next < it.items.len()
+    }
+    #[track_caller]
+    pub(crate) fn next(&self) -> E {
+        let mut it = self.jget_mut();
+        let item = it.items.get(it.next).cloned().expect("java.util.NoSuchElementException");
+        it.next += 1;
+        item
+    }
+}
 
-impl<K: JKey, V> Hashtable<K, V> {
+/// `java.util.Hashtable`: enumeration order from `tlars_java::Hashtable`.
+pub(crate) struct Hashtable<K, V>(tlars_java::Hashtable<Key<K>, V>);
+
+impl<K: JValue, V> Hashtable<K, V> {
     pub(crate) fn new_0() -> J<Hashtable<K, V>> {
         J::new(Hashtable(tlars_java::Hashtable::new()))
     }
 }
 
-impl<K: JKey, V: Clone + JNull> J<Hashtable<K, V>> {
+impl<K: JValue, V: Clone + JNull> J<Hashtable<K, V>> {
     pub(crate) fn get(&self, k: K) -> V {
         let h = k.java_hash();
-        self.jget().0.get(&k, h).cloned().unwrap_or_else(V::null)
+        self.jget().0.get(&Key(k), h).cloned().unwrap_or_else(V::null)
     }
     pub(crate) fn put(&self, k: K, v: V) -> V {
         let h = k.java_hash();
-        self.jget_mut().0.put(k, h, v).unwrap_or_else(V::null)
+        self.jget_mut().0.put(Key(k), h, v).unwrap_or_else(V::null)
+    }
+    pub(crate) fn remove(&self, k: K) -> V {
+        let h = k.java_hash();
+        self.jget_mut().0.remove(&Key(k), h).unwrap_or_else(V::null)
     }
     pub(crate) fn containsKey(&self, k: K) -> bool {
         let h = k.java_hash();
-        self.jget().0.get(&k, h).is_some()
+        self.jget().0.get(&Key(k), h).is_some()
+    }
+    pub(crate) fn size(&self) -> i32 {
+        self.jget().0.len() as i32
+    }
+    pub(crate) fn isEmpty(&self) -> bool {
+        self.jget().0.is_empty()
     }
     pub(crate) fn keys(&self) -> J<Enumeration<K>> {
-        J::new(Enumeration { items: self.jget().0.elements().map(|(k, _)| k.clone()).collect(), next: 0 })
+        J::new(Enumeration { items: self.jget().0.elements().map(|(k, _)| k.0.clone()).collect(), next: 0 })
+    }
+    pub(crate) fn elements(&self) -> J<Enumeration<V>> {
+        J::new(Enumeration { items: self.jget().0.elements().map(|(_, v)| v.clone()).collect(), next: 0 })
+    }
+    /// `values()`, as a snapshot in enumeration order.
+    pub(crate) fn values(&self) -> J<ArrayList<V>> {
+        J::new(ArrayList(self.jget().0.elements().map(|(_, v)| v.clone()).collect()))
     }
 }
 
-/// `java.util.Deque` / `ArrayDeque`, front at index 0.
-pub(crate) struct Deque<E>(std::collections::VecDeque<E>);
+/// `java.util.HashMap` (JDK 21 iteration order).
+pub(crate) struct HashMap<K, V>(tlars_java::JavaHashMap<K, V>);
 
-impl<E> Deque<E> {
-    pub(crate) fn new_0() -> J<Deque<E>> {
-        J::new(Deque(std::collections::VecDeque::new()))
+impl<K: JValue, V> HashMap<K, V> {
+    pub(crate) fn new_0() -> J<HashMap<K, V>> {
+        J::new(HashMap(tlars_java::JavaHashMap::new()))
     }
 }
 
-impl<E: Clone + JSame> J<Deque<E>> {
-    pub(crate) fn addFirst(&self, e: E) {
-        self.jget_mut().0.push_front(e);
+impl<K: JValue, V: Clone + JNull> J<HashMap<K, V>> {
+    pub(crate) fn get(&self, k: K) -> V {
+        let h = k.java_hash();
+        self.jget().0.get(&k, h, |a, b| a.java_equals(b)).cloned().unwrap_or_else(V::null)
     }
-    #[track_caller]
-    pub(crate) fn removeFirst(&self) -> E {
-        self.jget_mut().0.pop_front().expect("java.util.NoSuchElementException")
+    pub(crate) fn put(&self, k: K, v: V) -> V {
+        let h = k.java_hash();
+        self.jget_mut().0.put(k, h, v, |a, b| a.java_equals(b)).unwrap_or_else(V::null)
     }
-    pub(crate) fn contains(&self, e: E) -> bool {
-        self.jget().0.iter().any(|x| x.jsame(&e))
+    pub(crate) fn containsKey(&self, k: K) -> bool {
+        let h = k.java_hash();
+        self.jget().0.get(&k, h, |a, b| a.java_equals(b)).is_some()
     }
     pub(crate) fn size(&self) -> i32 {
         self.jget().0.len() as i32
     }
 }
 
-// ---- java.io ----
+/// `java.util.HashSet` (a `HashMap` with dummy values, JDK 21 iteration order).
+pub(crate) struct HashSet<E>(tlars_java::JavaHashMap<E, ()>);
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct IOException;
-
-impl IOException {
-    pub(crate) fn new_0() -> IOException {
-        IOException
+impl<E: JValue> HashSet<E> {
+    pub(crate) fn new_0() -> J<HashSet<E>> {
+        J::new(HashSet(tlars_java::JavaHashMap::new()))
+    }
+    pub(crate) fn new_1_0(capacity: i32) -> J<HashSet<E>> {
+        J::new(HashSet(tlars_java::JavaHashMap::with_capacity(index(capacity))))
+    }
+    /// `new HashSet<>(c)`: `HashMap.newHashMap(max(c.size(), 12))`, then `addAll(c)`.
+    pub(crate) fn new_1_1(c: J<HashSet<E>>) -> J<HashSet<E>> {
+        let items = c.items();
+        let set = J::new(HashSet(tlars_java::JavaHashMap::for_mappings(items.len().max(12))));
+        for e in items {
+            set.add(e);
+        }
+        set
     }
 }
+
+impl<E: JValue> J<HashSet<E>> {
+    fn items(&self) -> Vec<E> {
+        self.jget().0.iter().map(|(e, _)| e.clone()).collect()
+    }
+    pub(crate) fn add(&self, e: E) -> bool {
+        let h = e.java_hash();
+        self.jget_mut().0.put(e, h, (), |a, b| a.java_equals(b)).is_none()
+    }
+    /// `AbstractCollection.addAll`: `add` each element in `c`'s iteration order.
+    pub(crate) fn addAll(&self, c: J<HashSet<E>>) -> bool {
+        let mut changed = false;
+        for e in c.items() {
+            changed |= self.add(e);
+        }
+        changed
+    }
+    pub(crate) fn remove(&self, e: E) -> bool {
+        let h = e.java_hash();
+        self.jget_mut().0.remove(&e, h, |a, b| a.java_equals(b)).is_some()
+    }
+    pub(crate) fn contains(&self, e: E) -> bool {
+        let h = e.java_hash();
+        self.jget().0.get(&e, h, |a, b| a.java_equals(b)).is_some()
+    }
+    pub(crate) fn size(&self) -> i32 {
+        self.jget().0.len() as i32
+    }
+    pub(crate) fn isEmpty(&self) -> bool {
+        self.jget().0.is_empty()
+    }
+    pub(crate) fn clear(&self) {
+        self.jget_mut().0.clear();
+    }
+    /// `retainAll(c)`: removes, in iteration order, what `c` does not contain.
+    pub(crate) fn retainAll(&self, c: J<HashSet<E>>) -> bool {
+        let mut changed = false;
+        for e in self.items() {
+            if !c.contains(e.clone()) {
+                self.remove(e);
+                changed = true;
+            }
+        }
+        changed
+    }
+    pub(crate) fn iterator(&self) -> J<Iterator<E>> {
+        Iterator::over(self.items())
+    }
+}
+
+/// `AbstractCollection.toString`: `[a, b]`.
+impl<E: JValue> JToString for J<HashSet<E>> {
+    fn java_string(&self) -> String {
+        if self.is_null() {
+            return "null".into();
+        }
+        let items: Vec<String> = self.items().iter().map(JValue::object_string).collect();
+        format!("[{}]", items.join(", "))
+    }
+}
+
+/// `java.util.ArrayList` (and `List`/`Collection` views, as snapshots).
+pub(crate) struct ArrayList<E>(pub(crate) Vec<E>);
+
+impl<E: Clone> ArrayList<E> {
+    pub(crate) fn new_0() -> J<ArrayList<E>> {
+        J::new(ArrayList(Vec::new()))
+    }
+    pub(crate) fn new_1(c: J<ArrayList<E>>) -> J<ArrayList<E>> {
+        J::new(ArrayList(c.jget().0.clone()))
+    }
+}
+
+impl<E: Clone> J<ArrayList<E>> {
+    pub(crate) fn add(&self, e: E) -> bool {
+        self.jget_mut().0.push(e);
+        true
+    }
+    #[track_caller]
+    pub(crate) fn get(&self, i: i32) -> E {
+        self.jget().0[index(i)].clone()
+    }
+    #[track_caller]
+    pub(crate) fn set(&self, i: i32, e: E) -> E {
+        std::mem::replace(&mut self.jget_mut().0[index(i)], e)
+    }
+    pub(crate) fn size(&self) -> i32 {
+        self.jget().0.len() as i32
+    }
+    pub(crate) fn isEmpty(&self) -> bool {
+        self.jget().0.is_empty()
+    }
+    pub(crate) fn iterator(&self) -> J<Iterator<E>> {
+        Iterator::over(self.jget().0.clone())
+    }
+}
+
+impl<E: JValue> J<ArrayList<E>> {
+    /// `contains` compares with `equals`.
+    pub(crate) fn contains(&self, e: E) -> bool {
+        self.jget().0.iter().any(|x| e.java_equals(x))
+    }
+}
+
+/// `java.util.Deque` / `ArrayDeque`, head at the front.
+pub(crate) struct Deque<E>(std::collections::VecDeque<E>);
+
+impl<E> Deque<E> {
+    pub(crate) fn new_0() -> J<Deque<E>> {
+        J::new(Deque(std::collections::VecDeque::new()))
+    }
+    /// The capacity carries no semantics.
+    pub(crate) fn new_1_0(_capacity: i32) -> J<Deque<E>> {
+        Self::new_0()
+    }
+}
+
+impl<E: Clone> Deque<E> {
+    /// `new ArrayDeque<>(c)`: a copy in `c`'s order.
+    pub(crate) fn new_1_1(c: J<Deque<E>>) -> J<Deque<E>> {
+        J::new(Deque(c.jget().0.clone()))
+    }
+}
+
+impl<E: JValue> J<Deque<E>> {
+    pub(crate) fn addFirst(&self, e: E) {
+        self.jget_mut().0.push_front(e);
+    }
+    pub(crate) fn addLast(&self, e: E) {
+        self.jget_mut().0.push_back(e);
+    }
+    pub(crate) fn push(&self, e: E) {
+        self.addFirst(e);
+    }
+    #[track_caller]
+    pub(crate) fn pop(&self) -> E {
+        self.removeFirst()
+    }
+    #[track_caller]
+    pub(crate) fn removeFirst(&self) -> E {
+        self.jget_mut().0.pop_front().expect("java.util.NoSuchElementException")
+    }
+    pub(crate) fn peekFirst(&self) -> E {
+        self.jget().0.front().cloned().unwrap_or_else(E::null)
+    }
+    pub(crate) fn peekLast(&self) -> E {
+        self.jget().0.back().cloned().unwrap_or_else(E::null)
+    }
+    /// `contains` compares with `equals`.
+    pub(crate) fn contains(&self, e: E) -> bool {
+        self.jget().0.iter().any(|x| x.java_equals(&e))
+    }
+    pub(crate) fn size(&self) -> i32 {
+        self.jget().0.len() as i32
+    }
+    pub(crate) fn isEmpty(&self) -> bool {
+        self.jget().0.is_empty()
+    }
+    /// Head to tail.
+    pub(crate) fn iterator(&self) -> J<Iterator<E>> {
+        Iterator::over(self.jget().0.iter().cloned().collect())
+    }
+}
+
+// ---- java.io ----
 
 /// `java.io.Reader` over the decoded source, as `InputStreamReader` would deliver it.
 pub(crate) struct Reader {
@@ -390,11 +850,51 @@ impl UniqueString {
     pub(crate) fn concat(&self, s: JStr) -> UniqueString {
         UniqueString::uniqueStringOf(concat(&self.toString(), &s))
     }
+    pub(crate) fn of(s: JStr) -> UniqueString {
+        UniqueString::uniqueStringOf(s)
+    }
+    /// `compareTo`: token order.
+    pub(crate) fn compareTo(&self, other: UniqueString) -> i32 {
+        self.atom().tok() - other.atom().tok()
+    }
+    pub(crate) fn hashCode(&self) -> i32 {
+        self.java_hash()
+    }
+    pub(crate) fn length(&self) -> i32 {
+        self.toString().length()
+    }
+    /// `join(delim, n, us...)`: the first `n` joined with `"!"` (the delimiter is ignored),
+    /// interning each intermediate string as TLC does.
+    pub(crate) fn join(_delim: JStr, n: i32, us: JArr<UniqueString>) -> UniqueString {
+        let mut out = UniqueString::null();
+        for i in 0..n {
+            let u = us.at(i);
+            out = if out.is_null() { u } else { out.concat(JStr::of("!")).concat(u.toString()) };
+        }
+        out
+    }
 }
 
 impl JNull for UniqueString {
     fn null() -> Self {
         UniqueString(None)
+    }
+}
+
+/// `UniqueString.hashCode` is its string's; `equals(Object)` is identity, which interning
+/// makes token equality.
+impl JValue for UniqueString {
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        self.0.map_or(0, |a| interner().java_hash(a))
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
@@ -436,11 +936,56 @@ impl Location {
         Location::unknown();
         J::new(Location { name, b_line: bl, b_column: bc, e_line: el, e_column: ec })
     }
+
+    /// `Location.nullLoc`, one object per session (`toString` compares with it).
+    pub(crate) fn nullLoc() -> J<Location> {
+        if let Some(l) = LOCATION_NULL.with(|l| l.borrow().clone()) {
+            return l;
+        }
+        let l = Location::new_5(Location::unknown(), 0, 0, 0, 0);
+        LOCATION_NULL.with(|cell| *cell.borrow_mut() = Some(l.clone()));
+        l
+    }
+
+    /// `Location.moduleLocation(name)`: the whole module.
+    pub(crate) fn moduleLocation(name: JStr) -> J<Location> {
+        Location::new_5(UniqueString::uniqueStringOf(name), 0, 0, 0, 0)
+    }
+}
+
+thread_local! {
+    static LOCATION_NULL: RefCell<Option<J<Location>>> = const { RefCell::new(None) };
+}
+
+/// `Location.equals`/`hashCode`: by position and source name.
+impl JValue for J<Location> {
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.toString().java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() {
+            return 0;
+        }
+        let l = self.jget();
+        let mut r: i32 = 1;
+        for v in [l.b_column, l.b_line, l.e_column, l.e_line, l.name.java_hash()] {
+            r = r.wrapping_mul(31).wrapping_add(v);
+        }
+        r
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.equals(other.clone())
+    }
 }
 
 impl J<Location> {
-    /// The translated code never builds `nullLoc`, so its arm is not reachable here.
     pub(crate) fn toString(&self) -> JStr {
+        if self.same(&Location::nullLoc()) {
+            return JStr::of("Unknown location");
+        }
         let l = self.jget();
         let span = format!("line {}, col {} to line {}, col {} of module ", l.b_line, l.b_column, l.e_line, l.e_column);
         if l.name.is_null() {
@@ -453,6 +998,39 @@ impl J<Location> {
     }
     pub(crate) fn beginLine(&self) -> i32 {
         self.jget().b_line
+    }
+    pub(crate) fn beginColumn(&self) -> i32 {
+        self.jget().b_column
+    }
+    pub(crate) fn endLine(&self) -> i32 {
+        self.jget().e_line
+    }
+    pub(crate) fn endColumn(&self) -> i32 {
+        self.jget().e_column
+    }
+    pub(crate) fn source(&self) -> JStr {
+        let n = self.jget().name;
+        if n.is_null() { JStr::null() } else { n.toString() }
+    }
+    pub(crate) fn sourceAsUniqueString(&self) -> UniqueString {
+        self.jget().name
+    }
+    /// `equals(Object)`: same positions and `source().equals(other.source())`.
+    pub(crate) fn equals(&self, other: J<Location>) -> bool {
+        if other.is_null() {
+            return false;
+        }
+        let (a, b) = (self.jget(), other.jget());
+        a.b_line == b.b_line && a.b_column == b.b_column && a.e_line == b.e_line && a.e_column == b.e_column && {
+            drop((a, b));
+            self.source().equals(&other.source())
+        }
+    }
+}
+
+impl JToString for J<Location> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { self.toString().java_string() }
     }
 }
 
@@ -500,16 +1078,30 @@ impl SanyOutput {
 
 impl J<SanyOutput> {
     pub(crate) fn log_2(&self, level: LogLevel, format: JStr) {
-        self.jget_mut().messages.push((level, java_format(format.as_str(), &[])));
+        self.jget_mut().messages.push((level, format_str(format.as_str(), &[])));
     }
     pub(crate) fn log_3(&self, level: LogLevel, format: JStr, arg: &dyn JToString) {
-        self.jget_mut().messages.push((level, java_format(format.as_str(), &[arg])));
+        self.jget_mut().messages.push((level, format_str(format.as_str(), &[arg])));
     }
 }
 
-/// `String.format` for the `%s` and `%%` conversions the parser's messages use.
+/// `String.format(format, args...)`.
 #[track_caller]
-fn java_format(format: &str, args: &[&dyn JToString]) -> String {
+pub(crate) fn java_format(format: &JStr, args: &[&dyn JToString]) -> JStr {
+    JStr::of(&format_str(format.as_str(), args))
+}
+
+/// `String.format(format, objects)` with an `Object[]`.
+#[track_caller]
+pub(crate) fn java_format_objects(format: &JStr, objects: &JArr<J<Object>>) -> JStr {
+    let items: Vec<J<Object>> = objects.jget().clone();
+    let args: Vec<&dyn JToString> = items.iter().map(|o| o as &dyn JToString).collect();
+    JStr::of(&format_str(format.as_str(), &args))
+}
+
+/// The conversions SANY's messages use: `%s`, `%d` (printed alike), `%n`, `%%`.
+#[track_caller]
+fn format_str(format: &str, args: &[&dyn JToString]) -> String {
     let mut out = String::new();
     let mut args = args.iter();
     let mut chars = format.chars();
@@ -519,8 +1111,9 @@ fn java_format(format: &str, args: &[&dyn JToString]) -> String {
             continue;
         }
         match chars.next() {
-            Some('s') => out.push_str(&args.next().expect("java.util.MissingFormatArgumentException").java_string()),
+            Some('s' | 'd') => out.push_str(&args.next().expect("java.util.MissingFormatArgumentException").java_string()),
             Some('%') => out.push('%'),
+            Some('n') => out.push('\n'),
             other => panic!("unsupported format conversion %{other:?}"),
         }
     }
@@ -541,6 +1134,7 @@ impl Assert {
 pub(crate) struct EC;
 
 impl EC {
+    pub(crate) const TLC_PARAMETER_MUST_BE_POSTFIX: i32 = 2136;
     pub(crate) const SANY_PARSER_CHECK_1: i32 = 4000;
     pub(crate) const SANY_PARSER_CHECK_2: i32 = 4001;
     pub(crate) const SANY_PARSER_CHECK_3: i32 = 4002;
@@ -651,5 +1245,232 @@ impl TLAplusParser {
         let p = TLAplusParser::new_1_0(Reader::utf8(source))?;
         p.jget_mut().out = out;
         Ok(p)
+    }
+}
+
+// ---- tla2sany.semantic: hand-written classes and members ----
+
+/// `tla2sany.semantic.ErrorCode`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct ErrorCode(crate::SanyErrorCode);
+
+impl ErrorCode {
+    /// `ErrorCode.NAME`.
+    #[track_caller]
+    pub(crate) fn of(name: &str) -> ErrorCode {
+        ErrorCode(*crate::error_codes::SANY_ERROR_CODES.iter().find(|c| c.name == name).unwrap_or_else(|| panic!("no ErrorCode {name}")))
+    }
+    pub(crate) fn getSeverityLevel(&self) -> ErrorLevel {
+        match self.0.level {
+            crate::ErrorLevel::Warning => ErrorLevel::Warning,
+            crate::ErrorLevel::Error => ErrorLevel::Error,
+        }
+    }
+    pub(crate) fn getStandardValue(&self) -> i32 {
+        self.0.value
+    }
+    /// An unknown value is `IllegalArgumentException`, which only SANY's command line catches.
+    #[track_caller]
+    pub(crate) fn fromStandardValue(value: i32) -> ErrorCode {
+        ErrorCode(crate::SanyErrorCode::from_standard_value(value).unwrap_or_else(|| panic!("java.lang.IllegalArgumentException: {value}")))
+    }
+    pub(crate) fn same(&self, other: &ErrorCode) -> bool {
+        self == other
+    }
+    pub(crate) fn is_null(&self) -> bool {
+        false
+    }
+    pub(crate) fn code(&self) -> crate::SanyErrorCode {
+        self.0
+    }
+}
+
+impl JNull for ErrorCode {
+    fn null() -> Self {
+        ErrorCode::of("GENERAL")
+    }
+}
+
+impl JValue for ErrorCode {
+    fn is_java_null(&self) -> bool {
+        false
+    }
+    fn object_string(&self) -> String {
+        self.0.name.to_string()
+    }
+    fn java_hash(&self) -> i32 {
+        self.0.value
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+impl JToString for ErrorCode {
+    fn java_string(&self) -> String {
+        self.0.name.to_string()
+    }
+}
+
+/// `ErrorCode.ErrorLevel`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum ErrorLevel {
+    Warning,
+    Error,
+}
+
+impl ErrorLevel {
+    #[track_caller]
+    pub(crate) fn of(name: &str) -> ErrorLevel {
+        match name {
+            "WARNING" => ErrorLevel::Warning,
+            "ERROR" => ErrorLevel::Error,
+            _ => panic!("no ErrorLevel {name}"),
+        }
+    }
+    pub(crate) fn same(&self, other: &ErrorLevel) -> bool {
+        self == other
+    }
+    pub(crate) fn is_null(&self) -> bool {
+        false
+    }
+}
+
+impl JNull for ErrorLevel {
+    fn null() -> Self {
+        ErrorLevel::Error
+    }
+}
+
+impl JValue for ErrorLevel {
+    fn is_java_null(&self) -> bool {
+        false
+    }
+    fn object_string(&self) -> String {
+        format!("{self:?}").to_uppercase()
+    }
+    fn java_hash(&self) -> i32 {
+        *self as i32
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+/// `SetOfLevelConstraints` (a `HashMap<SymbolNode, Integer>`): `put` keeps the minimum.
+pub(crate) struct SetOfLevelConstraints(tlars_java::JavaHashMap<J<SemanticNodeObj>, i32>);
+
+/// `SetOfArgLevelConstraints` (a `HashMap<ParamAndPosition, Integer>`): `put` keeps the
+/// maximum.
+pub(crate) struct SetOfArgLevelConstraints(tlars_java::JavaHashMap<J<ParamAndPosition>, i32>);
+
+macro_rules! level_constraints {
+    ($set:ident, $key:ty, $put:ident, $keep:ident, $absent:expr) => {
+        impl $set {
+            pub(crate) fn new_0() -> J<$set> {
+                J::new($set(tlars_java::JavaHashMap::new()))
+            }
+            /// `new HashMap<>(m)`: pre-sized by `putMapEntries`, filled in `m`'s order with the
+            /// plain `put` (the override does not run).
+            pub(crate) fn new_1(m: J<$set>) -> J<$set> {
+                let mut map = tlars_java::JavaHashMap::new();
+                let entries: Vec<($key, i32)> = m.jget().0.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                map.reserve_for_put_all(entries.len());
+                for (k, v) in entries {
+                    let h = k.java_hash();
+                    map.put(k, h, v, |a, b| a.java_equals(b));
+                }
+                J::new($set(map))
+            }
+        }
+
+        impl J<$set> {
+            fn lookup(&self, k: &$key) -> Option<i32> {
+                self.jget().0.get(k, k.java_hash(), |a, b| a.java_equals(b)).copied()
+            }
+            /// The override: keep the stricter level. Returns the old value.
+            pub(crate) fn $put(&self, k: $key, level: i32) -> JInteger {
+                let old = self.lookup(&k);
+                let kept = level.$keep(old.unwrap_or($absent));
+                let h = k.java_hash();
+                self.jget_mut().0.put(k, h, kept, |a, b| a.java_equals(b));
+                JInteger(old)
+            }
+            pub(crate) fn get(&self, k: $key) -> JInteger {
+                JInteger(self.lookup(&k))
+            }
+            pub(crate) fn containsKey(&self, k: $key) -> bool {
+                self.lookup(&k).is_some()
+            }
+            pub(crate) fn remove(&self, k: $key) -> JInteger {
+                let h = k.java_hash();
+                JInteger(self.jget_mut().0.remove(&k, h, |a, b| a.java_equals(b)))
+            }
+            /// The override: `put` each entry of `s` in its key order.
+            pub(crate) fn putAll(&self, s: J<$set>) {
+                let entries: Vec<($key, i32)> = s.jget().0.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                for (k, v) in entries {
+                    self.$put(k, v);
+                }
+            }
+            /// `keySet()`, as a snapshot in iteration order.
+            pub(crate) fn keySet(&self) -> J<ArrayList<$key>> {
+                J::new(ArrayList(self.jget().0.iter().map(|(k, _)| k.clone()).collect()))
+            }
+        }
+    };
+}
+
+level_constraints!(SetOfLevelConstraints, J<SemanticNodeObj>, put, min, LevelConstants::MaxLevel);
+level_constraints!(SetOfArgLevelConstraints, J<ParamAndPosition>, put_2, max, LevelConstants::MinLevel);
+
+impl JToString for J<SetOfLevelConstraints> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { self.toString().expect("toString").java_string() }
+    }
+}
+
+impl JToString for J<SetOfArgLevelConstraints> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { self.toString().expect("toString").java_string() }
+    }
+}
+
+impl J<SetOfLevelConstraints> {
+    pub(crate) fn toString(&self) -> JResult<JStr> {
+        let mut parts = Vec::new();
+        for (k, v) in self.jget().0.iter() {
+            parts.push(format!("{} -> {v}", k.getName_0_via_SymbolNode()?.java_string()));
+        }
+        Ok(JStr::of(&format!("{{ {}}}", parts.join(", "))))
+    }
+}
+
+impl J<SetOfArgLevelConstraints> {
+    pub(crate) fn put_3(&self, param: J<SemanticNodeObj>, position: i32, level: i32) -> JResult<JInteger> {
+        let pap = ParamAndPosition::new_2(param, position)?;
+        Ok(self.put_2(pap, level))
+    }
+    pub(crate) fn toString(&self) -> JResult<JStr> {
+        let mut parts = Vec::new();
+        for (k, v) in self.jget().0.iter() {
+            parts.push(format!("{} -> {v}", k.java_string()));
+        }
+        Ok(JStr::of(&format!("{{ {}}}", parts.join(", "))))
+    }
+}
+
+impl J<SemanticNodeObj> {
+    /// `walkChildren(ChildrenVisitor)`: only the linter and TLC use it.
+    pub(crate) fn walkChildren__SemanticNode(&self, _visitor: J<ChildrenVisitor>) -> JResult<J<ChildrenVisitor>> {
+        todo!("linter: SemanticNode.walkChildren")
+    }
+    /// `isDefinedWith(SemanticNode)`: only TLC's `SpecProcessor` uses it.
+    pub(crate) fn isDefinedWith__SemanticNode(&self, _sn: J<SemanticNodeObj>) -> JResult<bool> {
+        todo!("TLC: SemanticNode.isDefinedWith")
+    }
+    /// `substituteFor(OpDefNode, OpDefNode)`: only TLC's `SpecProcessor` uses it.
+    pub(crate) fn substituteFor__SemanticNode(&self, _s: J<SemanticNodeObj>, _o: J<SemanticNodeObj>) -> JResult<()> {
+        todo!("TLC: SemanticNode.substituteFor")
     }
 }

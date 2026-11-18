@@ -4,7 +4,6 @@
 
 use std::any::Any;
 use std::cell::{Ref, RefCell, RefMut};
-use std::fmt;
 use std::rc::Rc;
 
 /// A Java reference to an object of class `T`: `null` or shared, mutable, compared by
@@ -43,6 +42,10 @@ impl<T: ?Sized> J<T> {
     #[track_caller]
     pub(crate) fn jget_mut(&self) -> RefMut<'_, T> {
         self.0.as_ref().expect("NullPointerException").borrow_mut()
+    }
+    /// `test(object)`, or `false` for `null` (`instanceof`).
+    pub(crate) fn jtest(&self, test: impl FnOnce(&T) -> bool) -> bool {
+        self.0.as_ref().is_some_and(|o| test(&o.borrow()))
     }
     /// `==` on references.
     pub(crate) fn same(&self, other: &J<T>) -> bool {
@@ -178,6 +181,14 @@ impl JStr {
         let v = chars.jget();
         JStr::of(&String::from_utf16_lossy(&v[idx(offset)..idx(offset) + idx(count)]))
     }
+    /// `toLowerCase()`; SANY lowercases ASCII numerals only, where every locale agrees.
+    pub(crate) fn to_lower_case(&self) -> JStr {
+        JStr::of(&self.as_str().to_lowercase())
+    }
+    /// `replace(CharSequence, CharSequence)`: literal, all occurrences.
+    pub(crate) fn replace(&self, from: &JStr, to: &JStr) -> JStr {
+        JStr::of(&self.as_str().replace(from.as_str(), to.as_str()))
+    }
     pub(crate) fn starts_with(&self, s: &JStr) -> bool {
         self.as_str().starts_with(s.as_str())
     }
@@ -230,59 +241,202 @@ pub(crate) fn concat(a: &dyn JToString, b: &dyn JToString) -> JStr {
     JStr::of(&(a.java_string() + &b.java_string()))
 }
 
-/// `java.lang.Object` holding a translated value: assigning to `Object` boxes, a cast back
-/// downcasts (a wrong type is `ClassCastException`, a panic).
-pub(crate) struct Object {
-    value: Box<dyn Any>,
-    to_string: fn(&dyn Any) -> String,
+/// `java.lang.Integer`: a nullable boxed `int`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(crate) struct JInteger(pub(crate) Option<i32>);
+
+impl JInteger {
+    pub(crate) fn of(v: i32) -> JInteger {
+        JInteger(Some(v))
+    }
+    #[track_caller]
+    pub(crate) fn intValue(&self) -> i32 {
+        self.0.expect("NullPointerException: unboxing null")
+    }
+    pub(crate) fn is_null(&self) -> bool {
+        self.0.is_none()
+    }
+    /// `==` on boxes: `Integer.valueOf` shares boxes for -128..=127; other values the
+    /// sources never compare by identity.
+    pub(crate) fn same(&self, other: &JInteger) -> bool {
+        match (self.0, other.0) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a == b && (-128..=127).contains(&a),
+            _ => false,
+        }
+    }
 }
 
-/// Values that can be stored as an `Object`.
-pub(crate) trait Boxable: Clone + JNull + 'static {
-    fn is_java_null(&self) -> bool;
-    /// `toString()` as `String.format("%s", o)` would call it.
-    fn object_string(&self) -> String;
+impl JNull for JInteger {
+    fn null() -> Self {
+        JInteger(None)
+    }
 }
 
-impl Boxable for JStr {
+impl JValue for JInteger {
     fn is_java_null(&self) -> bool {
         self.is_null()
     }
     fn object_string(&self) -> String {
         self.java_string()
     }
+    fn java_hash(&self) -> i32 {
+        self.0.unwrap_or(0)
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.0.is_some() && self.0 == other.0
+    }
 }
 
-impl<U: 'static> Boxable for J<U> {
+impl JToString for JInteger {
+    fn java_string(&self) -> String {
+        self.0.map_or_else(|| "null".into(), |v| v.to_string())
+    }
+}
+
+/// `java.lang.Object` holding a translated value: assigning to `Object` boxes, a cast back
+/// downcasts (a wrong type is `ClassCastException`, a panic). The box keeps the value's
+/// `hashCode`, `equals` and `toString`, so `Object`-keyed tables work.
+pub(crate) struct Object {
+    value: Box<dyn Any>,
+    to_string: fn(&dyn Any) -> String,
+    hash: fn(&dyn Any) -> i32,
+    equals: fn(&dyn Any, &J<Object>) -> bool,
+    instance_of: fn(&dyn Any, &str) -> bool,
+}
+
+/// What Java's `Object` methods do for a value: `hashCode`, `equals`, `toString` (as
+/// `String.valueOf`). Translated classes get generated implementations that call their own
+/// overrides; classes without overrides use identity.
+pub(crate) trait JValue: Clone + JNull + 'static {
+    fn is_java_null(&self) -> bool;
+    fn object_string(&self) -> String;
+    fn java_hash(&self) -> i32;
+    fn java_equals(&self, other: &Self) -> bool;
+    /// `Class.forName(class).isInstance(this)`, by simple class name.
+    fn java_instance_of(&self, class: &str) -> bool {
+        !self.is_java_null() && class == "Object"
+    }
+}
+
+impl JValue for JStr {
     fn is_java_null(&self) -> bool {
         self.is_null()
     }
-    /// Translated `toString()` methods are fallible and not reachable from here; no output
-    /// TLC shows depends on this form.
     fn object_string(&self) -> String {
-        format!("{}@object", std::any::type_name::<U>())
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() { 0 } else { tlars_java::string_hash_code(self.as_str()) }
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.equals(other)
+    }
+}
+
+impl JValue for i32 {
+    fn is_java_null(&self) -> bool {
+        false
+    }
+    fn object_string(&self) -> String {
+        self.to_string()
+    }
+    fn java_hash(&self) -> i32 {
+        *self
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+impl JValue for bool {
+    fn is_java_null(&self) -> bool {
+        false
+    }
+    fn object_string(&self) -> String {
+        self.to_string()
+    }
+    /// `Boolean.hashCode`.
+    fn java_hash(&self) -> i32 {
+        if *self { 1231 } else { 1237 }
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+impl<T: ?Sized> J<T> {
+    /// `Object.hashCode` for classes that do not override it. Java's identity hash is
+    /// arbitrary; tables keyed this way iterate in no reproducible order in TLC either.
+    pub(crate) fn identity_hash(&self) -> i32 {
+        self.0.as_ref().map_or(0, |rc| Rc::as_ptr(rc) as *const () as usize as i32)
     }
 }
 
 impl Object {
-    pub(crate) fn of<T: Boxable>(v: T) -> J<Object> {
+    pub(crate) fn of<T: JValue>(v: T) -> J<Object> {
         if v.is_java_null() {
             return J::null();
         }
-        fn string_of<T: Boxable>(a: &dyn Any) -> String {
+        fn string_of<T: JValue>(a: &dyn Any) -> String {
             a.downcast_ref::<T>().expect("boxed type").object_string()
         }
-        J::new(Object { value: Box::new(v), to_string: string_of::<T> })
+        fn hash_of<T: JValue>(a: &dyn Any) -> i32 {
+            a.downcast_ref::<T>().expect("boxed type").java_hash()
+        }
+        fn equals_of<T: JValue>(a: &dyn Any, other: &J<Object>) -> bool {
+            let a = a.downcast_ref::<T>().expect("boxed type");
+            !other.is_null() && other.jget().value.downcast_ref::<T>().is_some_and(|b| a.java_equals(b))
+        }
+        fn instance_of<T: JValue>(a: &dyn Any, class: &str) -> bool {
+            a.downcast_ref::<T>().expect("boxed type").java_instance_of(class)
+        }
+        J::new(Object { value: Box::new(v), to_string: string_of::<T>, hash: hash_of::<T>, equals: equals_of::<T>, instance_of: instance_of::<T> })
     }
 }
 
 impl J<Object> {
     #[track_caller]
-    pub(crate) fn cast<T: Boxable>(&self) -> T {
+    pub(crate) fn cast<T: JValue>(&self) -> T {
         if self.is_null() {
             return T::null();
         }
         self.jget().value.downcast_ref::<T>().cloned().expect("ClassCastException")
+    }
+
+    /// `o instanceof C` on an `Object`: boxed as a `T` that passes `test`.
+    pub(crate) fn instance_of<T: JValue>(&self, test: impl FnOnce(&T) -> bool) -> bool {
+        !self.is_null() && self.jget().value.downcast_ref::<T>().is_some_and(test)
+    }
+}
+
+impl JValue for J<Object> {
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() {
+            return 0;
+        }
+        let o = self.jget();
+        (o.hash)(&*o.value)
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        if self.is_null() {
+            return other.is_null();
+        }
+        let o = self.jget();
+        (o.equals)(&*o.value, other)
+    }
+    fn java_instance_of(&self, class: &str) -> bool {
+        if self.is_null() {
+            return false;
+        }
+        let o = self.jget();
+        (o.instance_of)(&*o.value, class)
     }
 }
 
@@ -296,27 +450,26 @@ impl JToString for J<Object> {
     }
 }
 
-/// Exceptions the translated code throws or catches. `Error`s and runtime exceptions are
-/// Rust panics instead, as they abort the parse in TLC too.
-pub(crate) enum JThrow {
-    ParseException(J<super::generated::ParseException>),
-    /// JavaCC's lookahead short-circuit; never escapes `jj_2_*`.
-    LookaheadSuccess,
-    TokenMgrError(J<super::generated::TokenMgrError>),
-    /// `java.io.IOException` from `SimpleCharStream.readChar` at end of input.
-    IoException,
+/// A library exception (`IOException`, `NumberFormatException`, ...) in flight. Translated
+/// exceptions travel in their own `JThrow` variants (generated).
+#[derive(Clone)]
+pub(crate) struct ExternThrowable {
+    pub(crate) class: &'static str,
+    pub(crate) message: JStr,
 }
 
-impl fmt::Debug for JThrow {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            JThrow::ParseException(_) => "ParseException",
-            JThrow::LookaheadSuccess => "LookaheadSuccess",
-            JThrow::TokenMgrError(_) => "TokenMgrError",
-            JThrow::IoException => "IOException",
-        })
+impl JThrow {
+    pub(crate) fn new_extern(class: &'static str, message: JStr) -> JThrow {
+        JThrow::Extern(ExternThrowable { class, message })
+    }
+    /// Debugging aid only; TLC's own stack traces are not reproduced.
+    #[allow(non_snake_case)]
+    pub(crate) fn printStackTrace(&self) {
+        eprintln!("{self:?}");
     }
 }
+
+pub(crate) use super::generated::JThrow;
 
 pub(crate) type JResult<T> = Result<T, JThrow>;
 
@@ -332,6 +485,23 @@ impl<T: ?Sized> JNull for J<T> {
 impl JNull for JStr {
     fn null() -> Self {
         JStr(None)
+    }
+}
+/// The primitive stand-ins for boxed `Integer`/`Boolean`/`Long` (see the emitter): what a
+/// map lookup that misses returns.
+impl JNull for i32 {
+    fn null() -> Self {
+        0
+    }
+}
+impl JNull for i64 {
+    fn null() -> Self {
+        0
+    }
+}
+impl JNull for bool {
+    fn null() -> Self {
+        false
     }
 }
 
