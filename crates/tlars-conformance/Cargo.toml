@@ -7,3 +7,4 @@ publish = false
 
 [dependencies]
 tlars-check = { path = "../tlars-check" }
+regex = "1"

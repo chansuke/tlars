@@ -12,6 +12,9 @@
 //!                                  construction (see jj2rs/mod.rs)
 //!   xtask jj2rs survey <File.java> report what the jj2rs Java reader cannot parse
 //!
+//!   xtask conformance record|run   tla-ts's TLC corpus against pinned TLC and tlars (see
+//!                                  conformance.rs)
+//!
 //! Implemented so far: `gen-fidelity` (FP64.Polys, EC/MP message catalog, SANY ErrorCode),
 //! `bench` and `jj2rs`. Planned:
 //!   xtask intern-dump-diff <dump>  compare tlars's intern sequence with an instrumented TLC
@@ -19,6 +22,7 @@
 
 mod bench;
 mod catalog;
+mod conformance;
 mod jj2rs;
 mod json;
 
@@ -30,9 +34,11 @@ enum Task {
     BenchCompare { baseline: PathBuf, candidate: PathBuf },
     Jj2rsSurvey(PathBuf),
     Jj2rsEmit { check: bool },
+    ConformanceRecord(conformance::Args),
+    ConformanceRun(conformance::Args),
 }
 
-const USAGE: &str = "usage: xtask gen-fidelity [--check]\n       xtask bench run [--engine tlc|tlars] [--workers N] [--repeat N] [--filter TEXT] [--timeout SECS]\n       xtask bench compare <baseline.jsonl> <candidate.jsonl>\n       xtask jj2rs emit [--check]\n       xtask jj2rs survey <File.java>";
+const USAGE: &str = "usage: xtask gen-fidelity [--check]\n       xtask bench run [--engine tlc|tlars] [--workers N] [--repeat N] [--filter TEXT] [--timeout SECS]\n       xtask bench compare <baseline.jsonl> <candidate.jsonl>\n       xtask jj2rs emit [--check]\n       xtask jj2rs survey <File.java>\n       xtask conformance record [--suite S] [--context C] [--filter TEXT] [--jobs N]\n       xtask conformance run [--suite S] [--context C] [--filter TEXT] [--jobs N] [--check|--update]";
 
 fn parse_args(args: &[String]) -> Result<Task, String> {
     let strs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -44,7 +50,34 @@ fn parse_args(args: &[String]) -> Result<Task, String> {
         ["jj2rs", "emit"] => Ok(Task::Jj2rsEmit { check: false }),
         ["jj2rs", "emit", "--check"] => Ok(Task::Jj2rsEmit { check: true }),
         ["bench", "run", rest @ ..] => parse_bench_run(rest).map(Task::BenchRun),
+        ["conformance", "record", rest @ ..] => parse_conformance(rest).map(Task::ConformanceRecord),
+        ["conformance", "run", rest @ ..] => parse_conformance(rest).map(Task::ConformanceRun),
         _ => Err(USAGE.into()),
+    }
+}
+
+fn parse_conformance(mut rest: &[&str]) -> Result<conformance::Args, String> {
+    let mut args = conformance::Args {
+        suite: "expressions".into(),
+        context: tlars_conformance::Context::Assume,
+        filter: None,
+        jobs: std::thread::available_parallelism().map_or(4, |n| n.get()),
+        mode: conformance::RunMode::Report,
+    };
+    loop {
+        match rest {
+            ["--check", tail @ ..] => (args.mode, rest) = (conformance::RunMode::Check, tail),
+            ["--update", tail @ ..] => (args.mode, rest) = (conformance::RunMode::Update, tail),
+            ["--suite", v, tail @ ..] => (args.suite, rest) = (v.to_string(), tail),
+            ["--context", v, tail @ ..] => {
+                args.context = tlars_conformance::Context::from_name(v).ok_or_else(|| format!("unknown context {v}"))?;
+                rest = tail;
+            }
+            ["--filter", v, tail @ ..] => (args.filter, rest) = (Some(v.to_string()), tail),
+            ["--jobs", v, tail @ ..] => (args.jobs, rest) = (v.parse().map_err(|_| USAGE.to_string())?, tail),
+            [] => return Ok(args),
+            _ => return Err(USAGE.into()),
+        }
     }
 }
 
@@ -187,6 +220,8 @@ fn main() {
         Task::BenchRun(args) => bench::run(&workspace_root(), &args),
         Task::BenchCompare { baseline, candidate } => bench::compare(&baseline, &candidate),
         Task::Jj2rsSurvey(file) => jj2rs::survey(&file),
+        Task::ConformanceRecord(args) => conformance::record(&workspace_root(), &args),
+        Task::ConformanceRun(args) => conformance::run(&workspace_root(), &args),
         Task::Jj2rsEmit { check } => {
             jj2rs::emit(&tlaplus_src()?, &workspace_root().join("crates/tlars-sany/src/parser/generated.rs"), check)
         }

@@ -6,3 +6,5 @@ license.workspace = true
 publish = false
 
 [dependencies]
+tlars-check = { path = "../tlars-check" }
+tlars-conformance = { path = "../tlars-conformance" }
