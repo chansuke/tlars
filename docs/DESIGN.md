@@ -220,7 +220,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
   - `UniqueString` (セッションの `Interner` に委ねる)、`Location`、`SanyOutput`、`JunctionListContext`。最後のものは enum と内部クラスを使うので手で移植する。
   - `SimpleCharStream.ExpandBuff`: `catch (Throwable)` を含むため。
   - `TLAplusParser(SanyOutput, byte[])`: UTF-8 で decode してから `Reader` 版のコンストラクタに渡す。
-- 意味解析 (`tla2sany/semantic` の全クラス) も同じ変換器で転写する (2026-11-18 時点でコンパイルまで。TLC との照合はまだ)。そのために変換器に足した規則は次のとおり。
+- 意味解析 (`tla2sany/semantic` の全クラス) も同じ変換器で転写する。そのために変換器に足した規則は次のとおり。
   - 継承の階層は、根のクラスごとに `enum RootObj` を 1 つ作り、具体クラス 1 つにつき variant を 1 つ置く。各 variant は、根からそのクラスまでのフィールドをすべて持つ。参照は `J<RootObj>` で共通にするので、型を変えるキャストは何もしない。仮想呼び出しと `instanceof` は、variant に対する `match` で表す。
   - オーバーライドの判定は「同じシグネチャを最初に宣言したクラスまたは interface」(origin) を単位にする。両方の origin を実装するクラスがあれば、2 つは同じ分岐関数にまとめる。シグネチャが同じでも別系統なら別の関数にする (`DecimalNode.bigVal()` と `NumeralNode.bigVal()` がその例)。
   - 内部クラスは、外側のインスタンスを `this__0` に持つ。名前の解決では外側を順にたどる。
@@ -229,6 +229,13 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
   - `Integer` は null を取りうる `JInteger` で表す (SANY がレベル表の `null` を検査するため)。`Boolean`、`Long`、`Character` はプリミティブのまま扱う。
   - stream とラムダ、raw 型の使い回し、モデル化しない interface を引数に取るメソッドは、変換の前に Java ソースへパッチを当てる (`jj2rs/mod.rs` の `PATCHES`)。どのパッチも、ファイル中にちょうど 1 回だけ現れる完全一致の置換で、理由を添えてある。
   - 無名クラスを使う `walkChildren`、`isDefinedWith`、`substituteFor` は、リンターと TLC が使うだけなので、今は `todo!()` にしてある。
+  - 多次元配列の生成 (`new boolean[a][b][]`) は、長さを与えた次元ごとに別の配列を作り、残りの次元は null にする。
+- 仕様の読み込み (`tla2sany/modanalyzer` の `SpecObj`、`ParseUnit`、`ModulePointer` など) も転写する。ファイルの扱いは shim (`parser/files.rs`) にまとめ、`PATCHES` で Java 側をそれに合わせる。範囲を置き換えるパッチは `開始⋯終了` と書く。
+  - 解決順は `SimpleFilenameToStream` と同じで、ユーザーディレクトリ、ライブラリパス、標準モジュールの順に探す。標準モジュールは `xtask gen-fidelity` が固定版ソースから `crates/tlars-sany/StandardModules/` に写し、バイナリに埋め込む。TLC と同じく、読む前に `tlc-*` の一時ディレクトリへ書き出す。
+  - TLC は jar から読んだ標準モジュールについて `Parsing file <path> (jar:file:...)` と jar の URL を添える。tlars には jar がないので、パスだけを出す (TLC の標準モジュールがファイルシステム上にあるときと同じ形)。
+  - 1 ファイルに複数のモジュールを書いた仕様 (`MonolithSpecExtractor`) は Rust で書き直した。
+  - PlusCal の検証 (`SpecObj.validateParseUnit`、`pcal.Validator`) は、PlusCal を含まないモジュール (Validator の `NO_PLUSCAL_EXISTS`) だけを扱い、含むものは `todo!()` にしてある。
+- SANY のドライバ (`SANY.parse`、`frontEndParse`、`frontEndSemanticAnalysis`) は、転写したクラスをつなぐだけなので `parser/driver.rs` に手で書く。リンター (`tla2sany.linter`) はまだ転写しておらず、`doLinting` は `todo!()` になる。意味解析中の `AbortException` について TLC が出す JVM のスタックトレースは、先頭行 (例外の文字列) だけを出す。
 - 外部 API のシグネチャは `xtask` の `jj2rs/externs.rs` に表として書く。表にない呼び出しは出力時のエラーになり、推測で補うことはしない。`jj2rs emit --check` で生成物が最新かを確かめる。
 
 ## Risks
@@ -236,6 +243,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 - jj2rs の snippet 表 (約 300) が扱える量か。M1 冒頭で spike。
   - spike 結果 (2026-11-17): JavaCC 4.0 で生成した 6 ファイル (17,562 行) の全 618 メソッドを Java 部分集合パーサーで AST 化できた (`xtask jj2rs survey`)。手書きは `.jj` 冒頭のヘルパー 19 メソッド (847 行) と semantic action が呼ぶ約 45 の API (SyntaxTreeNode、OperatorStack、JunctionListContext、proof level 等) に限られる。snippet 表方式はやめ、semantic action も同じ変換器で Rust に落とす方針に変更。
   - 実装結果 (2026-11-18): 転写したパーサーは tlaplus/Examples の全 433 モジュールで TLC と一致した (構文木、パースの成否、エラーログ、パース中の intern 列)。比較対象は `tools/golden/ParseGolden.java` の出力で、一致した文字列は構文エラーと字句エラーの文言も含む。
+  - 実装結果 (2026-11-18): 転写した SANY の前段 (読み込み、意味解析、レベル検査) は、tlaplus/Examples の全 433 モジュールをそれぞれ根の仕様として動かしたとき TLC と一致した (終了コード、エラーと警告の文言を含むログ、ToolIO の出力、intern 列、`ExternalModuleTable` の dump、全演算子定義のレベル)。433 件のうち 151 件は TLC でもエラーで終わる仕様である。比較対象は `tools/golden/SemanticGolden.java` の出力で、仕様ごとに JVM を起動する。設定はリンターと PlusCal 検証を切ったもの。
 - 転写したコードは Java のオブジェクトモデル (`Rc<RefCell<_>>` と `JResult`) のまま動くので遅い可能性がある。パースは全 433 モジュールで約 2 秒 (release、TLC は JVM 起動込みで約 2 秒) なので、今は問題にしていない。`SyntaxTreeNode.parent` は `Rc` の循環参照になり、`setParent` を呼ぶと木がリークする。Generator に渡すときに読み替えるか、`Weak` にする。
 - `Arc` トラフィックが JIT 済み TLC に対し許容できるか。M3.5 で計測。
 - stack overflow の深さは `-Xss2m` の frame サイズ依存で一致させられない見込み。
@@ -245,7 +253,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 | マイルストーン | 内容 | 合格条件 |
 |---|---|---|
 | M0 | `tlars-java` (`String.hashCode`、Hashtable、HashSet 順、Random、Double.toString、BigDecimal、DecimalFormat、SimpleDateFormat、数値パース)、FP64、`tlars-msg` (全 251 コード)、CLI、`Env` (cfg と pprint はそれぞれ M1 後と M2 へ移動) | JDK 21 と bc1b506 の TLC から生成した golden (完了) |
-| M1 | jj2rs (parser + TokenManager)、Generator、level、SANY の出力文 | syntax/modules/errors 約 1.8k 件。Hashtable 順と intern 順をここで検証する。jj2rs は完了 (Examples 全 433 モジュールで構文木と intern 列が TLC と一致) |
+| M1 | jj2rs (parser + TokenManager)、Generator、level、SANY の出力文 | syntax/modules/errors 約 1.8k 件。Hashtable 順と intern 順をここで検証する。パーサー、読み込み、意味解析、レベル検査は完了 (Examples 全 433 モジュールで TLC と一致)。残りはリンターと PlusCal 検証 |
 | M2 | 全値クラス (order/fp/print/enumerate)、定数評価 | expressions 984 件 × 5 context |
 | M3 | 1 worker の BFS、SpecProcessor、action 分割、trace 再生、ALIAS/VIEW/SYMMETRY | checker と standard |
 | M3.5 | **性能ゲート** (新設、judge の指摘による) | 大きめの spec (Paxos 等) で TLC との速度比を計測。許容できなければ表現を見直す |
@@ -256,7 +264,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 ## 開発環境
 
 - `nix develop`: Rust、JDK 21、samply/perf、bc1b506 から組み立てた `tlc`/`tla2tools-java`、`TLAPLUS_SRC`。
-- `cargo run -p xtask -- gen-fidelity [--check]`: FP64.Polys、EC/MP カタログ、SANY ErrorCode を固定版ソースから生成。
+- `cargo run -p xtask -- gen-fidelity [--check]`: FP64.Polys、EC/MP カタログ、SANY ErrorCode、埋め込む標準モジュールを固定版ソースから生成。
 - golden の再生成手順は `tools/golden/*` の先頭コメント。
 - ベンチマーク: `cargo run --release -p xtask -- bench run --engine tlc|tlars [--workers N] [--repeat N] [--filter TEXT]`。対象は `bench/suite.txt` (tlaplus/Examples の cfg パス)、期待値は Examples の manifest から読み、結果は `bench/results/*.jsonl` (git 管理外)。`bench compare <base> <cand>` で比較。基準値は `bench/baselines/` に置く。
 - プロファイル: `cargo build --profile profiling -p tlars` の後に `samply record` か `perf record`。
