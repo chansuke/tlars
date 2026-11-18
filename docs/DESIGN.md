@@ -95,7 +95,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
    - パーサーは `xtask jj2rs` が `TLAplusParser.java` (10,790 行) を機械的に転写して作る。
    - 統合版では TokenManager (5,334 行) も転写対象に加えた。judge が「全案とも lexer を手書きしていた」と指摘した穴を塞ぐためである。
    - これで構文エラーと字句エラーの文言、`bpa` のスタック、`matchFcnConst` のバグ、`\X` の n 項化が、作り方の時点で TLC と一致する。
-   - Java の semantic action (belchDEF、junction 判定、OperatorStack) だけは手で移植し、snippet のハッシュで照合する。
+   - semantic action も、それが呼ぶ SANY のクラス (SyntaxTreeNode、Operator(s)、OperatorStack、ParseError(s) など) も同じ変換器で転写する。手で書くのは Java ライブラリの部分集合と、変換しないクラスだけである (下の「パーサーの転写」)。
 2. **順序は事後に再生せず、TLC と同じ動作から自然に出す (base)。**
    - intern は TLC と同じ地点で行う。クラス初期化は明示的な `JavaClass` イベントとして扱う。
    - SANY の `Context` は `tlars_java::Hashtable` そのものにする。そのため宣言順を所有するのは 1 か所だけになる。
@@ -206,10 +206,28 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 4. intern 順は計測用 TLC の InternTable dump で一度照合する (`xtask intern-dump-diff`)。
 5. `-fp`/`-seed` の既定は TLC 同様に乱数。
 
+### パーサーの転写 (`xtask jj2rs`)
+
+- 入力は固定版 TLC のソースツリーにある Java ファイル。JavaCC の生成物 (`TLAplusParser`、`TLAplusParserTokenManager`、`SimpleCharStream`、`Token`、`ParseException`、`TokenMgrError`、2 つの定数 interface) はソースツリーに置かれており、JavaCC を回し直した出力と同一である。これに SANY のクラス (`SyntaxTreeNode`、`Operator`、`Operators`、`OSelement`、`OperatorStack`、`ParseError`、`ParseErrors`、`ParseExceptionExtended`、`Strings`) を加え、`crates/tlars-sany/src/parser/generated.rs` (約 2.3 万行) を出力する。
+- Java の意味は `parser/java.rs` が受け持つ。
+  - 参照は `J<T>` (null を取りうる `Rc<RefCell<T>>`、`==` は参照の同一性)、文字列は `JStr` (UTF-16 単位で添字を数える) で表す。
+  - 例外は `JResult` で伝える。`Error` と実行時例外は panic にする。TLC でもパースが中断するからである。
+  - `Object` は downcast できる箱にする。
+  - フィールドは `jread` で読み、借用はその読み取りの間で終わらせる。こうしないと、呼び出し先が同じオブジェクトを書き換えたときに `RefCell` が panic する。
+- オーバーロードは引数の型で解決する。static フィールドは遅延初期化して、Java のクラス初期化順 (つまり intern 順) を再現する。
+- 手書きするものは `parser/support.rs` にまとめる。
+  - Java ライブラリの部分集合: `Vector`、`Hashtable` (列挙順は `tlars_java::Hashtable` で再現)、`Deque`、`StringBuffer`、`Reader` など。
+  - `UniqueString` (セッションの `Interner` に委ねる)、`Location`、`SanyOutput`、`JunctionListContext`。最後のものは enum と内部クラスを使うので手で移植する。
+  - `SimpleCharStream.ExpandBuff`: `catch (Throwable)` を含むため。
+  - `TLAplusParser(SanyOutput, byte[])`: UTF-8 で decode してから `Reader` 版のコンストラクタに渡す。
+- 外部 API のシグネチャは `xtask` の `jj2rs/externs.rs` に表として書く。表にない呼び出しは出力時のエラーになり、推測で補うことはしない。`jj2rs emit --check` で生成物が最新かを確かめる。
+
 ## Risks
 
 - jj2rs の snippet 表 (約 300) が扱える量か。M1 冒頭で spike。
   - spike 結果 (2026-11-17): JavaCC 4.0 で生成した 6 ファイル (17,562 行) の全 618 メソッドを Java 部分集合パーサーで AST 化できた (`xtask jj2rs survey`)。手書きは `.jj` 冒頭のヘルパー 19 メソッド (847 行) と semantic action が呼ぶ約 45 の API (SyntaxTreeNode、OperatorStack、JunctionListContext、proof level 等) に限られる。snippet 表方式はやめ、semantic action も同じ変換器で Rust に落とす方針に変更。
+  - 実装結果 (2026-11-18): 転写したパーサーは tlaplus/Examples の全 433 モジュールで TLC と一致した (構文木、パースの成否、エラーログ、パース中の intern 列)。比較対象は `tools/golden/ParseGolden.java` の出力で、一致した文字列は構文エラーと字句エラーの文言も含む。
+- 転写したコードは Java のオブジェクトモデル (`Rc<RefCell<_>>` と `JResult`) のまま動くので遅い可能性がある。パースは全 433 モジュールで約 2 秒 (release、TLC は JVM 起動込みで約 2 秒) なので、今は問題にしていない。`SyntaxTreeNode.parent` は `Rc` の循環参照になり、`setParent` を呼ぶと木がリークする。Generator に渡すときに読み替えるか、`Weak` にする。
 - `Arc` トラフィックが JIT 済み TLC に対し許容できるか。M3.5 で計測。
 - stack overflow の深さは `-Xss2m` の frame サイズ依存で一致させられない見込み。
 
@@ -218,7 +236,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 | マイルストーン | 内容 | 合格条件 |
 |---|---|---|
 | M0 | `tlars-java` (`String.hashCode`、Hashtable、HashSet 順、Random、Double.toString、BigDecimal、DecimalFormat、SimpleDateFormat、数値パース)、FP64、`tlars-msg` (全 251 コード)、CLI、`Env` (cfg と pprint はそれぞれ M1 後と M2 へ移動) | JDK 21 と bc1b506 の TLC から生成した golden (完了) |
-| M1 | jj2rs (parser + TokenManager)、Generator、level、SANY の出力文 | syntax/modules/errors 約 1.8k 件。Hashtable 順と intern 順をここで検証する |
+| M1 | jj2rs (parser + TokenManager)、Generator、level、SANY の出力文 | syntax/modules/errors 約 1.8k 件。Hashtable 順と intern 順をここで検証する。jj2rs は完了 (Examples 全 433 モジュールで構文木と intern 列が TLC と一致) |
 | M2 | 全値クラス (order/fp/print/enumerate)、定数評価 | expressions 984 件 × 5 context |
 | M3 | 1 worker の BFS、SpecProcessor、action 分割、trace 再生、ALIAS/VIEW/SYMMETRY | checker と standard |
 | M3.5 | **性能ゲート** (新設、judge の指摘による) | 大きめの spec (Paxos 等) で TLC との速度比を計測。許容できなければ表現を見直す |
