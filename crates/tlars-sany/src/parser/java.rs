@@ -121,6 +121,10 @@ impl JStr {
     pub(crate) fn equals(&self, other: &JStr) -> bool {
         !other.is_null() && self.as_str() == other.as_str()
     }
+    /// `String.equals(Object)`.
+    pub(crate) fn equals_object(&self, other: &J<Object>) -> bool {
+        other.instance_of::<JStr>(|s| self.equals(s))
+    }
     pub(crate) fn length(&self) -> i32 {
         let r = self.rep();
         if r.ascii { r.text.len() as i32 } else { r.text.encode_utf16().count() as i32 }
@@ -143,6 +147,62 @@ impl JStr {
     }
     pub(crate) fn index_of_char(&self, c: u16) -> i32 {
         self.units().iter().position(|u| *u == c).map_or(-1, |p| p as i32)
+    }
+    /// `indexOf(str, fromIndex)`: a negative start searches from 0, one past the end finds
+    /// only the empty string.
+    pub(crate) fn index_of_from(&self, s: &JStr, from: i32) -> i32 {
+        let hay = self.units();
+        let needle = s.units();
+        let start = usize::try_from(from.max(0)).expect("non-negative");
+        if start > hay.len() || needle.len() > hay.len() {
+            return if needle.is_empty() && start <= hay.len() { start as i32 } else { -1 };
+        }
+        (start..=hay.len() - needle.len()).find(|&i| hay[i..].starts_with(&needle)).map_or(-1, |p| p as i32)
+    }
+    /// `startsWith(prefix, toffset)`: false for an offset outside the string.
+    pub(crate) fn starts_with_at(&self, s: &JStr, offset: i32) -> bool {
+        let hay = self.units();
+        let needle = s.units();
+        usize::try_from(offset).ok().is_some_and(|o| o <= hay.len() && hay[o..].starts_with(&needle))
+    }
+    /// `compareTo`: lexicographic by UTF-16 unit, then by length.
+    pub(crate) fn compare_to(&self, s: &JStr) -> i32 {
+        let (a, b) = (self.units(), s.units());
+        for (x, y) in a.iter().zip(&b) {
+            if x != y {
+                return i32::from(*x) - i32::from(*y);
+            }
+        }
+        a.len() as i32 - b.len() as i32
+    }
+    /// `split(regex)` for a regex that is an alternation of literal strings: at each position
+    /// the first alternative that matches ends a piece; trailing empty pieces are dropped, and
+    /// a string with no match is the only piece.
+    pub(crate) fn split_literals(&self, alternatives: &[&str]) -> JArr<JStr> {
+        let s = self.as_str();
+        let mut pieces = Vec::new();
+        let mut start = 0;
+        let mut i = 0;
+        let mut matched = false;
+        while i < s.len() {
+            match alternatives.iter().find(|a| s[i..].starts_with(**a)) {
+                Some(a) => {
+                    pieces.push(&s[start..i]);
+                    i += a.len();
+                    start = i;
+                    matched = true;
+                }
+                None => i += s[i..].chars().next().map_or(1, char::len_utf8),
+            }
+        }
+        if !matched {
+            return J::new(vec![self.clone()]);
+        }
+        pieces.push(&s[start..]);
+        while pieces.last().is_some_and(|p| p.is_empty()) {
+            pieces.pop();
+        }
+        J::new(pieces.into_iter().map(JStr::of).collect())
     }
     pub(crate) fn index_of(&self, s: &JStr) -> i32 {
         let hay = self.units();
@@ -295,6 +355,9 @@ impl JNull for JInteger {
 }
 
 impl JValue for JInteger {
+    fn java_class(&self) -> &'static str {
+        "Integer"
+    }
     fn is_java_null(&self) -> bool {
         self.is_null()
     }
@@ -324,6 +387,7 @@ pub(crate) struct Object {
     hash: fn(&dyn Any) -> i32,
     equals: fn(&dyn Any, &J<Object>) -> bool,
     instance_of: fn(&dyn Any, &str) -> bool,
+    class: fn(&dyn Any) -> &'static str,
 }
 
 /// What Java's `Object` methods do for a value: `hashCode`, `equals`, `toString` (as
@@ -338,9 +402,16 @@ pub(crate) trait JValue: Clone + JNull + 'static {
     fn java_instance_of(&self, class: &str) -> bool {
         !self.is_java_null() && class == "Object"
     }
+    /// The simple name of `getClass()`.
+    fn java_class(&self) -> &'static str {
+        "Object"
+    }
 }
 
 impl JValue for JStr {
+    fn java_class(&self) -> &'static str {
+        "String"
+    }
     fn is_java_null(&self) -> bool {
         self.is_null()
     }
@@ -389,6 +460,10 @@ impl JValue for bool {
 impl<T: ?Sized> J<T> {
     /// `Object.hashCode` for classes that do not override it. Java's identity hash is
     /// arbitrary; tables keyed this way iterate in no reproducible order in TLC either.
+    /// The object's address, unique while it lives: identity as a map key.
+    pub(crate) fn ptr_key(&self) -> usize {
+        self.0.as_ref().map_or(0, |rc| Rc::as_ptr(rc) as *const () as usize)
+    }
     pub(crate) fn identity_hash(&self) -> i32 {
         self.0.as_ref().map_or(0, |rc| Rc::as_ptr(rc) as *const () as usize as i32)
     }
@@ -398,6 +473,10 @@ impl Object {
     pub(crate) fn of<T: JValue>(v: T) -> J<Object> {
         if v.is_java_null() {
             return J::null();
+        }
+        // An `Object` stays itself (no box in a box).
+        if let Some(o) = (&v as &dyn Any).downcast_ref::<J<Object>>() {
+            return o.clone();
         }
         fn string_of<T: JValue>(a: &dyn Any) -> String {
             a.downcast_ref::<T>().expect("boxed type").object_string()
@@ -412,7 +491,17 @@ impl Object {
         fn instance_of<T: JValue>(a: &dyn Any, class: &str) -> bool {
             a.downcast_ref::<T>().expect("boxed type").java_instance_of(class)
         }
-        J::new(Object { value: Box::new(v), to_string: string_of::<T>, hash: hash_of::<T>, equals: equals_of::<T>, instance_of: instance_of::<T> })
+        fn class_of<T: JValue>(a: &dyn Any) -> &'static str {
+            a.downcast_ref::<T>().expect("boxed type").java_class()
+        }
+        J::new(Object {
+            value: Box::new(v),
+            to_string: string_of::<T>,
+            hash: hash_of::<T>,
+            equals: equals_of::<T>,
+            instance_of: instance_of::<T>,
+            class: class_of::<T>,
+        })
     }
 }
 
@@ -421,6 +510,9 @@ impl J<Object> {
     pub(crate) fn cast<T: JValue>(&self) -> T {
         if self.is_null() {
             return T::null();
+        }
+        if let Some(o) = (self as &dyn Any).downcast_ref::<T>() {
+            return o.clone();
         }
         self.jget().value.downcast_ref::<T>().cloned().expect("ClassCastException")
     }
@@ -458,6 +550,10 @@ impl JValue for J<Object> {
         }
         let o = self.jget();
         (o.instance_of)(&*o.value, class)
+    }
+    fn java_class(&self) -> &'static str {
+        let o = self.jget();
+        (o.class)(&*o.value)
     }
 }
 

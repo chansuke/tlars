@@ -44,22 +44,32 @@ pub enum Level {
 /// `tla2sany.st.Location`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Loc {
-    pub module: Atom,
-    pub begin_line: u32,
-    pub begin_col: u32,
-    pub end_line: u32,
-    pub end_col: u32,
+    /// `None` for a location without a module (`new Location(bl, bc, el, ec)`).
+    pub module: Option<Atom>,
+    pub begin_line: i32,
+    pub begin_col: i32,
+    pub end_line: i32,
+    pub end_col: i32,
 }
 
 impl Loc {
-    /// `line L, col C to line L2, col C2 of module M`, or `In module M` when all zero.
+    /// `Location.toString()`: `line L, col C to line L2, col C2 of module M`, or
+    /// `In module M` when all four are zero.
     pub fn tlc_text(&self, interner: &Interner) -> String {
-        todo!()
+        let module = self.module.map_or_else(|| "null".to_string(), |m| interner.text(m).to_string());
+        if self.module.is_some() && self.begin_line == 0 && self.begin_col == 0 && self.end_line == 0 && self.end_col == 0 {
+            return format!("In module {module}");
+        }
+        format!(
+            "line {}, col {} to line {}, col {} of module {module}",
+            self.begin_line, self.begin_col, self.end_line, self.end_col
+        )
     }
 }
 
 /// `BuiltInOperators` + `ASTConstants` internal names (`$ConjList`, `$FcnApply`, ...).
-/// Generated from the pinned sources; `BuiltInOPs.getOpCode` becomes this enum.
+/// TLC's operator codes (`BuiltInOPs.getOpCode`), which the evaluator derives from a
+/// built-in operator's name. Generated from the pinned sources.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BuiltinOp {
     ConjList,
@@ -115,7 +125,10 @@ pub enum BuiltinOp {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OpDefKind {
     User,
-    BuiltIn(BuiltinOp),
+    /// A built-in operator (`BuiltInOperators`), known by its name (`\\in`, `$FcnApply`,
+    /// ...). TLC maps names to its operator codes (`BuiltInOPs`), which is the evaluator's
+    /// business.
+    BuiltIn,
     /// `I == INSTANCE M` itself.
     ModuleInstance,
 }
@@ -159,6 +172,8 @@ pub struct FormalParamNode {
 pub enum ExprOrOpArg {
     Expr(ExprId),
     OpArg(SymbolRef),
+    /// A null argument: the guard of `CASE`'s `OTHER` arm (`$Pair(null, e)`).
+    Absent,
 }
 
 impl ExprOrOpArg {
@@ -166,7 +181,7 @@ impl ExprOrOpArg {
     pub fn expect_expr(self) -> ExprId {
         match self {
             ExprOrOpArg::Expr(e) => e,
-            ExprOrOpArg::OpArg(_) => panic!("operator argument where SANY guarantees an expression"),
+            ExprOrOpArg::OpArg(_) | ExprOrOpArg::Absent => panic!("operator argument where SANY guarantees an expression"),
         }
     }
 }
@@ -257,6 +272,7 @@ pub struct ThmOrAssumpDefNode {
     pub params: Box<[ParamId]>,
 }
 
+/// Theorems and proofs are not here: TLC does not evaluate them.
 pub struct ModuleNode {
     pub name: Atom,
     pub loc: Loc,
@@ -269,7 +285,6 @@ pub struct ModuleNode {
     pub op_defs: Box<[OpDefId]>,
     /// Includes extended, excludes instantiated (`getAssumptions`).
     pub assumptions: Box<[AssumeNode]>,
-    pub theorems: Box<[ThmId]>,
     pub inner_modules: Box<[ModuleId]>,
     pub is_standard: bool,
     pub is_instantiated: bool,
@@ -292,15 +307,39 @@ pub struct SemanticGraph {
     interner: Arc<Interner>,
 }
 
+/// The arenas `parser::freeze` fills, in id order.
+#[derive(Default)]
+pub(crate) struct GraphParts {
+    pub(crate) modules: Vec<ModuleNode>,
+    pub(crate) op_defs: Vec<OpDefNode>,
+    pub(crate) decls: Vec<OpDeclNode>,
+    pub(crate) params: Vec<FormalParamNode>,
+    pub(crate) thms: Vec<ThmOrAssumpDefNode>,
+    pub(crate) exprs: Vec<ExprNode>,
+    pub(crate) expr_levels: Vec<Level>,
+    pub(crate) op_levels: Vec<Level>,
+}
+
 impl SemanticGraph {
+    pub(crate) fn from_parts(parts: GraphParts, root: ModuleId, interner: Arc<Interner>) -> SemanticGraph {
+        let GraphParts { modules, op_defs, decls, params, thms, exprs, expr_levels, op_levels } = parts;
+        SemanticGraph { modules, op_defs, decls, params, thms, exprs, expr_levels, op_levels, root, interner }
+    }
+
     pub fn root(&self) -> ModuleId {
         self.root
     }
     pub fn module(&self, id: ModuleId) -> &ModuleNode {
         &self.modules[id.index()]
     }
+    /// `ExternalModuleTable.getModuleNode(name)`.
     pub fn module_by_name(&self, name: Atom) -> Option<ModuleId> {
-        todo!()
+        self.modules.iter().position(|m| m.name == name).map(|i| ModuleId::new(i as u32))
+    }
+    /// Every module, in the order SANY analysed them (`ExternalModuleTable`); inner modules
+    /// follow.
+    pub fn modules(&self) -> impl Iterator<Item = (ModuleId, &ModuleNode)> {
+        self.modules.iter().enumerate().map(|(i, m)| (ModuleId::new(i as u32), m))
     }
     pub fn op_def(&self, id: OpDefId) -> &OpDefNode {
         &self.op_defs[id.index()]
@@ -324,11 +363,21 @@ impl SemanticGraph {
         self.op_levels[id.index()]
     }
     pub fn loc(&self, id: ExprId) -> Loc {
-        todo!()
+        match self.expr(id) {
+            ExprNode::OpAppl { loc, .. }
+            | ExprNode::LetIn { loc, .. }
+            | ExprNode::SubstIn { loc, .. }
+            | ExprNode::APSubstIn { loc, .. }
+            | ExprNode::Label { loc, .. }
+            | ExprNode::At { loc, .. }
+            | ExprNode::Numeral { loc, .. }
+            | ExprNode::Decimal { loc, .. }
+            | ExprNode::String { loc, .. } => *loc,
+        }
     }
     /// Resolve `a!b!c` / plain names the way `SpecProcessor` resolves cfg identifiers.
     pub fn resolve_root_name(&self, path: &[Atom]) -> Option<SymbolRef> {
-        todo!()
+        todo!("M3: SpecProcessor's name resolution for cfg identifiers")
     }
     pub fn interner(&self) -> &Arc<Interner> {
         &self.interner

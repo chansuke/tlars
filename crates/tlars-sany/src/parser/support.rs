@@ -5,7 +5,7 @@
 #![allow(non_snake_case)]
 
 use super::generated::{
-    self, ChildrenVisitor, Errors, ParseUnit, SpecObj, LevelConstants, ParamAndPosition, SemanticNodeObj, SimpleCharStream, TLAplusParser, TLAplusParserConstants,
+    self, Debug, Errors, ParseUnit, SpecObj, TLAtoPCalMapping, trans, LevelConstants, ParamAndPosition, SemanticNodeObj, SimpleCharStream, TLAplusParser, TLAplusParserConstants,
 };
 pub(crate) use super::files::{FileUtil, FilenameToStream, NamedInputStream, ToolIO};
 use super::java::*;
@@ -103,6 +103,10 @@ impl Math {
     pub(crate) fn max(a: i32, b: i32) -> i32 {
         a.max(b)
     }
+    /// `Math.abs(int)`: `Integer.MIN_VALUE` stays negative.
+    pub(crate) fn abs(a: i32) -> i32 {
+        a.wrapping_abs()
+    }
     pub(crate) fn min(a: i32, b: i32) -> i32 {
         a.min(b)
     }
@@ -121,12 +125,12 @@ pub(crate) struct Arrays;
 impl Arrays {
     /// `Arrays.equals(Object[], Object[])`: element-wise `equals`, `null` arrays equal only
     /// each other.
-    pub(crate) fn equals(a: JArr<J<Object>>, b: JArr<J<Object>>) -> bool {
+    pub(crate) fn equals<T: JValue>(a: JArr<T>, b: JArr<T>) -> bool {
         if a.is_null() || b.is_null() {
             return a.is_null() && b.is_null();
         }
         let (a, b) = (a.jget(), b.jget());
-        a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| if x.is_null() { y.is_null() } else { x.java_equals(y) })
+        a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| if x.is_java_null() { y.is_java_null() } else { x.java_equals(y) })
     }
     pub(crate) fn copyOf(a: JArr<i32>, n: i32) -> JArr<i32> {
         let mut v = a.jget().clone();
@@ -274,6 +278,13 @@ impl JNull for JClass {
     }
 }
 
+/// `Class.toString()`: `class <name>`.
+impl JToString for JClass {
+    fn java_string(&self) -> String {
+        self.object_string()
+    }
+}
+
 impl JValue for JClass {
     fn is_java_null(&self) -> bool {
         false
@@ -318,6 +329,33 @@ impl BuiltInOPs {
 pub(crate) struct Character;
 
 impl Character {
+    /// `Character.isLetter(char)`: general categories Lu, Ll, Lt, Lm and Lo. ASCII is exact;
+    /// beyond it, Rust's `Alphabetic` stands in (it also admits letter numbers and some
+    /// marks, which Java does not).
+    pub(crate) fn isLetter(c: u16) -> bool {
+        match char::from_u32(u32::from(c)) {
+            Some(ch) if ch.is_ascii() => ch.is_ascii_alphabetic(),
+            Some(ch) => ch.is_alphabetic(),
+            None => false,
+        }
+    }
+    /// `Character.isDigit(char)`: category Nd. ASCII is exact; beyond it, Rust's `Numeric`
+    /// stands in.
+    pub(crate) fn isDigit(c: u16) -> bool {
+        match char::from_u32(u32::from(c)) {
+            Some(ch) if ch.is_ascii() => ch.is_ascii_digit(),
+            Some(ch) => ch.is_numeric(),
+            None => false,
+        }
+    }
+    pub(crate) fn isLetterOrDigit(c: u16) -> bool {
+        Self::isLetter(c) || Self::isDigit(c)
+    }
+    /// `Character.toString(int codePoint)`.
+    pub(crate) fn toString(code_point: i32) -> JStr {
+        let ch = u32::try_from(code_point).ok().and_then(char::from_u32).expect("IllegalArgumentException");
+        JStr::of(&ch.to_string())
+    }
     /// `Character.isWhitespace`: space separators except no-break spaces, plus the ASCII
     /// controls Java lists.
     pub(crate) fn isWhitespace(c: u16) -> bool {
@@ -333,9 +371,14 @@ impl Character {
 
 pub(crate) struct System;
 
+thread_local! {
+    /// Properties set with `System.setProperty` (PlusCal's `-unixEOL`).
+    static SYSTEM_PROPERTIES: RefCell<std::collections::BTreeMap<String, JStr>> = RefCell::default();
+}
+
 impl System {
     pub(crate) fn out() -> J<PrintStream> {
-        J::new(PrintStream)
+        J::new(PrintStream::Stdout)
     }
 
     /// Copies as if through a temporary array, so overlapping ranges work.
@@ -349,6 +392,9 @@ impl System {
     /// The platform properties SANY reads (Linux); TLC runs without the `-D` switches SANY
     /// reads.
     pub(crate) fn getProperty_2(key: JStr, default: JStr) -> JStr {
+        if let Some(v) = SYSTEM_PROPERTIES.with(|p| p.borrow().get(key.as_str()).cloned()) {
+            return v;
+        }
         match key.as_str() {
             "line.separator" => JStr::of("\n"),
             "file.separator" => JStr::of("/"),
@@ -357,6 +403,12 @@ impl System {
     }
     pub(crate) fn getProperty_1(key: JStr) -> JStr {
         Self::getProperty_2(key, JStr::null())
+    }
+    /// `System.setProperty`: returns the previous value.
+    pub(crate) fn setProperty(key: JStr, value: JStr) -> JStr {
+        let previous = Self::getProperty_1(key.clone());
+        SYSTEM_PROPERTIES.with(|p| p.borrow_mut().insert(key.as_str().to_string(), value));
+        previous
     }
     pub(crate) fn currentTimeMillis() -> i64 {
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
@@ -369,17 +421,37 @@ fn index(i: i32) -> usize {
 }
 
 /// `System.out`: only debugging dumps in the translated code write to it.
-pub(crate) struct PrintStream;
+/// A `PrintStream`: `System.out`, or `ToolIO.out`/`ToolIO.err`, whose lines are kept for
+/// the caller (`files::take_tool_io`).
+pub(crate) enum PrintStream {
+    Stdout,
+    Tool { is_err: bool, pending: String },
+}
+
+impl PrintStream {
+    fn write(&mut self, text: &str) {
+        match self {
+            PrintStream::Stdout => print!("{text}"),
+            PrintStream::Tool { is_err, pending } => {
+                pending.push_str(text);
+                while let Some(n) = pending.find('\n') {
+                    let line: String = pending.drain(..=n).collect();
+                    super::files::tool_println(*is_err, line.trim_end_matches('\n').to_string());
+                }
+            }
+        }
+    }
+}
 
 impl J<PrintStream> {
     pub(crate) fn print(&self, x: &dyn JToString) {
-        print!("{}", x.java_string());
+        self.jget_mut().write(&x.java_string());
     }
     pub(crate) fn println_1(&self, x: &dyn JToString) {
-        println!("{}", x.java_string());
+        self.jget_mut().write(&format!("{}\n", x.java_string()));
     }
     pub(crate) fn println_0(&self) {
-        println!();
+        self.jget_mut().write("\n");
     }
 }
 
@@ -486,6 +558,161 @@ impl<E: Clone> J<Vector<E>> {
     }
 }
 
+/// `java.util.Vector` (PlusCal's), erased as in Java: one type for every element type,
+/// holding `Object`s. Accessors take the element type the caller expects (a turbofish from
+/// the translation) and cast to it. Unlike `tla2sany.utilities.Vector`, `contains` and
+/// `indexOf` compare with `equals`.
+pub(crate) struct JavaVector(pub(crate) Vec<J<Object>>);
+
+impl JavaVector {
+    pub(crate) fn new_0() -> J<JavaVector> {
+        J::new(JavaVector(Vec::new()))
+    }
+    pub(crate) fn new_1_0(_capacity: i32) -> J<JavaVector> {
+        Self::new_0()
+    }
+    pub(crate) fn new_2(_capacity: i32, _increment: i32) -> J<JavaVector> {
+        Self::new_0()
+    }
+    /// `new Vector<>(collection)`: a copy.
+    pub(crate) fn new_1_1(c: J<JavaVector>) -> J<JavaVector> {
+        J::new(JavaVector(c.jget().0.clone()))
+    }
+}
+
+impl J<JavaVector> {
+    pub(crate) fn add_1<E: JValue>(&self, e: E) -> bool {
+        self.jget_mut().0.push(Object::of(e));
+        true
+    }
+    #[track_caller]
+    pub(crate) fn add_2<E: JValue>(&self, i: i32, e: E) {
+        let i = index(i);
+        let mut v = self.jget_mut();
+        assert!(i <= v.0.len(), "ArrayIndexOutOfBoundsException");
+        v.0.insert(i, Object::of(e));
+    }
+    pub(crate) fn addAll(&self, other: J<JavaVector>) -> bool {
+        let items = other.jget().0.clone();
+        let changed = !items.is_empty();
+        self.jget_mut().0.extend(items);
+        changed
+    }
+    pub(crate) fn addElement<E: JValue>(&self, e: E) {
+        self.jget_mut().0.push(Object::of(e));
+    }
+    #[track_caller]
+    pub(crate) fn insertElementAt<E: JValue>(&self, e: E, i: i32) {
+        self.add_2(i, e);
+    }
+    #[track_caller]
+    pub(crate) fn elementAt<E: JValue>(&self, i: i32) -> E {
+        self.jget().0.get(index(i)).expect("ArrayIndexOutOfBoundsException").cast::<E>()
+    }
+    #[track_caller]
+    pub(crate) fn get<E: JValue>(&self, i: i32) -> E {
+        self.elementAt(i)
+    }
+    #[track_caller]
+    pub(crate) fn set<E: JValue>(&self, i: i32, e: E) -> E {
+        let mut v = self.jget_mut();
+        let slot = v.0.get_mut(index(i)).expect("ArrayIndexOutOfBoundsException");
+        std::mem::replace(slot, Object::of(e)).cast::<E>()
+    }
+    #[track_caller]
+    pub(crate) fn setElementAt<E: JValue>(&self, e: E, i: i32) {
+        let _: E = self.set(i, e);
+    }
+    #[track_caller]
+    pub(crate) fn firstElement<E: JValue>(&self) -> E {
+        self.jget().0.first().expect("java.util.NoSuchElementException").cast::<E>()
+    }
+    #[track_caller]
+    pub(crate) fn lastElement<E: JValue>(&self) -> E {
+        self.jget().0.last().expect("java.util.NoSuchElementException").cast::<E>()
+    }
+    #[track_caller]
+    pub(crate) fn remove<E: JValue>(&self, i: i32) -> E {
+        let i = index(i);
+        let mut v = self.jget_mut();
+        assert!(i < v.0.len(), "ArrayIndexOutOfBoundsException");
+        v.0.remove(i).cast::<E>()
+    }
+    #[track_caller]
+    pub(crate) fn removeElementAt(&self, i: i32) {
+        let _: J<Object> = self.remove(i);
+    }
+    pub(crate) fn removeAllElements(&self) {
+        self.jget_mut().0.clear();
+    }
+    pub(crate) fn size(&self) -> i32 {
+        self.jget().0.len() as i32
+    }
+    pub(crate) fn isEmpty(&self) -> bool {
+        self.jget().0.is_empty()
+    }
+    /// A snapshot; the translated code never mutates a vector while enumerating it.
+    pub(crate) fn elements<E: JValue>(&self) -> J<Enumeration<E>> {
+        J::new(Enumeration { items: self.jget().0.iter().map(|o| o.cast::<E>()).collect(), next: 0 })
+    }
+    pub(crate) fn iterator<E: JValue>(&self) -> J<Iterator<E>> {
+        Iterator::over(self.jget().0.iter().map(|o| o.cast::<E>()).collect())
+    }
+    pub(crate) fn contains<E: JValue>(&self, e: E) -> bool {
+        self.indexOf(e) >= 0
+    }
+    /// `indexOf(o)`: the first element `o.equals`, or null for a null `o`.
+    pub(crate) fn indexOf<E: JValue>(&self, e: E) -> i32 {
+        let o = Object::of(e);
+        let v = self.jget();
+        let found = if o.is_null() { v.0.iter().position(J::is_null) } else { v.0.iter().position(|x| o.java_equals(x)) };
+        found.map_or(-1, |i| i as i32)
+    }
+    pub(crate) fn toString(&self) -> JStr {
+        JStr::of(&self.java_string())
+    }
+}
+
+/// `AbstractCollection.toString`: `[a, b]`.
+impl JToString for J<JavaVector> {
+    fn java_string(&self) -> String {
+        if self.is_null() {
+            return "null".into();
+        }
+        let items: Vec<String> = self.jget().0.iter().map(JValue::object_string).collect();
+        format!("[{}]", items.join(", "))
+    }
+}
+
+/// `Vector.equals` and `hashCode` are `AbstractList`'s: element by element.
+impl JValue for J<JavaVector> {
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        self.jget().0.iter().fold(1i32, |h, e| h.wrapping_mul(31).wrapping_add(if e.is_null() { 0 } else { e.java_hash() }))
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        if other.is_null() {
+            return false;
+        }
+        if self.same(other) {
+            return true;
+        }
+        let (a, b) = (self.jget(), other.jget());
+        a.0.len() == b.0.len() && a.0.iter().zip(&b.0).all(|(x, y)| if x.is_null() { y.is_null() } else { x.java_equals(y) })
+    }
+    fn java_instance_of(&self, class: &str) -> bool {
+        matches!(class, "Vector" | "JavaVector" | "AbstractList" | "List" | "Collection" | "Object")
+    }
+    fn java_class(&self) -> &'static str {
+        "Vector"
+    }
+}
+
 /// Element identity (`==`), which `tla2sany.utilities.Vector.contains` compares by.
 pub(crate) trait JSame {
     fn same_object(&self, other: &Self) -> bool;
@@ -577,6 +804,11 @@ pub(crate) struct Hashtable<K, V>(tlars_java::Hashtable<Key<K>, V>);
 impl<K: JValue, V> Hashtable<K, V> {
     pub(crate) fn new_0() -> J<Hashtable<K, V>> {
         J::new(Hashtable(tlars_java::Hashtable::new()))
+    }
+    /// `new Hashtable<>(initialCapacity)`, which changes the enumeration order.
+    pub(crate) fn new_1(initial_capacity: i32) -> J<Hashtable<K, V>> {
+        let capacity = usize::try_from(initial_capacity).expect("IllegalArgumentException");
+        J::new(Hashtable(tlars_java::Hashtable::with_capacity(capacity)))
     }
 }
 
@@ -727,6 +959,10 @@ impl<E: JValue> JToString for J<HashSet<E>> {
 pub(crate) struct ArrayList<E>(pub(crate) Vec<E>);
 
 impl<E: Clone> ArrayList<E> {
+    /// A list holding `items` (`List.subList` copies and the like).
+    pub(crate) fn from_vec(items: Vec<E>) -> J<ArrayList<E>> {
+        J::new(ArrayList(items))
+    }
     pub(crate) fn new_0() -> J<ArrayList<E>> {
         J::new(ArrayList(Vec::new()))
     }
@@ -877,6 +1113,10 @@ impl UniqueString {
     fn atom(self) -> Atom {
         self.0.expect("NullPointerException")
     }
+    /// The interned string, or `None` for a null `UniqueString`.
+    pub(crate) fn as_atom(self) -> Option<Atom> {
+        self.0
+    }
     pub(crate) fn is_null(&self) -> bool {
         self.0.is_none()
     }
@@ -978,6 +1218,11 @@ impl Location {
     pub(crate) fn new_5(name: UniqueString, bl: i32, bc: i32, el: i32, ec: i32) -> J<Location> {
         Location::unknown();
         J::new(Location { name, b_line: bl, b_column: bc, e_line: el, e_column: ec })
+    }
+
+    /// `new Location(bl, bc, el, ec)`: no module name.
+    pub(crate) fn new_4(bl: i32, bc: i32, el: i32, ec: i32) -> J<Location> {
+        Location::new_5(UniqueString::null(), bl, bc, el, ec)
     }
 
     /// `Location.nullLoc`, one object per session (`toString` compares with it).
@@ -1120,14 +1365,23 @@ impl SanyOutput {
 }
 
 impl J<SanyOutput> {
+    /// Without arguments the format is the message (`SimpleSanyOutput` skips
+    /// `String.format`).
     pub(crate) fn log_2(&self, level: LogLevel, format: JStr) {
-        self.jget_mut().messages.push((level, format_str(format.as_str(), &[])));
+        self.record(level, format.as_str().to_string());
     }
     pub(crate) fn log_3(&self, level: LogLevel, format: JStr, arg: &dyn JToString) {
-        self.jget_mut().messages.push((level, format_str(format.as_str(), &[arg])));
+        self.record(level, format_str(format.as_str(), &[arg]));
     }
     pub(crate) fn log_4(&self, level: LogLevel, format: JStr, a: &dyn JToString, b: &dyn JToString) {
-        self.jget_mut().messages.push((level, format_str(format.as_str(), &[a, b])));
+        self.record(level, format_str(format.as_str(), &[a, b]));
+    }
+    /// Keeps the message, and prints it as TLC's `SimpleSanyOutput(ToolIO.out, INFO)` does.
+    fn record(&self, level: LogLevel, message: String) {
+        if !matches!(level, LogLevel::Trace | LogLevel::Debug) {
+            super::load::console(super::load::ConsoleLine::Out(message.clone()));
+        }
+        self.jget_mut().messages.push((level, message));
     }
 }
 
@@ -1145,21 +1399,41 @@ pub(crate) fn java_format_objects(format: &JStr, objects: &JArr<J<Object>>) -> J
     JStr::of(&format_str(format.as_str(), &args))
 }
 
-/// The conversions SANY's messages use: `%s`, `%d` (printed alike), `%n`, `%%`.
+/// The conversions SANY's messages use: `%s`, `%d` (printed alike), `%N$s`, `%n`, `%%`.
 #[track_caller]
 fn format_str(format: &str, args: &[&dyn JToString]) -> String {
     let mut out = String::new();
-    let mut args = args.iter();
-    let mut chars = format.chars();
+    // Ordinary conversions take the arguments in turn; `%N$s` names one and does not move
+    // that cursor.
+    let mut next = 0;
+    let mut chars = format.chars().peekable();
+    let arg = |i: usize| args.get(i).expect("java.util.MissingFormatArgumentException").java_string();
     while let Some(c) = chars.next() {
         if c != '%' {
             out.push(c);
             continue;
         }
+        let mut digits = String::new();
+        while let Some(d) = chars.peek().filter(|d| d.is_ascii_digit()) {
+            digits.push(*d);
+            chars.next();
+        }
+        let explicit = if digits.is_empty() {
+            None
+        } else {
+            assert_eq!(chars.next(), Some('$'), "unsupported format width in %{digits}");
+            Some(digits.parse::<usize>().expect("index") - 1)
+        };
         match chars.next() {
-            Some('s' | 'd') => out.push_str(&args.next().expect("java.util.MissingFormatArgumentException").java_string()),
-            Some('%') => out.push('%'),
-            Some('n') => out.push('\n'),
+            Some('s' | 'd') => match explicit {
+                Some(i) => out.push_str(&arg(i)),
+                None => {
+                    out.push_str(&arg(next));
+                    next += 1;
+                }
+            },
+            Some('%') if explicit.is_none() => out.push('%'),
+            Some('n') if explicit.is_none() => out.push('\n'),
             other => panic!("unsupported format conversion %{other:?}"),
         }
     }
@@ -1192,6 +1466,21 @@ pub(crate) struct KeyWords;
 impl KeyWords {
     pub(crate) fn CONSTANT() -> JStr {
         JStr::of("CONSTANT")
+    }
+    pub(crate) fn CONSTANTS() -> JStr {
+        JStr::of("CONSTANTS")
+    }
+    pub(crate) fn EXTENDS() -> JStr {
+        JStr::of("EXTENDS")
+    }
+    pub(crate) fn MODULE() -> JStr {
+        JStr::of("MODULE")
+    }
+    pub(crate) fn SPECIFICATION() -> JStr {
+        JStr::of("SPECIFICATION")
+    }
+    pub(crate) fn VARIABLE() -> JStr {
+        JStr::of("VARIABLE")
     }
 }
 
@@ -1507,10 +1796,6 @@ impl J<SetOfArgLevelConstraints> {
 }
 
 impl J<SemanticNodeObj> {
-    /// `walkChildren(ChildrenVisitor)`: only the linter and TLC use it.
-    pub(crate) fn walkChildren__SemanticNode(&self, _visitor: J<ChildrenVisitor>) -> JResult<J<ChildrenVisitor>> {
-        todo!("linter: SemanticNode.walkChildren")
-    }
     /// `isDefinedWith(SemanticNode)`: only TLC's `SpecProcessor` uses it.
     pub(crate) fn isDefinedWith__SemanticNode(&self, _sn: J<SemanticNodeObj>) -> JResult<bool> {
         todo!("TLC: SemanticNode.isDefinedWith")
@@ -1524,22 +1809,172 @@ impl J<SemanticNodeObj> {
 // ---- tla2sany.modanalyzer: hand-written members ----
 
 impl J<SpecObj> {
-    /// `SpecObj.validateParseUnit`: checks a module's PlusCal algorithm against its
-    /// translation (`pcal.Validator`). Only `Validator`'s first step is here: a module none of
-    /// whose lines contains `algorithm` past its first column has no PlusCal
-    /// (`NO_PLUSCAL_EXISTS`), which adds no message.
-    pub(crate) fn validateParseUnit(&self, parse_unit: J<ParseUnit>, _errors: J<Errors>) -> JResult<()> {
-        let loc = parse_unit.getParseTree()?.getLocation()?;
-        let (begin, end) = (loc.beginLine(), loc.endLine());
-        let text = String::from_utf8_lossy(&parse_unit.getNis()?.bytes()).into_owned();
-        let seen_algorithm = text
-            .split('\n')
-            .enumerate()
-            .take_while(|(i, _)| (*i as i32 + 1) <= end)
-            .any(|(i, line)| i as i32 + 1 >= begin && line.find("algorithm").is_some_and(|p| p > 0));
-        if seen_algorithm {
-            todo!("pcal.Validator: validating a PlusCal translation is not translated yet");
+    /// `SpecObj.validateParseUnit`: warns when a module's PlusCal algorithm or its TLA+
+    /// translation changed since the translator checksummed them (`pcal.Validator`). TLC
+    /// reads the file again; the stream's contents are the same bytes.
+    pub(crate) fn validateParseUnit(&self, parse_unit: J<ParseUnit>, errors: J<Errors>) -> JResult<()> {
+        use super::pcal_validator::ValidationResult::*;
+        let bytes = parse_unit.getNis()?.bytes();
+        let results = super::pcal_validator::validate(&parse_unit, &bytes)?;
+        let name = parse_unit.getName()?;
+        let message = |code: &str, format: &str| -> JResult<()> {
+            errors.addMessage(
+                ErrorCode::of(code),
+                Location::moduleLocation(name.clone()),
+                JStr::of(format),
+                J::new(vec![Object::of(name.clone())]),
+            )?;
+            Ok(())
+        };
+        if results.contains(&TlaDivergenceExists) && results.contains(&PcalDivergenceExists) {
+            message(
+                "PLUSCAL_ALGORITHM_AND_TRANSLATION_CHANGED_SINCE_LAST_TRANSLATION",
+                "Both the PlusCal algorithm and its TLA+ translation in module %s have changed since the last translation.",
+            )?;
+        } else if results.contains(&TlaDivergenceExists) {
+            message(
+                "PLUSCAL_TRANSLATION_CHANGED_SINCE_LAST_TRANSLATION",
+                "The TLA+ translation in module %s has changed since its last translation.",
+            )?;
+        } else if results.contains(&PcalDivergenceExists) {
+            message(
+                "PLUSCAL_ALGORITHM_CHANGED_SINCE_LAST_TRANSLATION",
+                "The PlusCal algorithm in module %s has changed since its last translation.",
+            )?;
+        } else if results.contains(&ErrorEncountered) {
+            message("INTERNAL_ERROR", "An unexpected problem was encountered attempting to validate the specification for %s")?;
         }
         Ok(())
+    }
+}
+
+// ---- pcal and tla2tex: hand-written classes ----
+
+/// Helpers for the stream pipelines and `String` constructors that `PATCHES` rewrites in
+/// PlusCal's sources.
+pub(crate) struct JavaStrings;
+
+impl JavaStrings {
+    /// `input.codePoints().toArray()`.
+    pub(crate) fn codePoints(input: JStr) -> JArr<i32> {
+        J::new(input.as_str().chars().map(|c| c as i32).collect())
+    }
+    /// `new String(int[] codePoints, int offset, int count)`.
+    #[track_caller]
+    pub(crate) fn fromCodePoints(code_points: JArr<i32>, offset: i32, count: i32) -> JStr {
+        let v = code_points.jget();
+        let (start, n) = (index(offset), index(count));
+        let s: String = v[start..start + n]
+            .iter()
+            .map(|&c| u32::try_from(c).ok().and_then(char::from_u32).expect("IllegalArgumentException"))
+            .collect();
+        JStr::of(&s)
+    }
+    /// `Arrays.stream(array).anyMatch(s::equals)`.
+    pub(crate) fn arrayContains(array: JArr<JStr>, s: JStr) -> bool {
+        array.jget().iter().any(|x| s.equals(x))
+    }
+    /// `Pattern.compile("[a-zA-Z][a-zA-Z0-9_]*").matcher(s).matches()`.
+    pub(crate) fn isLabelRoot(s: JStr) -> bool {
+        let mut chars = s.as_str().chars();
+        chars.next().is_some_and(|c| c.is_ascii_alphabetic()) && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    }
+}
+
+/// `java.io.File`, as far as path names: `getName` and `getPath` (no file system access).
+pub(crate) struct File {
+    path: String,
+}
+
+impl File {
+    /// `new File(pathname)`: duplicate and trailing separators are dropped.
+    pub(crate) fn new_1(pathname: JStr) -> J<File> {
+        let mut path = String::new();
+        for c in pathname.as_str().chars() {
+            if !(c == '/' && path.ends_with('/')) {
+                path.push(c);
+            }
+        }
+        if path.len() > 1 && path.ends_with('/') {
+            path.pop();
+        }
+        J::new(File { path })
+    }
+}
+
+impl J<File> {
+    pub(crate) fn getPath(&self) -> JStr {
+        JStr::of(&self.jget().path)
+    }
+    pub(crate) fn getName(&self) -> JStr {
+        let f = self.jget();
+        JStr::of(f.path.rsplit('/').next().unwrap_or(&f.path))
+    }
+}
+
+/// `tla2tex.Token`'s kinds of tokens.
+pub(crate) struct TexToken;
+
+impl TexToken {
+    pub(crate) const BUILTIN: i32 = 1;
+    pub(crate) const NUMBER: i32 = 2;
+    pub(crate) const STRING: i32 = 3;
+    pub(crate) const IDENT: i32 = 4;
+    pub(crate) const COMMENT: i32 = 5;
+    pub(crate) const DASHES: i32 = 6;
+    pub(crate) const END_MODULE: i32 = 7;
+    pub(crate) const PROLOG: i32 = 8;
+    pub(crate) const EPILOG: i32 = 9;
+    pub(crate) const PF_STEP: i32 = 12;
+    pub(crate) const PCAL_LABEL: i32 = 13;
+}
+
+/// `util.TLAConstants`.
+pub(crate) struct TLAConstants;
+
+impl TLAConstants {
+    pub(crate) fn MODULE_CLOSING_REGEX() -> JStr {
+        JStr::of("^[=]+$")
+    }
+    pub(crate) fn RECORD_ARROW() -> JStr {
+        JStr::of(" |-> ")
+    }
+}
+
+/// `util.TLAConstants.Files`.
+pub(crate) struct Files;
+
+impl Files {
+    pub(crate) fn CONFIG_EXTENSION() -> JStr {
+        JStr::of(".cfg")
+    }
+    pub(crate) fn TLA_EXTENSION() -> JStr {
+        JStr::of(".tla")
+    }
+}
+
+impl Debug {
+    /// `tla2tex.Debug.now()`: `new Date().getTime()`.
+    pub(crate) fn now() -> JResult<i64> {
+        Ok(System::currentTimeMillis())
+    }
+}
+
+// The PlusCal translator as a program (`pcal.trans` with a file to translate): not reached by
+// validation, which is all tlars runs of PlusCal so far.
+impl trans {
+    pub(crate) fn OutputHelpMessage() -> JResult<bool> {
+        todo!("pcal.trans -help: the help text resource")
+    }
+    pub(crate) fn WriteStringVectorToFile<L>(_v: J<L>, _file: JStr) -> JResult<()> {
+        todo!("pcal.trans: writing the translation to a file")
+    }
+}
+
+impl J<TLAtoPCalMapping> {
+    /// `TLAtoPCalMapping.hashCode`: `Arrays.hashCode` of the mapping, whose elements are
+    /// arrays and hash by identity. Never used as a key.
+    pub(crate) fn hashCode(&self) -> JResult<i32> {
+        todo!("TLAtoPCalMapping.hashCode hashes arrays by identity")
     }
 }

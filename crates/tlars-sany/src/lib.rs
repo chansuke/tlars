@@ -14,7 +14,6 @@ mod error_codes;
 pub mod graph;
 mod fidelity;
 mod intern;
-mod modules;
 mod parser;
 mod pcal;
 mod semantic;
@@ -47,74 +46,73 @@ impl SanyErrorCode {
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// Where SANY finds `EXTENDS`/`INSTANCE` modules. Search order mirrors
-/// `SimpleFilenameToStream`: spec dir (or cwd), `-DTLA-Library` paths, embedded
-/// `StandardModules/*.tla`. User files shadow standard modules.
-pub trait ModuleResolver {
-    fn resolve(&self, module_name: &str) -> Option<ModuleSource>;
-}
-
-pub struct ModuleSource {
-    pub text: Arc<str>,
-    /// Absolute path printed in `Parsing file <abs> [(<uri>)]`.
-    pub path: PathBuf,
-    pub library_uri: Option<String>,
-    /// Found via the library locator: such modules are not linted.
-    pub is_standard: bool,
-}
-
-/// The default resolver; the embedded standard modules are the pinned
-/// `tla2sany/StandardModules/*.tla` sources (see `fidelity`).
-pub struct DefaultResolver {
-    pub spec_dir: PathBuf,
-    pub library_paths: Vec<PathBuf>,
-}
-
-impl ModuleResolver for DefaultResolver {
-    fn resolve(&self, module_name: &str) -> Option<ModuleSource> {
-        todo!()
-    }
-}
-
-/// SANY's console lines ("Parsing file ...", "Semantic processing of module X",
-/// "Linting of module X", warnings and errors), in order. The caller decides framing and
-/// delayed printing in `-tool` mode.
+/// SANY's console output, line by line: what TLC's `SimpleSanyOutput` prints to
+/// `ToolIO.out` ("Parsing file ...", "Semantic processing of module X", warnings and errors)
+/// and what PlusCal and the module resolver print to `ToolIO.out`/`ToolIO.err`, in the
+/// order TLC prints them. A line may contain newlines (one `println`).
 pub trait SanyOut {
     fn line(&mut self, text: &str);
+    fn err_line(&mut self, text: &str);
 }
 
 pub struct LoadRequest<'a> {
-    pub root_file: &'a Path,
-    pub resolver: &'a dyn ModuleResolver,
+    /// TLC's `mainFile`: the root module's file name as given, `.tla` optional.
+    pub root_file: &'a str,
+    /// `ToolIO.setUserDir`: TLC sets it to the spec's directory when `mainFile` is an
+    /// absolute path; otherwise modules are found from the working directory.
+    pub user_dir: Option<&'a Path>,
+    /// `-DTLA-Library` paths, searched after the user directory.
+    pub library_paths: &'a [PathBuf],
     /// Session interner. The cfg was already parsed into it (cfg strings intern first).
     pub interner: Arc<Interner>,
     /// `ParameterizedSpecObj`: modules that `-inv`, `-postCondition`, ... force into the
     /// root's EXTENDS.
     pub extra_root_extends: &'a [&'a str],
+    /// `MP.getSanySuppressedCodes()` / `MP.getSanyMessagesAsErrorCodes()`.
+    pub suppressed_codes: &'a [SanyErrorCode],
+    pub messages_as_errors: &'a [SanyErrorCode],
 }
 
-/// SANY failed. Its error text has already been written to [`SanyOut`]; TLC then prints
-/// `TLC_PARSING_FAILED` and exits 150.
+/// SANY failed; its text has already gone to [`SanyOut`]. What `SpecProcessor.processSpec`
+/// makes of it: `FrontEnd` is `TLC_PARSING_FAILED2`, the others `TLC_PARSING_FAILED` (with
+/// the error strings where SANY recorded errors).
 #[derive(Debug)]
 pub enum SanyFailed {
-    Parse,
-    Semantic,
-    ModuleNotFound,
-    Circular,
+    /// `SANY.parse` threw `FrontEndException`.
+    FrontEnd,
+    /// `specObj.parseErrors.getErrors()`.
+    Parse { errors: Vec<String> },
+    /// `specObj.semanticErrors.getErrors()`.
+    Semantic { errors: Vec<String> },
+    /// A non-zero `SanyExitCode` with no recorded errors (a warning elevated to an error).
+    Exit(i32),
 }
 
-/// `SANY.parse` (`SANY.java:182`): `frontEndParse` (SpecObj.loadSpec, dependency order),
-/// `frontEndSemanticAnalysis` (Generator + levelCheck per module), `frontEndLinting`.
+/// `SANY.parse` as `SpecProcessor.processSpec` runs it (`SanySettings.forExternalCaller`:
+/// strict exit codes, semantic analysis, level checking, linting and PlusCal validation),
+/// then the semantic graph. Runs on its own thread with a large stack: the translated SANY
+/// recurses per nesting level, and its statics start fresh as in a new JVM.
 pub fn load(req: LoadRequest<'_>, out: &mut dyn SanyOut) -> Result<graph::SemanticGraph, SanyFailed> {
-    // TODO(pseudocode):
-    //   interner.ensure(JavaClass::ContextReInit)           // Context.reInit(): built-ins
-    //   units = modules::load_spec(root, resolver, interner, out)?   // prints "Parsing file"
-    //   for m in units.in_dependency_order():
-    //       out.line("Semantic processing of module " + m)
-    //       semantic::generate(&mut builder, m.tree, &mut errors)
-    //       if errors.none() { semantic::level_check(&mut builder, m) }
-    //   print warnings / errors exactly as SANY.java:403-545
-    //   for m in non-standard modules: out.line("Linting of module " + m); linter
-    //   Ok(builder.freeze())
-    todo!()
+    assert!(req.extra_root_extends.is_empty(), "ParameterizedSpecObj (extra root EXTENDS) is not implemented yet");
+    let job = parser::LoadJob {
+        root_file: req.root_file.to_string(),
+        user_dir: req.user_dir.map(Path::to_path_buf),
+        library_paths: req.library_paths.to_vec(),
+        interner: req.interner.clone(),
+        suppressed_codes: req.suppressed_codes.to_vec(),
+        messages_as_errors: req.messages_as_errors.to_vec(),
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker = std::thread::Builder::new()
+        .name("sany".into())
+        .stack_size(1 << 28)
+        .spawn(move || parser::load_on_this_thread(job, tx))
+        .expect("spawning the SANY thread");
+    for line in rx {
+        match line {
+            parser::ConsoleLine::Out(s) => out.line(&s),
+            parser::ConsoleLine::Err(s) => out.err_line(&s),
+        }
+    }
+    worker.join().unwrap_or_else(|e| std::panic::resume_unwind(e))
 }

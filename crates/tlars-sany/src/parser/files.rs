@@ -14,7 +14,7 @@
 
 use super::generated::TLAplusParser;
 use super::java::*;
-use super::support::SanyOutput;
+use super::support::{PrintStream, SanyOutput};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
@@ -24,7 +24,8 @@ thread_local! {
     static TOOL_IO: RefCell<Vec<(bool, String)>> = const { RefCell::new(Vec::new()) };
 }
 
-fn tool_println(is_err: bool, line: String) {
+pub(crate) fn tool_println(is_err: bool, line: String) {
+    super::load::console(if is_err { super::load::ConsoleLine::Err(line.clone()) } else { super::load::ConsoleLine::Out(line.clone()) });
     TOOL_IO.with(|t| t.borrow_mut().push((is_err, line)));
 }
 
@@ -266,7 +267,7 @@ fn tempdir_for_monolith() -> Option<PathBuf> {
 }
 
 /// `BufferedReader.readLine` over the whole text: lines end at `\n`, `\r` or `\r\n`.
-fn java_lines(text: &str) -> Vec<&str> {
+pub(crate) fn java_lines(text: &str) -> Vec<&str> {
     let mut lines = Vec::new();
     let mut rest = text;
     while !rest.is_empty() {
@@ -364,7 +365,27 @@ impl FileUtil {
 
 pub(crate) struct ToolIO;
 
+thread_local! {
+    static TOOL_STREAMS: (J<PrintStream>, J<PrintStream>) = (
+        J::new(PrintStream::Tool { is_err: false, pending: String::new() }),
+        J::new(PrintStream::Tool { is_err: true, pending: String::new() }),
+    );
+}
+
 impl ToolIO {
+    /// `ToolIO.SYSTEM`, the mode SANY and TLC run in.
+    pub(crate) const SYSTEM: i32 = 0;
+
+    pub(crate) fn getMode() -> i32 {
+        Self::SYSTEM
+    }
+    pub(crate) fn out() -> J<PrintStream> {
+        TOOL_STREAMS.with(|s| s.0.clone())
+    }
+    pub(crate) fn err() -> J<PrintStream> {
+        TOOL_STREAMS.with(|s| s.1.clone())
+    }
+
     /// `ToolIO.getDefaultResolver()`: a `SimpleFilenameToStream` over the working directory
     /// and the `TLA-Library` paths (unset: tlars has no system properties).
     pub(crate) fn getDefaultResolver() -> J<FilenameToStream> {

@@ -4,11 +4,10 @@
 //! SANY's text. Written by hand: the class is glue between translated classes, and most of
 //! it is the command line (`SANYmain`), the explorer and deprecated overloads.
 //!
-//! Not modelled yet: linting (`frontEndLinting`, the untranslated `tla2sany.linter`) and
-//! the stack trace `AbortException` prints during semantic analysis (a JVM stack trace;
-//! only its first line, the exception, is printed).
+//! Not modelled: the stack trace `AbortException` prints during semantic analysis (a JVM
+//! stack trace; only its first line, the exception, is printed).
 
-use super::generated::{Context, ErrorDetails, Generator, ParseUnit, SpecObj};
+use super::generated::{Context, ErrorDetails, Generator, Linter, ParseUnit, SpecObj};
 use super::java::*;
 use super::support::{ArrayList, ErrorCode, LogLevel, SanyOutput, UniqueString};
 
@@ -114,7 +113,16 @@ pub(crate) fn parse(spec: &J<SpecObj>, out: &J<SanyOutput>, settings: &SanySetti
             }
             let error_level = spec.jread(|s| s.errorLevel);
             if settings.level_checking && SanyExitCode::from_code(error_level) == SanyExitCode::Ok && settings.linting {
-                todo!("tla2sany.linter is not translated yet");
+                let semantic_errors = spec.jread(|s| s.semanticErrors.clone());
+                let warns_before = semantic_errors.getWarningDetails()?.size();
+                front_end_linting(spec, out)?;
+                // Print linting warnings, respecting suppressed/elevated codes.
+                let all_warnings = semantic_errors.getWarningDetails()?;
+                let linting: Vec<J<ErrorDetails>> = all_warnings.jget().0[warns_before as usize..].to_vec();
+                let linting = ArrayList::from_vec(linting);
+                if report_messages(out, &filter_visible_messages(&linting, settings)?, settings)? {
+                    set_error_level(spec, SEMANTIC_FAILURE);
+                }
             }
         }
         Ok(None)
@@ -287,4 +295,21 @@ fn front_end_semantic_analysis(spec: &J<SpecObj>, out: &J<SanyOutput>, settings:
         }
         Err(e) => Err(e),
     }
+}
+
+/// `frontEndLinting`: lints every module that is not a standard module.
+fn front_end_linting(spec: &J<SpecObj>, out: &J<SanyOutput>) -> JResult<()> {
+    let table = spec.getExternalModuleTable()?;
+    let semantic_errors = spec.jread(|s| s.semanticErrors.clone());
+    let linter = Linter::new_0()?;
+    let modules = table.getModuleNodes()?;
+    for i in 0..modules.length() {
+        let module = modules.at(i);
+        if module.isStandardModule()? {
+            continue;
+        }
+        out.log_3(LogLevel::Info, JStr::of("Linting of module %s"), &module.getName_0_via_SymbolNode()?);
+        linter.lint(module, table.clone(), semantic_errors.clone())?;
+    }
+    Ok(())
 }

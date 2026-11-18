@@ -11,10 +11,15 @@
 
 mod driver;
 mod files;
+mod freeze;
 mod generated;
 mod java;
+mod load;
+mod pcal_validator;
 mod support;
 
+
+pub(crate) use load::{ConsoleLine, LoadJob, load_on_this_thread};
 
 #[cfg(test)]
 mod semantic_tests;
