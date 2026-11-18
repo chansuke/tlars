@@ -220,6 +220,15 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
   - `UniqueString` (セッションの `Interner` に委ねる)、`Location`、`SanyOutput`、`JunctionListContext`。最後のものは enum と内部クラスを使うので手で移植する。
   - `SimpleCharStream.ExpandBuff`: `catch (Throwable)` を含むため。
   - `TLAplusParser(SanyOutput, byte[])`: UTF-8 で decode してから `Reader` 版のコンストラクタに渡す。
+- 意味解析 (`tla2sany/semantic` の全クラス) も同じ変換器で転写する (2026-11-18 時点でコンパイルまで。TLC との照合はまだ)。そのために変換器に足した規則は次のとおり。
+  - 継承の階層は、根のクラスごとに `enum RootObj` を 1 つ作り、具体クラス 1 つにつき variant を 1 つ置く。各 variant は、根からそのクラスまでのフィールドをすべて持つ。参照は `J<RootObj>` で共通にするので、型を変えるキャストは何もしない。仮想呼び出しと `instanceof` は、variant に対する `match` で表す。
+  - オーバーライドの判定は「同じシグネチャを最初に宣言したクラスまたは interface」(origin) を単位にする。両方の origin を実装するクラスがあれば、2 つは同じ分岐関数にまとめる。シグネチャが同じでも別系統なら別の関数にする (`DecimalNode.bigVal()` と `NumeralNode.bigVal()` がその例)。
+  - 内部クラスは、外側のインスタンスを `this__0` に持つ。名前の解決では外側を順にたどる。
+  - 例外は生成される `JThrow` に入れる。これは翻訳したクラスの例外にも、`NumberFormatException` のようなライブラリの例外にも使う。`catch` は「その型の下位クラスか」を判定して捕まえる。
+  - `HashMap`/`HashSet` は JDK 21 と同じ列挙順を再現する (`tlars_java::JavaHashMap`、JDK の golden で照合済み)。`SemanticNode.hashCode` は `kind` と連番の `myUID` から決まるので、TLC の列挙順も再現できる。キーには `JValue` (`hashCode`/`equals`/`toString`) を生成する。オーバーライドがなく参照の同一性で比べるクラスは、Java でも列挙順が実行ごとに変わるので一致させられない。
+  - `Integer` は null を取りうる `JInteger` で表す (SANY がレベル表の `null` を検査するため)。`Boolean`、`Long`、`Character` はプリミティブのまま扱う。
+  - stream とラムダ、raw 型の使い回し、モデル化しない interface を引数に取るメソッドは、変換の前に Java ソースへパッチを当てる (`jj2rs/mod.rs` の `PATCHES`)。どのパッチも、ファイル中にちょうど 1 回だけ現れる完全一致の置換で、理由を添えてある。
+  - 無名クラスを使う `walkChildren`、`isDefinedWith`、`substituteFor` は、リンターと TLC が使うだけなので、今は `todo!()` にしてある。
 - 外部 API のシグネチャは `xtask` の `jj2rs/externs.rs` に表として書く。表にない呼び出しは出力時のエラーになり、推測で補うことはしない。`jj2rs emit --check` で生成物が最新かを確かめる。
 
 ## Risks
