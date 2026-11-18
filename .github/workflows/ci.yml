@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'flake.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - name: Generated files match the pinned sources
+        run: |
+          nix develop -c cargo run -q -p xtask -- gen-fidelity --check
+          nix develop -c cargo run -q -p xtask -- jj2rs emit --check
+      - name: Tests
+        run: nix develop -c cargo test --release --workspace
+      - name: Conformance cases that passed still pass
+        run: nix develop -c cargo run -q --release -p xtask -- conformance run --check
