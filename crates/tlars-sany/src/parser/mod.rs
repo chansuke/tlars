@@ -17,4 +17,6 @@ mod support;
 
 
 #[cfg(test)]
+mod semantic_tests;
+#[cfg(test)]
 mod tests;
