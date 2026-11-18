@@ -29,6 +29,87 @@ public class JavaGolden {
         decimalFormat(dir.resolve("decimal_format.txt"));
         dates(dir.resolve("date_format.txt"));
         intHashSet(dir.resolve("int_hashset.txt"));
+        hashMap(dir.resolve("hashmap.txt"));
+    }
+
+    // "<start>\t<ops>\t<keys in iteration order>". start: "new", "cap N", or "set k;k;..."
+    // (new HashSet<>(list)). ops, comma separated: "p<k>" put, "r<k>" remove, "a<k;k;...>"
+    // putAll of a new HashMap filled with those puts. Integer keys hash to themselves; some
+    // collide (multiples of 16 and 64) so bins overflow and small tables grow in treeifyBin;
+    // at most 8 distinct multiples of 64 keep tables of 64+ from treeifying (not modelled).
+    static void hashMap(Path p) throws IOException {
+        Random r = new Random(29);
+        try (PrintWriter w = open(p)) {
+            for (int c = 0; c < 400; c++) {
+                int kind = r.nextInt(3);
+                java.util.HashMap<Integer, Integer> m;
+                String start;
+                if (kind == 0) {
+                    m = new java.util.HashMap<>();
+                    start = "new";
+                } else if (kind == 1) {
+                    int cap = r.nextInt(40);
+                    m = new java.util.HashMap<>(cap);
+                    start = "cap " + cap;
+                } else {
+                    List<Integer> init = keys(r, r.nextInt(30));
+                    java.util.HashSet<Integer> set = new java.util.HashSet<>(init);
+                    // Read the set's map order back through a LinkedHashMap-free copy.
+                    m = new java.util.HashMap<>();
+                    StringBuilder b = new StringBuilder("set ");
+                    for (int i = 0; i < init.size(); i++) b.append(i == 0 ? "" : ";").append(init.get(i));
+                    start = b.toString();
+                    // Replay into m below by recording the set's own order instead.
+                    StringBuilder order = new StringBuilder();
+                    for (int v : set) order.append(order.length() == 0 ? "" : ",").append(v);
+                    w.println(start + "\t\t" + order);
+                    continue;
+                }
+                StringBuilder ops = new StringBuilder();
+                int nops = r.nextInt(c < 200 ? 20 : 120);
+                for (int i = 0; i < nops; i++) {
+                    if (ops.length() > 0) ops.append(',');
+                    int op = r.nextInt(10);
+                    if (op < 7) {
+                        int k = key(r);
+                        m.put(k, i);
+                        ops.append('p').append(k);
+                    } else if (op < 9) {
+                        int k = m.isEmpty() || r.nextBoolean() ? key(r) : m.keySet().iterator().next();
+                        m.remove(k);
+                        ops.append('r').append(k);
+                    } else {
+                        java.util.HashMap<Integer, Integer> src = new java.util.HashMap<>();
+                        List<Integer> ks = keys(r, r.nextInt(25));
+                        StringBuilder b = new StringBuilder();
+                        for (int k : ks) {
+                            src.put(k, 0);
+                            b.append(b.length() == 0 ? "" : ";").append(k);
+                        }
+                        m.putAll(src);
+                        ops.append('a').append(b);
+                    }
+                }
+                StringBuilder order = new StringBuilder();
+                for (int v : m.keySet()) order.append(order.length() == 0 ? "" : ",").append(v);
+                w.println(start + "\t" + ops + "\t" + order);
+            }
+        }
+    }
+
+    static int key(Random r) {
+        switch (r.nextInt(4)) {
+            case 0: return 16 * r.nextInt(12);
+            case 1: return 64 * r.nextInt(8);
+            case 2: return 2 * r.nextInt(30000) + 1;
+            default: return r.nextInt(200);
+        }
+    }
+
+    static List<Integer> keys(Random r, int n) {
+        List<Integer> out = new ArrayList<>();
+        for (int i = 0; i < n; i++) out.add(key(r));
+        return out;
     }
 
     static PrintWriter open(Path p) throws IOException {
@@ -78,6 +159,32 @@ public class JavaGolden {
                     String k = r.nextInt(4) == 0 && i > 0 ? "k" + r.nextInt(i) : "k" + i + "_" + r.nextInt(1000);
                     t.put(k, i);
                     w.println("put " + k);
+                }
+                StringBuilder b = new StringBuilder();
+                for (Enumeration<String> e = t.keys(); e.hasMoreElements();) {
+                    if (b.length() > 0) b.append(',');
+                    b.append(e.nextElement());
+                }
+                w.println("order " + b);
+            }
+            // Cases with removals ("remove <k>") between puts.
+            Random q = new Random(8);
+            for (int c = 0; c < 40; c++) {
+                Hashtable<String, Integer> t = new Hashtable<>();
+                List<String> live = new ArrayList<>();
+                w.println("case");
+                int n = q.nextInt(150);
+                for (int i = 0; i < n; i++) {
+                    if (!live.isEmpty() && q.nextInt(3) == 0) {
+                        String k = live.remove(q.nextInt(live.size()));
+                        t.remove(k);
+                        w.println("remove " + k);
+                    } else {
+                        String k = "r" + i + "_" + q.nextInt(1000);
+                        t.put(k, i);
+                        live.add(k);
+                        w.println("put " + k);
+                    }
                 }
                 StringBuilder b = new StringBuilder();
                 for (Enumeration<String> e = t.keys(); e.hasMoreElements();) {

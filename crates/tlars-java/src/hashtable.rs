@@ -8,7 +8,9 @@
 pub struct Hashtable<K, V> {
     /// Bucket heads, indices into `entries`.
     buckets: Vec<Option<usize>>,
-    entries: Vec<Entry<K, V>>,
+    /// Entry storage; a removed entry's slot stays `None` (it is unreachable from buckets).
+    entries: Vec<Option<Entry<K, V>>>,
+    count: usize,
     threshold: usize,
 }
 
@@ -42,6 +44,7 @@ impl<K: Eq, V> Hashtable<K, V> {
         Hashtable {
             buckets: vec![None; INITIAL_CAPACITY],
             entries: Vec::new(),
+            count: 0,
             threshold: threshold_for(INITIAL_CAPACITY),
         }
     }
@@ -50,19 +53,48 @@ impl<K: Eq, V> Hashtable<K, V> {
     /// not change) and returns the old value.
     pub fn put(&mut self, key: K, java_hash: i32, value: V) -> Option<V> {
         if let Some(i) = self.find(&key, java_hash) {
-            return Some(std::mem::replace(&mut self.entries[i].value, value));
+            return Some(std::mem::replace(&mut self.entry_mut(i).value, value));
         }
-        if self.entries.len() >= self.threshold {
+        if self.count >= self.threshold {
             self.rehash();
         }
         let index = index_for(java_hash, self.buckets.len());
-        self.entries.push(Entry { hash: java_hash, key, value, next: self.buckets[index] });
+        self.entries.push(Some(Entry { hash: java_hash, key, value, next: self.buckets[index] }));
         self.buckets[index] = Some(self.entries.len() - 1);
+        self.count += 1;
         None
     }
 
     pub fn get(&self, key: &K, java_hash: i32) -> Option<&V> {
-        self.find(key, java_hash).map(|i| &self.entries[i].value)
+        self.find(key, java_hash).map(|i| &self.entry(i).value)
+    }
+
+    /// `Hashtable.remove`: unlinks the entry from its chain (the others keep their order).
+    pub fn remove(&mut self, key: &K, java_hash: i32) -> Option<V> {
+        let index = index_for(java_hash, self.buckets.len());
+        let (mut prev, mut cur) = (None, self.buckets[index]);
+        while let Some(i) = cur {
+            let e = self.entry(i);
+            if e.hash == java_hash && e.key == *key {
+                let next = e.next;
+                match prev {
+                    Some(p) => self.entry_mut(p).next = next,
+                    None => self.buckets[index] = next,
+                }
+                self.count -= 1;
+                return self.entries[i].take().map(|e| e.value);
+            }
+            (prev, cur) = (Some(i), e.next);
+        }
+        None
+    }
+
+    fn entry(&self, i: usize) -> &Entry<K, V> {
+        self.entries[i].as_ref().expect("live entry")
+    }
+
+    fn entry_mut(&mut self, i: usize) -> &mut Entry<K, V> {
+        self.entries[i].as_mut().expect("live entry")
     }
 
     /// `Hashtable.keys()` / `elements()` enumeration order.
@@ -71,17 +103,17 @@ impl<K: Eq, V> Hashtable<K, V> {
     }
 
     pub fn len(&self) -> usize {
-        self.entries.len()
+        self.count
     }
 
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.count == 0
     }
 
     fn find(&self, key: &K, java_hash: i32) -> Option<usize> {
         let mut cur = self.buckets[index_for(java_hash, self.buckets.len())];
         while let Some(i) = cur {
-            let e = &self.entries[i];
+            let e = self.entry(i);
             if e.hash == java_hash && e.key == *key {
                 return Some(i);
             }
@@ -99,9 +131,9 @@ impl<K: Eq, V> Hashtable<K, V> {
         for head in old.into_iter().rev() {
             let mut cur = head;
             while let Some(i) = cur {
-                cur = self.entries[i].next;
-                let index = index_for(self.entries[i].hash, new_capacity);
-                self.entries[i].next = self.buckets[index];
+                cur = self.entry(i).next;
+                let index = index_for(self.entry(i).hash, new_capacity);
+                self.entry_mut(i).next = self.buckets[index];
                 self.buckets[index] = Some(i);
             }
         }
@@ -123,7 +155,7 @@ impl<'a, K, V> Iterator for Elements<'a, K, V> {
             self.bucket -= 1;
             self.entry = self.table.buckets[self.bucket];
         }
-        let e = &self.table.entries[self.entry?];
+        let e = self.table.entries[self.entry?].as_ref().expect("live entry");
         self.entry = e.next;
         Some((&e.key, &e.value))
     }

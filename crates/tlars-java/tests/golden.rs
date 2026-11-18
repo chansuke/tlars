@@ -31,6 +31,8 @@ fn hashtable_enumeration_matches_java() {
             table = Hashtable::new();
         } else if let Some(key) = line.strip_prefix("put ") {
             table.put(key.to_string(), string_hash_code(key), ());
+        } else if let Some(key) = line.strip_prefix("remove ") {
+            assert!(table.remove(&key.to_string(), string_hash_code(key)).is_some(), "{key}");
         } else if let Some(order) = line.strip_prefix("order ") {
             let actual: Vec<&str> = table.elements().map(|(k, _)| k.as_str()).collect();
             let expected: Vec<&str> = order.split(',').filter(|k| !k.is_empty()).collect();
@@ -38,7 +40,7 @@ fn hashtable_enumeration_matches_java() {
             cases += 1;
         }
     }
-    assert_eq!(cases, 60);
+    assert_eq!(cases, 100);
 }
 
 #[test]
@@ -132,5 +134,53 @@ fn int_hashset_order_matches_java() {
         let mut inter = JavaIntHashSet::copy_of(&a);
         inter.retain(|v| b.contains(v));
         assert_eq!(inter.to_java_string(), f[3], "{line}");
+    }
+}
+
+#[test]
+fn hashmap_order_matches_java() {
+    use tlars_java::JavaHashMap;
+    let eq = |a: &i32, b: &i32| a == b;
+    let keys = |s: &str| -> Vec<i32> { s.split(';').filter(|x| !x.is_empty()).map(|x| x.parse().unwrap()).collect() };
+    for line in golden("hashmap.txt").lines() {
+        let f: Vec<&str> = line.split('\t').collect();
+        let mut m: JavaHashMap<i32, i32> = if f[0] == "new" {
+            JavaHashMap::new()
+        } else if let Some(cap) = f[0].strip_prefix("cap ") {
+            JavaHashMap::with_capacity(cap.parse().unwrap())
+        } else {
+            // `new HashSet<>(list)`: `HashMap.newHashMap(max(n, 12))`, then `addAll`.
+            let init = keys(f[0].strip_prefix("set ").unwrap());
+            let mut m = JavaHashMap::for_mappings(init.len().max(12));
+            for k in init {
+                m.put(k, k, 0, eq);
+            }
+            m
+        };
+        for (i, op) in f[1].split(',').filter(|o| !o.is_empty()).enumerate() {
+            let (code, arg) = op.split_at(1);
+            match code {
+                "p" => {
+                    let k: i32 = arg.parse().unwrap();
+                    m.put(k, k, i as i32, eq);
+                }
+                "r" => {
+                    let k: i32 = arg.parse().unwrap();
+                    m.remove(&k, k, eq);
+                }
+                _ => {
+                    let mut src = JavaHashMap::new();
+                    for k in keys(arg) {
+                        src.put(k, k, 0, eq);
+                    }
+                    m.reserve_for_put_all(src.len());
+                    for (k, v) in src.iter() {
+                        m.put(*k, *k, *v, eq);
+                    }
+                }
+            }
+        }
+        let order: Vec<String> = m.iter().map(|(k, _)| k.to_string()).collect();
+        assert_eq!(order.join(","), f[2], "{line}");
     }
 }

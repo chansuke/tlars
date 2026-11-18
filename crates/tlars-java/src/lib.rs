@@ -19,6 +19,7 @@
 //! Golden files under `tests/golden` come from `tools/golden/JavaGolden.java` run on the
 //! pinned JDK 21.
 
+mod hashmap;
 mod hashset;
 mod hashtable;
 mod number;
@@ -27,6 +28,7 @@ mod pprint;
 mod random;
 pub mod time;
 
+pub use hashmap::{JavaHashMap, capacity_for_mappings, table_size_for};
 pub use hashset::JavaIntHashSet;
 pub use hashtable::{Elements, Hashtable};
 pub use number::{decimal_format_grouped, double_to_string, reciprocal_two_digits};
