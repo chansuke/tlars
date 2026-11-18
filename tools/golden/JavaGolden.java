@@ -193,6 +193,26 @@ public class JavaGolden {
                 }
                 w.println("order " + b);
             }
+            // Cases with an initial capacity ("case <capacity>"), as new Hashtable<>(n).
+            Random u = new Random(9);
+            int[] capacities = {0, 1, 2, 7, 100, 200, 700};
+            for (int c = 0; c < 35; c++) {
+                int capacity = capacities[c % capacities.length];
+                Hashtable<String, Integer> t = new Hashtable<>(capacity);
+                w.println("case " + capacity);
+                int n = u.nextInt(300);
+                for (int i = 0; i < n; i++) {
+                    String k = "c" + i + "_" + u.nextInt(1000);
+                    t.put(k, i);
+                    w.println("put " + k);
+                }
+                StringBuilder b = new StringBuilder();
+                for (Enumeration<String> e = t.keys(); e.hasMoreElements();) {
+                    if (b.length() > 0) b.append(',');
+                    b.append(e.nextElement());
+                }
+                w.println("order " + b);
+            }
         }
     }
 

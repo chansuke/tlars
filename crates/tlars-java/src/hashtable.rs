@@ -49,6 +49,12 @@ impl<K: Eq, V> Hashtable<K, V> {
         }
     }
 
+    /// `new Hashtable<>(initialCapacity)`; a capacity of 0 becomes 1.
+    pub fn with_capacity(initial_capacity: usize) -> Self {
+        let capacity = initial_capacity.max(1);
+        Hashtable { buckets: vec![None; capacity], entries: Vec::new(), count: 0, threshold: threshold_for(capacity) }
+    }
+
     /// `Hashtable.put`: replaces the value of an existing key in place (its position does
     /// not change) and returns the old value.
     pub fn put(&mut self, key: K, java_hash: i32, value: V) -> Option<V> {

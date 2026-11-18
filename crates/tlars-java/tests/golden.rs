@@ -29,6 +29,8 @@ fn hashtable_enumeration_matches_java() {
     for line in text.lines() {
         if line == "case" {
             table = Hashtable::new();
+        } else if let Some(capacity) = line.strip_prefix("case ") {
+            table = Hashtable::with_capacity(capacity.parse().unwrap());
         } else if let Some(key) = line.strip_prefix("put ") {
             table.put(key.to_string(), string_hash_code(key), ());
         } else if let Some(key) = line.strip_prefix("remove ") {
@@ -40,7 +42,7 @@ fn hashtable_enumeration_matches_java() {
             cases += 1;
         }
     }
-    assert_eq!(cases, 100);
+    assert_eq!(cases, 135);
 }
 
 #[test]
