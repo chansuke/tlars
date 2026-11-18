@@ -21,6 +21,27 @@ pub(crate) struct Method {
     pub(crate) params: Vec<(Type, String)>,
     pub(crate) body: Vec<Stmt>,
     pub(crate) is_static: bool,
+    /// `false` for abstract and interface methods (`;` instead of a body).
+    pub(crate) has_body: bool,
+    /// The last parameter is `T...` (its type is recorded as `T[]`).
+    pub(crate) varargs: bool,
+    /// `<T, U>` of a generic method.
+    pub(crate) type_params: Vec<String>,
+}
+
+/// `class|interface|enum Name<T> extends A implements B, C`.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ClassHeader {
+    pub(crate) name: String,
+    pub(crate) is_interface: bool,
+    pub(crate) is_enum: bool,
+    pub(crate) is_abstract: bool,
+    /// A `static` nested class (no enclosing instance).
+    pub(crate) is_static: bool,
+    pub(crate) type_params: Vec<String>,
+    /// For an interface, the interfaces it extends.
+    pub(crate) extends: Vec<Type>,
+    pub(crate) implements: Vec<Type>,
 }
 
 #[derive(Clone, Debug)]
@@ -43,6 +64,8 @@ pub(crate) enum Stmt {
     Try { body: Vec<Stmt>, catches: Vec<(Type, String, Vec<Stmt>)>, finally: Option<Vec<Stmt>> },
     Block(Vec<Stmt>),
     Empty,
+    /// Read past, never emitted (try-with-resources).
+    Unsupported(&'static str),
 }
 
 #[derive(Clone, Debug)]
@@ -82,4 +105,7 @@ pub(crate) enum Expr {
     Binary(&'static str, Box<Expr>, Box<Expr>),
     Assign(&'static str, Box<Expr>, Box<Expr>),
     Cond(Box<Expr>, Box<Expr>, Box<Expr>),
+    InstanceOf(Box<Expr>, Type),
+    /// Lambdas, method references and anonymous classes: read past, never emitted.
+    Unsupported(&'static str),
 }

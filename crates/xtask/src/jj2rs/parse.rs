@@ -1,7 +1,7 @@
 //! Recursive-descent parser for the Java subset of the generated parser. It reads a whole
 //! class body; members it cannot parse are reported, not fatal, so the survey can count them.
 
-use super::ast::{Expr, Method, Stmt, SwitchArm, Type, Var};
+use super::ast::{ClassHeader, Expr, Method, Stmt, SwitchArm, Type, Var};
 use super::lex::{Tok, Token};
 
 pub(crate) struct Member {
@@ -14,7 +14,7 @@ pub(crate) enum MemberKind {
     Method(Method),
     Constructor(Method),
     Field { decl: Stmt, is_static: bool, is_final: bool },
-    Class { members: Vec<Member> },
+    Class { header: ClassHeader, members: Vec<Member> },
     StaticInit(Vec<Stmt>),
     /// Fields, nested classes, initializers: kept as source line ranges for hand porting.
     Other(&'static str),
@@ -99,6 +99,24 @@ impl<'t> Parser<'t> {
         }
     }
 
+    /// Skips a balanced `open ... close` group starting at the current token.
+    fn skip_balanced(&mut self, open: &'static str, close: &'static str) {
+        let mut depth = 0;
+        loop {
+            match self.bump() {
+                Tok::Punct(p) if p == open => depth += 1,
+                Tok::Punct(p) if p == close => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return;
+                    }
+                }
+                Tok::Eof => return,
+                _ => {}
+            }
+        }
+    }
+
     // ---- members ----
 
     /// All members of the class whose body starts at the current `{`.
@@ -145,52 +163,59 @@ impl<'t> Parser<'t> {
                 self.args()?;
             }
         }
-        let (mut is_static, mut is_final) = (false, false);
+        let (mut is_static, mut is_final, mut is_abstract) = (false, false, false);
         while let Tok::Ident(m) = self.peek() {
-            if !MODIFIERS.contains(&m.as_str()) {
+            if !MODIFIERS.contains(&m.as_str()) && m != "default" {
                 break;
             }
             is_static |= m == "static";
             is_final |= m == "final";
+            is_abstract |= m == "abstract";
             self.bump();
         }
         if self.is_punct("{") {
             let body = self.block()?;
             return Ok(Member { name: "static {}".into(), line, kind: MemberKind::StaticInit(body) });
         }
-        if self.is_ident("class") || self.is_ident("interface") {
-            self.bump();
-            let name = self.ident()?;
-            while !self.is_punct("{") {
-                self.bump();
-            }
-            let members = self.class_body()?;
-            self.expect_punct("}")?;
-            return Ok(Member { name, line, kind: MemberKind::Class { members } });
+        if self.is_ident("class") || self.is_ident("interface") || self.is_ident("enum") {
+            let (mut header, members) = self.class_decl(is_abstract)?;
+            // Nested interfaces and enums are implicitly static.
+            header.is_static = is_static || header.is_interface || header.is_enum;
+            return Ok(Member { name: header.name.clone(), line, kind: MemberKind::Class { header, members } });
         }
+        let type_params = if self.is_punct("<") { self.type_params()? } else { Vec::new() };
         // Constructor: `Name (`.
         if matches!((self.peek(), self.peek_at(1)), (Tok::Ident(_), Tok::Punct("("))) {
             let name = self.ident()?;
-            let params = self.params()?;
+            let (params, varargs) = self.params()?;
             self.throws()?;
             let body = self.block()?;
             return Ok(Member {
                 name: name.clone(),
                 line,
-                kind: MemberKind::Constructor(Method { name, ret: Type::named("void"), params, body, is_static: false }),
+                kind: MemberKind::Constructor(Method {
+                    name,
+                    ret: Type::named("void"),
+                    params,
+                    body,
+                    is_static: false,
+                    has_body: true,
+                    varargs,
+                    type_params,
+                }),
             });
         }
         let field_start = self.i;
         let ret = self.ty()?;
         let name = self.ident()?;
         if self.is_punct("(") {
-            let params = self.params()?;
+            let (params, varargs) = self.params()?;
             self.throws()?;
-            let body = self.block()?;
+            let (body, has_body) = if self.eat_punct(";") { (Vec::new(), false) } else { (self.block()?, true) };
             return Ok(Member {
                 name: name.clone(),
                 line,
-                kind: MemberKind::Method(Method { name, ret, params, body, is_static }),
+                kind: MemberKind::Method(Method { name, ret, params, body, is_static, has_body, varargs, type_params }),
             });
         }
         // A field: re-read it as a local declaration from its type.
@@ -200,14 +225,78 @@ impl<'t> Parser<'t> {
         Ok(Member { name, line, kind: MemberKind::Field { decl, is_static, is_final } })
     }
 
-    fn params(&mut self) -> R<Vec<(Type, String)>> {
+    /// `class Name<T> extends A implements B { ... }` from the keyword; returns after `}`.
+    pub(crate) fn class_decl(&mut self, is_abstract: bool) -> R<(ClassHeader, Vec<Member>)> {
+        let kw = self.ident()?;
+        let mut h = ClassHeader {
+            name: self.ident()?,
+            is_interface: kw == "interface",
+            is_enum: kw == "enum",
+            is_abstract,
+            ..ClassHeader::default()
+        };
+        if self.is_punct("<") {
+            h.type_params = self.type_params()?;
+        }
+        loop {
+            if self.is_ident("extends") {
+                self.bump();
+                h.extends.push(self.ty()?);
+                while self.eat_punct(",") {
+                    h.extends.push(self.ty()?);
+                }
+            } else if self.is_ident("implements") {
+                self.bump();
+                h.implements.push(self.ty()?);
+                while self.eat_punct(",") {
+                    h.implements.push(self.ty()?);
+                }
+            } else {
+                break;
+            }
+        }
+        if h.is_enum {
+            return Err(format!("line {}: enum {}", self.line(), h.name));
+        }
+        let members = self.class_body()?;
+        self.expect_punct("}")?;
+        Ok((h, members))
+    }
+
+    /// `<T, U extends X>`: the parameter names.
+    fn type_params(&mut self) -> R<Vec<String>> {
+        self.expect_punct("<")?;
+        let mut names = Vec::new();
+        while !self.close_angle()? {
+            names.push(self.ident()?);
+            if self.is_ident("extends") {
+                self.bump();
+                self.ty()?;
+                while self.eat_punct("&") {
+                    self.ty()?;
+                }
+            }
+            self.eat_punct(",");
+        }
+        Ok(names)
+    }
+
+    fn params(&mut self) -> R<(Vec<(Type, String)>, bool)> {
         self.expect_punct("(")?;
         let mut ps = Vec::new();
+        let mut varargs = false;
         while !self.eat_punct(")") {
+            while self.eat_punct("@") {
+                self.ident()?;
+            }
             if self.is_ident("final") {
                 self.bump();
             }
             let mut ty = self.ty()?;
+            if self.eat_punct("...") {
+                ty.dims += 1;
+                varargs = true;
+            }
             let name = self.ident()?;
             while self.eat_punct("[") {
                 self.expect_punct("]")?;
@@ -216,7 +305,7 @@ impl<'t> Parser<'t> {
             ps.push((ty, name));
             self.eat_punct(",");
         }
-        Ok(ps)
+        Ok((ps, varargs))
     }
 
     fn throws(&mut self) -> R<()> {
@@ -362,6 +451,13 @@ impl<'t> Parser<'t> {
     }
 
     fn stmt(&mut self) -> R<Stmt> {
+        // Annotations on local declarations (`@SuppressWarnings("unchecked")`).
+        while self.eat_punct("@") {
+            self.ident()?;
+            if self.is_punct("(") {
+                self.args()?;
+            }
+        }
         if self.is_punct("{") {
             return Ok(Stmt::Block(self.block()?));
         }
@@ -482,6 +578,16 @@ impl<'t> Parser<'t> {
                     }
                     return Ok(Stmt::Switch { scrutinee, arms });
                 }
+                // Assertions are off in TLC (no `-ea`): the condition is never evaluated.
+                "assert" => {
+                    self.bump();
+                    self.expr()?;
+                    if self.eat_punct(":") {
+                        self.expr()?;
+                    }
+                    self.expect_punct(";")?;
+                    return Ok(Stmt::Empty);
+                }
                 "break" | "continue" => {
                     self.bump();
                     let label = if let Tok::Ident(l) = self.peek().clone() {
@@ -504,6 +610,18 @@ impl<'t> Parser<'t> {
                     let e = self.expr()?;
                     self.expect_punct(";")?;
                     return Ok(Stmt::Throw(e));
+                }
+                "try" if matches!(self.peek_at(1), Tok::Punct("(")) => {
+                    self.bump();
+                    self.skip_balanced("(", ")");
+                    self.block()?;
+                    while self.is_ident("catch") || self.is_ident("finally") {
+                        if self.bump() == Tok::Ident("catch".into()) {
+                            self.skip_balanced("(", ")");
+                        }
+                        self.block()?;
+                    }
+                    return Ok(Stmt::Unsupported("try-with-resources"));
                 }
                 "try" => {
                     self.bump();
@@ -541,6 +659,10 @@ impl<'t> Parser<'t> {
     // ---- expressions (Java precedence) ----
 
     pub(crate) fn expr(&mut self) -> R<Expr> {
+        if self.at_lambda() {
+            self.skip_lambda()?;
+            return Ok(Expr::Unsupported("lambda"));
+        }
         let lhs = self.cond()?;
         for op in ["=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>="] {
             if self.is_punct(op) {
@@ -550,6 +672,54 @@ impl<'t> Parser<'t> {
             }
         }
         Ok(lhs)
+    }
+
+    /// `x ->` or `(...) ->`.
+    fn at_lambda(&self) -> bool {
+        if matches!((self.peek(), self.peek_at(1)), (Tok::Ident(_), Tok::Punct("->"))) {
+            return true;
+        }
+        if !self.is_punct("(") {
+            return false;
+        }
+        let mut depth = 0;
+        let mut j = 0;
+        loop {
+            match self.peek_at(j) {
+                Tok::Punct("(") => depth += 1,
+                Tok::Punct(")") => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return matches!(self.peek_at(j + 1), Tok::Punct("->"));
+                    }
+                }
+                Tok::Eof => return false,
+                _ => {}
+            }
+            j += 1;
+        }
+    }
+
+    fn skip_lambda(&mut self) -> R<()> {
+        if self.eat_punct("(") {
+            let mut depth = 1;
+            while depth > 0 {
+                match self.bump() {
+                    Tok::Punct("(") => depth += 1,
+                    Tok::Punct(")") => depth -= 1,
+                    _ => {}
+                }
+            }
+        } else {
+            self.bump();
+        }
+        self.expect_punct("->")?;
+        if self.is_punct("{") {
+            self.block()?;
+        } else {
+            self.expr()?;
+        }
+        Ok(())
     }
 
     fn cond(&mut self) -> R<Expr> {
@@ -580,7 +750,15 @@ impl<'t> Parser<'t> {
             return self.unary();
         }
         let mut lhs = self.binary(level + 1)?;
-        while let Some(op) = LEVELS[level].iter().find(|op| self.is_punct(op)) {
+        loop {
+            // `instanceof` binds like the relational operators.
+            if LEVELS[level][0] == "<" && self.is_ident("instanceof") {
+                self.bump();
+                let ty = self.ty()?;
+                lhs = Expr::InstanceOf(Box::new(lhs), ty);
+                continue;
+            }
+            let Some(op) = LEVELS[level].iter().find(|op| self.is_punct(op)) else { break };
             self.bump();
             let rhs = self.binary(level + 1)?;
             lhs = Expr::Binary(op, Box::new(lhs), Box::new(rhs));
@@ -638,10 +816,20 @@ impl<'t> Parser<'t> {
                 } else {
                     e = Expr::Field(Box::new(e), name);
                 }
+            } else if self.is_punct("[") && matches!((self.peek_at(1), self.peek_at(2)), (Tok::Punct("]"), Tok::Punct("::"))) {
+                // `String[]::new`.
+                self.bump();
+                self.bump();
+                self.bump();
+                self.bump();
+                e = Expr::Unsupported("method reference");
             } else if self.eat_punct("[") {
                 let idx = self.expr()?;
                 self.expect_punct("]")?;
                 e = Expr::Index(Box::new(e), Box::new(idx));
+            } else if self.eat_punct("::") {
+                self.bump();
+                e = Expr::Unsupported("method reference");
             } else if self.is_punct("++") || self.is_punct("--") {
                 let Tok::Punct(op) = self.bump() else { unreachable!() };
                 e = Expr::Postfix(op, Box::new(e));
@@ -704,7 +892,9 @@ impl<'t> Parser<'t> {
                     }
                     let args = self.args()?;
                     if self.is_punct("{") {
-                        return Err(format!("line {line}: anonymous class"));
+                        self.class_body()?;
+                        self.expect_punct("}")?;
+                        return Ok(Expr::Unsupported("anonymous class"));
                     }
                     Ok(Expr::New { ty, args })
                 }
