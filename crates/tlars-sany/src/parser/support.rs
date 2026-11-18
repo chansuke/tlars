@@ -5,8 +5,9 @@
 #![allow(non_snake_case)]
 
 use super::generated::{
-    self, ChildrenVisitor, LevelConstants, ParamAndPosition, SemanticNodeObj, SimpleCharStream, TLAplusParser, TLAplusParserConstants,
+    self, ChildrenVisitor, Errors, ParseUnit, SpecObj, LevelConstants, ParamAndPosition, SemanticNodeObj, SimpleCharStream, TLAplusParser, TLAplusParserConstants,
 };
+pub(crate) use super::files::{FileUtil, FilenameToStream, NamedInputStream, ToolIO};
 use super::java::*;
 use crate::{Atom, Interner};
 use std::cell::RefCell;
@@ -345,10 +346,12 @@ impl System {
         dest.jget_mut()[d..d + n].clone_from_slice(&tmp);
     }
 
-    /// Only `line.separator` is set (Linux); TLC runs without the `-D` switches SANY reads.
+    /// The platform properties SANY reads (Linux); TLC runs without the `-D` switches SANY
+    /// reads.
     pub(crate) fn getProperty_2(key: JStr, default: JStr) -> JStr {
         match key.as_str() {
             "line.separator" => JStr::of("\n"),
+            "file.separator" => JStr::of("/"),
             _ => default,
         }
     }
@@ -480,6 +483,46 @@ impl<E: Clone> J<Vector<E>> {
     /// A snapshot; the translated code never mutates a collection while enumerating it.
     pub(crate) fn elements(&self) -> J<Enumeration<E>> {
         J::new(Enumeration { items: self.jget().0.clone(), next: 0 })
+    }
+}
+
+/// Element identity (`==`), which `tla2sany.utilities.Vector.contains` compares by.
+pub(crate) trait JSame {
+    fn same_object(&self, other: &Self) -> bool;
+}
+impl<T: ?Sized> JSame for J<T> {
+    fn same_object(&self, other: &Self) -> bool {
+        self.same(other)
+    }
+}
+impl JSame for JStr {
+    fn same_object(&self, other: &Self) -> bool {
+        self.same(other)
+    }
+}
+
+impl<E: Clone + JSame> J<Vector<E>> {
+    pub(crate) fn contains(&self, e: E) -> bool {
+        self.jget().0.iter().any(|x| x.same_object(&e))
+    }
+    pub(crate) fn appendNoRepeats(&self, v: J<Vector<E>>) {
+        for i in 0..v.size() {
+            let e = v.elementAt(i);
+            if !self.contains(e.clone()) {
+                self.addElement(e);
+            }
+        }
+    }
+}
+
+/// `tla2sany.utilities.Vector.toString`: `[ a, b ]`.
+impl<E: JValue> JToString for J<Vector<E>> {
+    fn java_string(&self) -> String {
+        if self.is_null() {
+            return "null".into();
+        }
+        let items: Vec<String> = self.jget().0.iter().map(JValue::object_string).collect();
+        if items.is_empty() { "[  ]".into() } else { format!("[ {} ]", items.join(", ")) }
     }
 }
 
@@ -1083,6 +1126,9 @@ impl J<SanyOutput> {
     pub(crate) fn log_3(&self, level: LogLevel, format: JStr, arg: &dyn JToString) {
         self.jget_mut().messages.push((level, format_str(format.as_str(), &[arg])));
     }
+    pub(crate) fn log_4(&self, level: LogLevel, format: JStr, a: &dyn JToString, b: &dyn JToString) {
+        self.jget_mut().messages.push((level, format_str(format.as_str(), &[a, b])));
+    }
 }
 
 /// `String.format(format, args...)`.
@@ -1472,5 +1518,28 @@ impl J<SemanticNodeObj> {
     /// `substituteFor(OpDefNode, OpDefNode)`: only TLC's `SpecProcessor` uses it.
     pub(crate) fn substituteFor__SemanticNode(&self, _s: J<SemanticNodeObj>, _o: J<SemanticNodeObj>) -> JResult<()> {
         todo!("TLC: SemanticNode.substituteFor")
+    }
+}
+
+// ---- tla2sany.modanalyzer: hand-written members ----
+
+impl J<SpecObj> {
+    /// `SpecObj.validateParseUnit`: checks a module's PlusCal algorithm against its
+    /// translation (`pcal.Validator`). Only `Validator`'s first step is here: a module none of
+    /// whose lines contains `algorithm` past its first column has no PlusCal
+    /// (`NO_PLUSCAL_EXISTS`), which adds no message.
+    pub(crate) fn validateParseUnit(&self, parse_unit: J<ParseUnit>, _errors: J<Errors>) -> JResult<()> {
+        let loc = parse_unit.getParseTree()?.getLocation()?;
+        let (begin, end) = (loc.beginLine(), loc.endLine());
+        let text = String::from_utf8_lossy(&parse_unit.getNis()?.bytes()).into_owned();
+        let seen_algorithm = text
+            .split('\n')
+            .enumerate()
+            .take_while(|(i, _)| (*i as i32 + 1) <= end)
+            .any(|(i, line)| i as i32 + 1 >= begin && line.find("algorithm").is_some_and(|p| p > 0));
+        if seen_algorithm {
+            todo!("pcal.Validator: validating a PlusCal translation is not translated yet");
+        }
+        Ok(())
     }
 }

@@ -18,6 +18,7 @@ mod modules;
 mod parser;
 mod pcal;
 mod semantic;
+mod standard_modules;
 
 pub use intern::{Atom, Interner, JavaClass};
 

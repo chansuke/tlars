@@ -65,6 +65,10 @@ impl<T: Clone> J<Vec<T>> {
     pub(crate) fn new_array(len: i32, default: T) -> Self {
         J::new(vec![default; usize::try_from(len).expect("NegativeArraySizeException")])
     }
+    /// An array whose elements are built one by one (`new T[a][b]`: `a` distinct rows).
+    pub(crate) fn new_array_with(len: i32, mut element: impl FnMut() -> T) -> Self {
+        J::new((0..usize::try_from(len).expect("NegativeArraySizeException")).map(|_| element()).collect())
+    }
     #[track_caller]
     pub(crate) fn at(&self, i: i32) -> T {
         self.jget()[idx(i)].clone()
@@ -86,18 +90,30 @@ fn idx(i: i32) -> usize {
 /// A Java `String`: immutable, nullable. Java strings are UTF-16; TLA+ sources and the
 /// parser's strings are compared and sliced in UTF-16 units through these methods.
 #[derive(Clone, Default)]
-pub(crate) struct JStr(Option<Rc<str>>);
+pub(crate) struct JStr(Option<Rc<StrRep>>);
+
+/// A string's text, and whether it is ASCII (then UTF-16 units are its bytes, so
+/// `length` and `charAt` need not re-encode it; SANY's explorer dumps call them per
+/// character).
+pub(crate) struct StrRep {
+    text: Box<str>,
+    ascii: bool,
+}
 
 impl JStr {
     pub(crate) fn of(s: &str) -> Self {
-        JStr(Some(Rc::from(s)))
+        JStr(Some(Rc::new(StrRep { text: Box::from(s), ascii: s.is_ascii() })))
     }
     pub(crate) fn is_null(&self) -> bool {
         self.0.is_none()
     }
     #[track_caller]
-    pub(crate) fn as_str(&self) -> &str {
+    fn rep(&self) -> &StrRep {
         self.0.as_deref().expect("NullPointerException")
+    }
+    #[track_caller]
+    pub(crate) fn as_str(&self) -> &str {
+        &self.rep().text
     }
     fn units(&self) -> Vec<u16> {
         self.as_str().encode_utf16().collect()
@@ -106,11 +122,16 @@ impl JStr {
         !other.is_null() && self.as_str() == other.as_str()
     }
     pub(crate) fn length(&self) -> i32 {
-        self.units().len() as i32
+        let r = self.rep();
+        if r.ascii { r.text.len() as i32 } else { r.text.encode_utf16().count() as i32 }
     }
     #[track_caller]
     pub(crate) fn char_at(&self, i: i32) -> u16 {
-        self.units()[idx(i)]
+        let r = self.rep();
+        if r.ascii {
+            return u16::from(r.text.as_bytes()[idx(i)]);
+        }
+        r.text.encode_utf16().nth(idx(i)).expect("StringIndexOutOfBoundsException")
     }
     #[track_caller]
     pub(crate) fn substring(&self, begin: i32, end: i32) -> JStr {
@@ -204,7 +225,7 @@ pub(crate) trait JToString {
 
 impl JToString for JStr {
     fn java_string(&self) -> String {
-        self.0.as_deref().unwrap_or("null").to_string()
+        self.0.as_deref().map_or("null", |r| &r.text).to_string()
     }
 }
 impl JToString for i32 {

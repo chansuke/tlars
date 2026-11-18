@@ -1,7 +1,7 @@
 //! Generated data that TLC's output depends on, copied out of the pinned tlaplus sources by
 //! `xtask gen-fidelity` (and checked by `xtask gen-fidelity --check` in CI):
 //! class-static `UniqueString`s, `BuiltInOperators`, the `Operators` table and synonyms,
-//! `SyntaxTreeConstants` node names, and the embedded `StandardModules/*.tla` sources.
+//! `SyntaxTreeConstants` node names. (The embedded standard modules are `standard_modules.rs`.)
 //! One list each; everything else derives from these.
 
 use crate::JavaClass;
@@ -18,6 +18,3 @@ pub(crate) fn class_statics(class: JavaClass) -> &'static [&'static str] {
         JavaClass::TlcRuntime => &[/* TLCGetSet keys, UnnamedAction, ... */],
     }
 }
-
-/// `(module name, source)` for the embedded standard library.
-pub(crate) static STANDARD_MODULES: &[(&str, &str)] = &[/* include_str!(...) generated */];

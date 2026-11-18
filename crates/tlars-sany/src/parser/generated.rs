@@ -2035,9 +2035,9 @@ impl J<SimpleCharStream> {
         { let __v: i32 = startline; self.jget_mut().line = __v; };
         { let __v: i32 = (startcolumn).wrapping_sub(1i32); self.jget_mut().column = __v; };
         { let __v: i32 = { let __v: i32 = buffersize; self.jget_mut().bufsize = __v.clone(); __v }; self.jget_mut().available = __v; };
-        { let __v: JArr<u16> = JArr::new_array(buffersize, 0); self.jget_mut().buffer = __v; };
-        { let __v: JArr<i32> = JArr::new_array(buffersize, 0); self.jget_mut().bufline = __v; };
-        { let __v: JArr<i32> = JArr::new_array(buffersize, 0); self.jget_mut().bufcolumn = __v; };
+        { let __v: JArr<u16> = { let __d0: i32 = buffersize; JArr::new_array(__d0, 0) }; self.jget_mut().buffer = __v; };
+        { let __v: JArr<i32> = { let __d0: i32 = buffersize; JArr::new_array(__d0, 0) }; self.jget_mut().bufline = __v; };
+        { let __v: JArr<i32> = { let __d0: i32 = buffersize; JArr::new_array(__d0, 0) }; self.jget_mut().bufcolumn = __v; };
         #[allow(unreachable_code)]
         Ok(())
     }
@@ -2057,9 +2057,9 @@ impl J<SimpleCharStream> {
         { let __v: i32 = (startcolumn).wrapping_sub(1i32); self.jget_mut().column = __v; };
         if ((self.jread(|o| o.buffer.clone())).is_null() || (buffersize != self.jread(|o| o.buffer.clone()).length())) {
             { let __v: i32 = { let __v: i32 = buffersize; self.jget_mut().bufsize = __v.clone(); __v }; self.jget_mut().available = __v; };
-            { let __v: JArr<u16> = JArr::new_array(buffersize, 0); self.jget_mut().buffer = __v; };
-            { let __v: JArr<i32> = JArr::new_array(buffersize, 0); self.jget_mut().bufline = __v; };
-            { let __v: JArr<i32> = JArr::new_array(buffersize, 0); self.jget_mut().bufcolumn = __v; };
+            { let __v: JArr<u16> = { let __d0: i32 = buffersize; JArr::new_array(__d0, 0) }; self.jget_mut().buffer = __v; };
+            { let __v: JArr<i32> = { let __d0: i32 = buffersize; JArr::new_array(__d0, 0) }; self.jget_mut().bufline = __v; };
+            { let __v: JArr<i32> = { let __d0: i32 = buffersize; JArr::new_array(__d0, 0) }; self.jget_mut().bufcolumn = __v; };
         }
         { let __v: bool = { let __v: bool = false; self.jget_mut().prevCharIsCR = __v.clone(); __v }; self.jget_mut().prevCharIsLF = __v; };
         { let __v: i32 = { let __v: i32 = { let __v: i32 = 0i32; self.jget_mut().maxNextCharInd = __v.clone(); __v }; self.jget_mut().inBuf = __v.clone(); __v }; self.jget_mut().tokenBegin = __v; };
@@ -2087,7 +2087,7 @@ impl J<SimpleCharStream> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn GetSuffix(&self, mut len: i32) -> JResult<JArr<u16>> {
-        let mut ret: JArr<u16> = JArr::new_array(len, 0);
+        let mut ret: JArr<u16> = { let __d0: i32 = len; JArr::new_array(__d0, 0) };
         if ((self.jread(|o| o.bufpos)).wrapping_add(1i32) >= len) {
             let _ = System::arraycopy(&self.jread(|o| o.buffer.clone()), ((self.jread(|o| o.bufpos)).wrapping_sub(len)).wrapping_add(1i32), &ret.clone(), 0i32, len);
         } else {
@@ -2592,8 +2592,8 @@ impl TLAplusParserTokenManager {
 impl J<TLAplusParserTokenManager> {
     pub(crate) fn init_fields__TLAplusParserTokenManager(&self) -> JResult<()> {
         { let __v = System::out(); self.jget_mut().debugStream = __v; }
-        { let __v = JArr::new_array(269i32, 0); self.jget_mut().jjrounds = __v; }
-        { let __v = JArr::new_array(538i32, 0); self.jget_mut().jjstateSet = __v; }
+        { let __v = { let __d0: i32 = 269i32; JArr::new_array(__d0, 0) }; self.jget_mut().jjrounds = __v; }
+        { let __v = { let __d0: i32 = 538i32; JArr::new_array(__d0, 0) }; self.jget_mut().jjstateSet = __v; }
         { let __v = 0i32; self.jget_mut().curLexState = __v; }
         { let __v = 0i32; self.jget_mut().defaultLexState = __v; }
         Ok(())
@@ -9914,8 +9914,8 @@ impl SyntaxTreeNode {
     }
 
     fn static_init() -> JResult<()> {
-        { let __v = JArr::new_array(0i32, JNull::null()); SyntaxTreeNode::statics().jget_mut().nullArray = __v; }
-        { let __v = JArr::new_array(0i32, JNull::null()); SyntaxTreeNode::statics().jget_mut().ns = __v; }
+        { let __v = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; SyntaxTreeNode::statics().jget_mut().nullArray = __v; }
+        { let __v = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; SyntaxTreeNode::statics().jget_mut().ns = __v; }
         { let __v = SyntaxTreeNode::new_1(UniqueString::uniqueStringOf(JStr::of("***I do not exist***")))?; SyntaxTreeNode::statics().jget_mut().nullSTN = __v; }
         { let __v = Token::new_0()?; SyntaxTreeNode::statics().jget_mut().nullToken = __v; }
         Ok(())
@@ -10162,7 +10162,7 @@ impl J<SyntaxTreeNode> {
         { let __v = 0i32; self.jget_mut().kind = __v; }
         { let __v = JNull::null(); self.jget_mut().image = __v; }
         { let __v = JNull::null(); self.jget_mut().originalImage = __v; }
-        { let __v = JArr::new_array(4i32, 0); self.jget_mut().location = __v; }
+        { let __v = { let __d0: i32 = 4i32; JArr::new_array(__d0, 0) }; self.jget_mut().location = __v; }
         { let __v = JNull::null(); self.jget_mut().fileName = __v; }
         { let __v = SyntaxTreeNode::statics().jread(|o| o.ns.clone()); self.jget_mut().preComment = __v; }
         { let __v = (1i32).wrapping_neg(); self.jget_mut().proofLevel = __v; }
@@ -10324,7 +10324,7 @@ impl J<SyntaxTreeNode> {
         { let __v: i32 = kind; (self.clone()).jget_mut().kind = __v; };
         { let __v: UniqueString = SyntaxTreeConstants::statics().jread(|o| o.SyntaxNodeImage.clone()).at(kind); self.jget_mut().image = __v; };
         if !(a.clone()).is_null() {
-            { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(1i32, JNull::null()); self.jget_mut().zero = __v; };
+            { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().zero = __v; };
             { let __v: J<SyntaxTreeNode> = a.clone(); (self.jread(|o| o.zero.clone())).set_at(0i32, __v); };
         }
         { let __v: JArr<J<SyntaxTreeNode>> = b.clone(); self.jget_mut().one = __v; };
@@ -10349,7 +10349,7 @@ impl J<SyntaxTreeNode> {
         { let __v: i32 = kind; (self.clone()).jget_mut().kind = __v; };
         { let __v: UniqueString = SyntaxTreeConstants::statics().jread(|o| o.SyntaxNodeImage.clone()).at(kind); self.jget_mut().image = __v; };
         { let __v: UniqueString = (a.clone()).jread(|o| o.fileName.clone()); self.jget_mut().fileName = __v; };
-        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); self.jget_mut().zero = __v; };
+        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().zero = __v; };
         { let __v: J<SyntaxTreeNode> = a.clone(); (self.jread(|o| o.zero.clone())).set_at(0i32, __v); };
         { let __v: J<SyntaxTreeNode> = b.clone(); (self.jread(|o| o.zero.clone())).set_at(1i32, __v); };
         let _ = self.updateLocation()?;
@@ -10361,7 +10361,7 @@ impl J<SyntaxTreeNode> {
         { let __v: i32 = kind; (self.clone()).jget_mut().kind = __v; };
         { let __v: UniqueString = SyntaxTreeConstants::statics().jread(|o| o.SyntaxNodeImage.clone()).at(kind); self.jget_mut().image = __v; };
         { let __v: UniqueString = (a.clone()).jread(|o| o.fileName.clone()); self.jget_mut().fileName = __v; };
-        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null()); self.jget_mut().zero = __v; };
+        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().zero = __v; };
         { let __v: J<SyntaxTreeNode> = a.clone(); (self.jread(|o| o.zero.clone())).set_at(0i32, __v); };
         { let __v: J<SyntaxTreeNode> = b.clone(); (self.jread(|o| o.zero.clone())).set_at(1i32, __v); };
         { let __v: J<SyntaxTreeNode> = c.clone(); (self.jread(|o| o.zero.clone())).set_at(2i32, __v); };
@@ -10394,7 +10394,7 @@ impl J<SyntaxTreeNode> {
             return Ok(self.jread(|o| o.preComment.clone()));
         }
         if ((self.clone()).heirs()?.length() == 0i32) {
-            let mut res: JArr<JStr> = JArr::new_array(0i32, JNull::null());
+            let mut res: JArr<JStr> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) };
             return Ok(res.clone());
         }
         return Ok(((self.clone()).heirs()?.at(0i32)).getAttachedComments()?);
@@ -10423,7 +10423,7 @@ impl J<SyntaxTreeNode> {
             { let __v: J<Token> = tmp_t.clone(); nextPre = __v; };
             { let __v: J<Token> = (tmp_t.clone()).jread(|o| o.specialToken.clone()); tmp_t = __v; };
         }
-        let mut aPre: JArr<JStr> = JArr::new_array(cPre, JNull::null());
+        let mut aPre: JArr<JStr> = { let __d0: i32 = cPre; JArr::new_array(__d0, JNull::null()) };
         { let __v: J<Token> = nextPre.clone(); tmp_t = __v; };
         { let __v: i32 = 0i32; cPre = __v; };
         'loop10: while !(tmp_t.clone()).same(&SyntaxTreeNode::statics().jread(|o| o.nullToken.clone())) {
@@ -10442,15 +10442,15 @@ impl J<SyntaxTreeNode> {
             let mut result: JArr<J<SyntaxTreeNode>> = JNull::null();
             if !(self.jread(|o| o.zero.clone())).is_null() {
                 if !(self.jread(|o| o.one.clone())).is_null() {
-                    { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array((self.jread(|o| o.zero.clone()).length()).wrapping_add(self.jread(|o| o.one.clone()).length()), JNull::null()); result = __v; };
+                    { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = (self.jread(|o| o.zero.clone()).length()).wrapping_add(self.jread(|o| o.one.clone()).length()); JArr::new_array(__d0, JNull::null()) }; result = __v; };
                     let _ = System::arraycopy(&self.jread(|o| o.zero.clone()), 0i32, &result.clone(), 0i32, self.jread(|o| o.zero.clone()).length());
                     let _ = System::arraycopy(&self.jread(|o| o.one.clone()), 0i32, &result.clone(), self.jread(|o| o.zero.clone()).length(), self.jread(|o| o.one.clone()).length());
                 } else {
-                    { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(self.jread(|o| o.zero.clone()).length(), JNull::null()); result = __v; };
+                    { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = self.jread(|o| o.zero.clone()).length(); JArr::new_array(__d0, JNull::null()) }; result = __v; };
                     let _ = System::arraycopy(&self.jread(|o| o.zero.clone()), 0i32, &result.clone(), 0i32, self.jread(|o| o.zero.clone()).length());
                 }
             } else {
-                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(self.jread(|o| o.one.clone()).length(), JNull::null()); result = __v; };
+                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = self.jread(|o| o.one.clone()).length(); JArr::new_array(__d0, JNull::null()) }; result = __v; };
                 let _ = System::arraycopy(&self.jread(|o| o.one.clone()), 0i32, &result.clone(), 0i32, self.jread(|o| o.one.clone()).length());
             }
             return Ok(result.clone());
@@ -10465,15 +10465,15 @@ impl J<SyntaxTreeNode> {
             let mut result: JArr<J<SyntaxTreeNode>> = JNull::null();
             if !(self.jread(|o| o.zero.clone())).is_null() {
                 if !(self.jread(|o| o.one.clone())).is_null() {
-                    { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array((self.jread(|o| o.zero.clone()).length()).wrapping_add(self.jread(|o| o.one.clone()).length()), JNull::null()); result = __v; };
+                    { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = (self.jread(|o| o.zero.clone()).length()).wrapping_add(self.jread(|o| o.one.clone()).length()); JArr::new_array(__d0, JNull::null()) }; result = __v; };
                     let _ = System::arraycopy(&self.jread(|o| o.zero.clone()), 0i32, &result.clone(), 0i32, self.jread(|o| o.zero.clone()).length());
                     let _ = System::arraycopy(&self.jread(|o| o.one.clone()), 0i32, &result.clone(), self.jread(|o| o.zero.clone()).length(), self.jread(|o| o.one.clone()).length());
                 } else {
-                    { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(self.jread(|o| o.zero.clone()).length(), JNull::null()); result = __v; };
+                    { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = self.jread(|o| o.zero.clone()).length(); JArr::new_array(__d0, JNull::null()) }; result = __v; };
                     let _ = System::arraycopy(&self.jread(|o| o.zero.clone()), 0i32, &result.clone(), 0i32, self.jread(|o| o.zero.clone()).length());
                 }
             } else {
-                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(self.jread(|o| o.one.clone()).length(), JNull::null()); result = __v; };
+                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = self.jread(|o| o.one.clone()).length(); JArr::new_array(__d0, JNull::null()) }; result = __v; };
                 let _ = System::arraycopy(&self.jread(|o| o.one.clone()), 0i32, &result.clone(), 0i32, self.jread(|o| o.one.clone()).length());
             }
             return Ok(result.clone());
@@ -11217,7 +11217,7 @@ impl J<OperatorStack> {
             let mut lSTN: J<SyntaxTreeNode> = JNull::null();
             if ((op.clone()).isNfix()? && (leftOp.clone()).isKind(SyntaxTreeConstants::N_Times)?) {
                 let mut children: JArr<J<SyntaxTreeNode>> = (leftOp.clone()).heirs()?;
-                let mut newC: JArr<J<SyntaxTreeNode>> = JArr::new_array((children.clone().length()).wrapping_add(2i32), JNull::null());
+                let mut newC: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = (children.clone().length()).wrapping_add(2i32); JArr::new_array(__d0, JNull::null()) };
                 let _ = System::arraycopy(&children.clone(), 0i32, &newC.clone(), 0i32, children.clone().length());
                 { let __v: J<SyntaxTreeNode> = opNode.clone(); (newC.clone()).set_at((newC.clone().length()).wrapping_sub(2i32), __v); };
                 { let __v: J<SyntaxTreeNode> = rightOp.clone(); (newC.clone()).set_at((newC.clone().length()).wrapping_sub(1i32), __v); };
@@ -11621,7 +11621,7 @@ impl J<ParseErrors> {
         Ok(())
     }
     pub(crate) fn errors(&self) -> JResult<JArr<J<ParseError>>> {
-        let mut pes: JArr<J<ParseError>> = JArr::new_array((self.jread(|o| o.loe.clone())).size(), JNull::null());
+        let mut pes: JArr<J<ParseError>> = { let __d0: i32 = (self.jread(|o| o.loe.clone())).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut lvi: i32 = 0i32;
             'loop1: loop {
@@ -12009,32 +12009,32 @@ impl J<TLAplusParser> {
         { let __v = ParseErrors::new_0()?; self.jget_mut().PErrors = __v; }
         { let __v = OperatorStack::new_1(self.jread(|o| o.PErrors.clone()))?; self.jget_mut().OperatorStack = __v; }
         { let __v = JunctionListContext::new_0(); self.jget_mut().junctionListCtx = __v; }
-        { let __v = JArr::new_array(512i32, JNull::null()); self.jget_mut().msgStack = __v; }
+        { let __v = { let __d0: i32 = 512i32; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().msgStack = __v; }
         { let __v = 512i32; self.jget_mut().msgStackMaxSize = __v; }
         { let __v = 0i32; self.jget_mut().msgStackCurrentSize = __v; }
         { let __v = JStr::of("nothing"); self.jget_mut().expecting = __v; }
-        { let __v = JArr::new_array(512i32, JNull::null()); self.jget_mut().heirsTable = __v; }
+        { let __v = { let __d0: i32 = 512i32; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().heirsTable = __v; }
         { let __v = 512i32; self.jget_mut().heirsSize = __v; }
         { let __v = 0i32; self.jget_mut().heirsIndex = __v; }
         { let __v = JStr::of(""); self.jget_mut().emptyString = __v; }
         { let __v = Deque::new_0(); self.jget_mut().internals = __v; }
         { let __v = (1i32).wrapping_neg(); self.jget_mut().proofDepth = __v; }
         { let __v = 100i32; self.jget_mut().MaxProofDepth = __v; }
-        { let __v = JArr::new_array(self.jread(|o| o.MaxProofDepth), 0); self.jget_mut().proofLevelStack = __v; }
+        { let __v = { let __d0: i32 = self.jread(|o| o.MaxProofDepth); JArr::new_array(__d0, 0) }; self.jget_mut().proofLevelStack = __v; }
         { let __v = false; self.jget_mut().lookingAhead = __v; }
-        { let __v = JArr::new_array(130i32, 0); self.jget_mut().jj_la1 = __v; }
-        { let __v = JArr::new_array(74i32, JNull::null()); self.jget_mut().jj_2_rtns = __v; }
+        { let __v = { let __d0: i32 = 130i32; JArr::new_array(__d0, 0) }; self.jget_mut().jj_la1 = __v; }
+        { let __v = { let __d0: i32 = 74i32; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().jj_2_rtns = __v; }
         { let __v = false; self.jget_mut().jj_rescan = __v; }
         { let __v = 0i32; self.jget_mut().jj_gc = __v; }
         { let __v = LookaheadSuccess::new_0()?; self.jget_mut().jj_ls = __v; }
         { let __v = Vector::new_0(); self.jget_mut().jj_expentries = __v; }
         { let __v = (1i32).wrapping_neg(); self.jget_mut().jj_kind = __v; }
-        { let __v = JArr::new_array(100i32, 0); self.jget_mut().jj_lasttokens = __v; }
+        { let __v = { let __d0: i32 = 100i32; JArr::new_array(__d0, 0) }; self.jget_mut().jj_lasttokens = __v; }
         Ok(())
     }
 
     pub(crate) fn dependencies(&self) -> JResult<JArr<JStr>> {
-        let mut deps: JArr<JStr> = JArr::new_array((self.jread(|o| o.dependencyList.clone())).size(), JNull::null());
+        let mut deps: JArr<JStr> = { let __d0: i32 = (self.jread(|o| o.dependencyList.clone())).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut lvi: i32 = 0i32;
             'loop1: loop {
@@ -12357,7 +12357,7 @@ impl J<TLAplusParser> {
     }
     pub(crate) fn pushMsg(&self, mut s: JStr, mut t: J<Token>) -> JResult<()> {
         if (self.jread(|o| o.msgStackCurrentSize) == self.jread(|o| o.msgStackMaxSize)) {
-            let mut neo: JArr<J<Object>> = JArr::new_array((2i32).wrapping_mul(self.jread(|o| o.msgStackMaxSize)), JNull::null());
+            let mut neo: JArr<J<Object>> = { let __d0: i32 = (2i32).wrapping_mul(self.jread(|o| o.msgStackMaxSize)); JArr::new_array(__d0, JNull::null()) };
             let _ = System::arraycopy(&self.jread(|o| o.msgStack.clone()), 0i32, &neo.clone(), 0i32, self.jread(|o| o.msgStackMaxSize));
             { let __v: JArr<J<Object>> = neo.clone(); self.jget_mut().msgStack = __v; };
             { let __v: i32 = (self.jread(|o| o.msgStackMaxSize)).wrapping_mul(2i32); self.jget_mut().msgStackMaxSize = __v; };
@@ -12409,7 +12409,7 @@ impl J<TLAplusParser> {
     }
     pub(crate) fn addHeir(&self, mut sn: J<SyntaxTreeNode>) -> JResult<()> {
         if (self.jread(|o| o.heirsIndex) == self.jread(|o| o.heirsSize)) {
-            let mut nh: JArr<J<SyntaxTreeNode>> = JArr::new_array((self.jread(|o| o.heirsSize)).wrapping_add(512i32), JNull::null());
+            let mut nh: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = (self.jread(|o| o.heirsSize)).wrapping_add(512i32); JArr::new_array(__d0, JNull::null()) };
             let _ = System::arraycopy(&self.jread(|o| o.heirsTable.clone()), 0i32, &nh.clone(), 0i32, self.jread(|o| o.heirsSize));
             { let __v: i32 = (self.jread(|o| o.heirsSize)).wrapping_add(512i32); self.jget_mut().heirsSize = __v; };
             { let __v: JArr<J<SyntaxTreeNode>> = nh.clone(); self.jget_mut().heirsTable = __v; };
@@ -12428,7 +12428,7 @@ impl J<TLAplusParser> {
         if (r#as == 0i32) {
             return Ok(JNull::null());
         } else {
-            let mut ts: JArr<J<SyntaxTreeNode>> = JArr::new_array(r#as, JNull::null());
+            let mut ts: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = r#as; JArr::new_array(__d0, JNull::null()) };
             let _ = System::arraycopy(&self.jread(|o| o.heirsTable.clone()), (lvi).wrapping_add(1i32), &ts.clone(), 0i32, r#as);
             { let __v: i32 = (lvi).wrapping_add(1i32); self.jget_mut().heirsIndex = __v; };
             return Ok(ts.clone());
@@ -13510,7 +13510,7 @@ impl J<TLAplusParser> {
     }
     pub(crate) fn Module(&self) -> JResult<J<SyntaxTreeNode>> {
         let mut t: J<Token> = JNull::null();
-        let mut lSTN: JArr<J<SyntaxTreeNode>> = JArr::new_array(4i32, JNull::null());
+        let mut lSTN: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 4i32; JArr::new_array(__d0, JNull::null()) };
         let _ = self.bpa(JStr::of("Module definition"))?;
         let mut stackLevel: i32 = (self.jread(|o| o.internals.clone())).size();
         let mut pop: J<Object> = JNull::null();
@@ -13537,7 +13537,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn BeginModule(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut lSTN: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null());
+        let mut lSTN: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) };
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Begin module"))?;
         { let __v: JStr = JStr::of("---- MODULE (beginning of module)"); self.jget_mut().expecting = __v; };
@@ -13586,7 +13586,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn EndModule(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut lSTN: JArr<J<SyntaxTreeNode>> = JArr::new_array(1i32, JNull::null());
+        let mut lSTN: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
         let mut t: J<Token> = JNull::null();
         { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::END_MODULE)?; t = __v; };
         { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (lSTN.clone()).set_at(0i32, __v); };
@@ -13751,7 +13751,7 @@ impl J<TLAplusParser> {
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut sn: JArr<J<SyntaxTreeNode>> = JNull::null();
         let mut t: J<Token> = JNull::null();
-        let mut lSTN: JArr<J<SyntaxTreeNode>> = JArr::new_array(1i32, JNull::null());
+        let mut lSTN: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
         let _ = self.bpa(JStr::of("variable declaration"))?;
         { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::VARIABLE)?; t = __v; };
         { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (lSTN.clone()).set_at(0i32, __v); };
@@ -13836,7 +13836,7 @@ impl J<TLAplusParser> {
         let mut u: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Parameter declaration item"))?;
         { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::CONSTANT)?; t = __v; };
-        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(1i32, JNull::null()); sn = __v; };
+        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; sn = __v; };
         { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (sn.clone()).set_at(0i32, __v); };
         { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_ConsDecl, sn.clone())?; tn = __v; };
         let _ = self.epa()?;
@@ -14287,7 +14287,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn PrefixLHS(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut sn: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null());
+        let mut sn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Prefix LHS"))?;
@@ -14307,7 +14307,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn InfixLHS(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut sn: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null());
+        let mut sn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Infix LHS"))?;
@@ -14328,7 +14328,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn PostfixLHS(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut sn: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null());
+        let mut sn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Postfix LHS"))?;
@@ -14416,7 +14416,7 @@ impl J<TLAplusParser> {
                 { let __v: J<SyntaxTreeNode> = self.NonExpPrefixOp()?; tn = __v; };
                 { let __v: i32 = SyntaxTreeConstants::N_PrefixDecl; kind = __v; };
                 { let __v: UniqueString = (self.jread(|o| o.lastOp.clone())).getIdentifier()?; n = __v; };
-                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); sn = __v; };
+                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; sn = __v; };
                 { let __v: J<SyntaxTreeNode> = tn.clone(); (sn.clone()).set_at(0i32, __v); };
                 { let __v: JStr = JStr::of("_"); self.jget_mut().expecting = __v; };
                 { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::US)?; t = __v; };
@@ -14433,7 +14433,7 @@ impl J<TLAplusParser> {
                         { let __v: J<SyntaxTreeNode> = self.InfixOp()?; tn = __v; };
                         { let __v: i32 = SyntaxTreeConstants::N_InfixDecl; kind = __v; };
                         { let __v: UniqueString = (self.jread(|o| o.lastOp.clone())).getIdentifier()?; n = __v; };
-                        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null()); sn = __v; };
+                        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) }; sn = __v; };
                         { let __v: J<SyntaxTreeNode> = tn.clone(); (sn.clone()).set_at(1i32, __v); };
                         { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (sn.clone()).set_at(0i32, __v); };
                         { let __v: JStr = JStr::of("_"); self.jget_mut().expecting = __v; };
@@ -14445,7 +14445,7 @@ impl J<TLAplusParser> {
                         { let __v: J<SyntaxTreeNode> = self.PostfixOp()?; tn = __v; };
                         { let __v: i32 = SyntaxTreeConstants::N_PostfixDecl; kind = __v; };
                         { let __v: UniqueString = (self.jread(|o| o.lastOp.clone())).getIdentifier()?; n = __v; };
-                        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); sn = __v; };
+                        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; sn = __v; };
                         { let __v: J<SyntaxTreeNode> = tn.clone(); (sn.clone()).set_at(1i32, __v); };
                         { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (sn.clone()).set_at(0i32, __v); };
                         break 'sw66;
@@ -14561,7 +14561,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn Substitution(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
         let mut n: JStr = JNull::null();
@@ -14746,7 +14746,7 @@ impl J<TLAplusParser> {
             let __k: usize = if __s == TLAplusParserConstants::IDENTIFIER { 0 } else { 1 };
             if __k <= 0 {
                 { let __v: J<SyntaxTreeNode> = self.Identifier()?; tn = __v; };
-                let _ = self.addHeir(SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_GeneralId, J::new(vec![SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, JArr::new_array(0i32, JNull::null()))?, tn.clone()]))?)?;
+                let _ = self.addHeir(SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_GeneralId, J::new(vec![SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) })?, tn.clone()]))?)?;
                 { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::COLONCOLON)?; t = __v; };
                 let _ = self.addHeir(SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?)?;
                 { let __v: J<SyntaxTreeNode> = self.AssumeProve()?; tn = __v; };
@@ -14971,7 +14971,7 @@ impl J<TLAplusParser> {
                 let _ = self.addHeir(SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?)?;
                 { let __v: JStr = JStr::of("Identifier"); self.jget_mut().expecting = __v; };
                 { let __v: J<SyntaxTreeNode> = self.Identifier()?; tn = __v; };
-                let mut sn: JArr<J<SyntaxTreeNode>> = JArr::new_array(1i32, JNull::null());
+                let mut sn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
                 { let __v: J<SyntaxTreeNode> = tn.clone(); (sn.clone()).set_at(0i32, __v); };
                 let _ = self.addHeir(SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdentDecl, sn.clone())?)?;
             } else {
@@ -15057,7 +15057,7 @@ impl J<TLAplusParser> {
             let __k: usize = if __s == TLAplusParserConstants::IN { 0 } else { 1 };
             if __k <= 0 {
                 { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::IN)?; t = __v; };
-                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); zn = __v; };
+                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; zn = __v; };
                 { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (zn.clone()).set_at(0i32, __v); };
                 let _ = (zn.clone().at(0i32)).setKind(SyntaxTreeConstants::T_IN)?;
                 { let __v: JStr = JStr::of("Expression"); self.jget_mut().expecting = __v; };
@@ -15183,11 +15183,11 @@ impl J<TLAplusParser> {
                 }
                 let mut sn: JArr<J<SyntaxTreeNode>> = JNull::null();
                 if !(t0.clone()).is_null() {
-                    { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); sn = __v; };
+                    { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; sn = __v; };
                     { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t0.clone())?; (sn.clone()).set_at(0i32, __v); };
                     { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (sn.clone()).set_at(1i32, __v); };
                 } else {
-                    { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(1i32, JNull::null()); sn = __v; };
+                    { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; sn = __v; };
                     { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (sn.clone()).set_at(0i32, __v); };
                 }
                 { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_TerminalProof, sn.clone())?; tn = __v; };
@@ -15519,7 +15519,7 @@ impl J<TLAplusParser> {
         let _ = self.addHeir(tn.clone())?;
         { let __v: JStr = JStr::of("QED"); self.jget_mut().expecting = __v; };
         { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::QED)?; t = __v; };
-        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(1i32, JNull::null()); sn = __v; };
+        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; sn = __v; };
         { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (sn.clone()).set_at(0i32, __v); };
         let _ = self.addHeir(SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_QEDStep, sn.clone())?)?;
         if self.beginsProof(self.getToken(1i32)?)? {
@@ -16063,7 +16063,7 @@ impl J<TLAplusParser> {
             { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::DOT)?; t2 = __v; };
             { let __v: i32 = SyntaxTreeConstants::N_Real; kind = __v; };
             { let __v: bool = true; self.jget_mut().decimalFlag = __v; };
-            { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null()); sn = __v; };
+            { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) }; sn = __v; };
             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t1.clone())?; (sn.clone()).set_at(0i32, __v); };
             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t2.clone())?; (sn.clone()).set_at(1i32, __v); };
             { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::NUMBER_LITERAL)?; t1 = __v; };
@@ -16072,7 +16072,7 @@ impl J<TLAplusParser> {
         }
         if (sn.clone()).is_null() {
             { let __v: bool = true; self.jget_mut().numberFlag = __v; };
-            { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(1i32, JNull::null()); sn = __v; };
+            { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; sn = __v; };
             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t1.clone())?; (sn.clone()).set_at(0i32, __v); };
             { let __v: i32 = SyntaxTreeConstants::N_Number; kind = __v; };
         }
@@ -16156,7 +16156,7 @@ impl J<TLAplusParser> {
                     return Err(JThrow::ParseException(ParseException::new_0()?));
                 }
             }
-            let mut heirs: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null());
+            let mut heirs: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, JNull::null())?; (heirs.clone()).set_at(0i32, __v); };
             { let __v: J<SyntaxTreeNode> = tn.clone(); (heirs.clone()).set_at(1i32, __v); };
             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), kind, heirs.clone())?; tn = __v; };
@@ -16189,7 +16189,7 @@ impl J<TLAplusParser> {
         Ok(())
     }
     pub(crate) fn ParenExpr(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
         { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::LBR)?; t = __v; };
@@ -16451,13 +16451,13 @@ impl J<TLAplusParser> {
                 let _ = (tn_1.clone()).setKind(SyntaxTreeConstants::T_IN)?;
                 { let __v: J<SyntaxTreeNode> = self.Expression()?; tn_2 = __v; };
                 { let __v: JStr = JStr::of("':', ',' or '}'"); self.jget_mut().expecting = __v; };
-                let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null());
-                let mut wn: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null());
-                { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, JArr::new_array(0i32, JNull::null()))?; (wn.clone()).set_at(0i32, __v); };
+                let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) };
+                let mut wn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
+                { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) })?; (wn.clone()).set_at(0i32, __v); };
                 { let __v: J<SyntaxTreeNode> = tn_0.clone(); (wn.clone()).set_at(1i32, __v); };
                 { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_GeneralId, wn.clone())?; (zn.clone()).set_at(0i32, __v); };
-                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); wn = __v; };
-                { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, JArr::new_array(0i32, JNull::null()))?; (wn.clone()).set_at(0i32, __v); };
+                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; wn = __v; };
+                { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) })?; (wn.clone()).set_at(0i32, __v); };
                 { let __v: J<SyntaxTreeNode> = tn_1.clone(); (wn.clone()).set_at(1i32, __v); };
                 { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_GenInfixOp, wn.clone())?; (zn.clone()).set_at(1i32, __v); };
                 { let __v: J<SyntaxTreeNode> = tn_2.clone(); (zn.clone()).set_at(2i32, __v); };
@@ -16883,7 +16883,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn FieldVal(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) };
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Field Value"))?;
         { let __v: J<SyntaxTreeNode> = self.Identifier()?; (zn.clone()).set_at(0i32, __v); };
@@ -16901,7 +16901,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn FieldSet(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Field Set"))?;
@@ -17106,10 +17106,10 @@ impl J<TLAplusParser> {
             if __k <= 0 {
                 { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::BANG)?; t = __v; };
                 if (top.clone()).is_null() {
-                    { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); heirs = __v; };
+                    { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; heirs = __v; };
                     { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (heirs.clone()).set_at(1i32, __v); };
                 } else {
-                    { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null()); heirs = __v; };
+                    { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) }; heirs = __v; };
                     { let __v: J<SyntaxTreeNode> = top.clone(); (heirs.clone()).set_at(1i32, __v); };
                     { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_2_0(self.jread(|o| o.mn.clone()), t.clone())?; (heirs.clone()).set_at(2i32, __v); };
                 }
@@ -17129,7 +17129,7 @@ impl J<TLAplusParser> {
             } else {
                 { let __v: J<SyntaxTreeNode> = JNull::null(); self.jget_mut().FairnessHook = __v; };
             }
-            let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null());
+            let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, self.getLastHeirs()?)?; (zn.clone()).set_at(0i32, __v); };
             { let __v: J<SyntaxTreeNode> = tid.clone(); (zn.clone()).set_at(1i32, __v); };
             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_GeneralId, zn.clone())?; last = __v; };
@@ -17186,7 +17186,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn FairnessExpr(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(5i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 5i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut expr: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
@@ -17246,7 +17246,7 @@ impl J<TLAplusParser> {
             }
         } else {
             if ((zn.clone().at(1i32)).isKind(SyntaxTreeConstants::N_GeneralId)? && !(self.jread(|o| o.FairnessHook.clone())).is_null()) {
-                let mut ozn: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null());
+                let mut ozn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
                 { let __v: J<SyntaxTreeNode> = zn.clone().at(1i32); (ozn.clone()).set_at(0i32, __v); };
                 { let __v: J<SyntaxTreeNode> = self.jread(|o| o.FairnessHook.clone()); (ozn.clone()).set_at(1i32, __v); };
                 { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_OpApplication, ozn.clone())?; (zn.clone()).set_at(1i32, __v); };
@@ -17271,7 +17271,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn IfThenElse(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(6i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 6i32; JArr::new_array(__d0, JNull::null()) };
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("IF THEN ELSE"))?;
         { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::IF)?; t = __v; };
@@ -17330,7 +17330,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn CaseArm(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) };
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Case Arm"))?;
         { let __v: J<SyntaxTreeNode> = self.Expression()?; (zn.clone()).set_at(0i32, __v); };
@@ -17348,7 +17348,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn OtherArm(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) };
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Case Other Arm"))?;
         { let __v: J<Token> = self.jj_consume_token(TLAplusParserConstants::OTHER)?; t = __v; };
@@ -17367,7 +17367,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn LetIn(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(4i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 4i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Case Other Arm"))?;
@@ -17493,7 +17493,7 @@ impl J<TLAplusParser> {
         Ok(())
     }
     pub(crate) fn JuncItem(&self, mut itemKind: i32) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("Junction Item"))?;
@@ -17539,7 +17539,7 @@ impl J<TLAplusParser> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn UnboundOrBoundChoose(&self) -> JResult<J<SyntaxTreeNode>> {
-        let mut zn: JArr<J<SyntaxTreeNode>> = JArr::new_array(5i32, JNull::null());
+        let mut zn: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 5i32; JArr::new_array(__d0, JNull::null()) };
         let mut tn: J<SyntaxTreeNode> = JNull::null();
         let mut t: J<Token> = JNull::null();
         let _ = self.bpa(JStr::of("(Un)Bounded Choose"))?;
@@ -17655,7 +17655,7 @@ impl J<TLAplusParser> {
                     return Err(JThrow::ParseException(ParseException::new_0()?));
                 }
             }
-            let mut heirs: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null());
+            let mut heirs: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, JNull::null())?; (heirs.clone()).set_at(0i32, __v); };
             { let __v: J<SyntaxTreeNode> = tn.clone(); (heirs.clone()).set_at(1i32, __v); };
             let _ = (self.jread(|o| o.OperatorStack.clone())).pushOnStack(SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), kind, heirs.clone())?, self.jread(|o| o.lastOp.clone()))?;
@@ -17733,7 +17733,7 @@ impl J<TLAplusParser> {
             }
             if (self.jj_2_59(2147483647i32)? && (self.jread(|o| o.junctionListCtx.clone())).isAboveCurrent((self.getToken(1i32)?).jread(|o| o.beginColumn))) {
                 { let __v: J<SyntaxTreeNode> = self.PostfixOp()?; tn = __v; };
-                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); heirs = __v; };
+                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; heirs = __v; };
                 { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, JNull::null())?; (heirs.clone()).set_at(0i32, __v); };
                 { let __v: J<SyntaxTreeNode> = tn.clone(); (heirs.clone()).set_at(1i32, __v); };
                 let _ = (self.jread(|o| o.OperatorStack.clone())).pushOnStack(SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_GenPostfixOp, heirs.clone())?, self.jread(|o| o.lastOp.clone()))?;
@@ -17776,7 +17776,7 @@ impl J<TLAplusParser> {
         if self.jj_2_66(1i32)? {
             if (self.jj_2_64(2147483647i32)? && (self.jread(|o| o.junctionListCtx.clone())).isAboveCurrent((self.getToken(1i32)?).jread(|o| o.beginColumn))) {
                 { let __v: J<SyntaxTreeNode> = self.InfixOp()?; tn = __v; };
-                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); heirs = __v; };
+                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; heirs = __v; };
                 { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, JNull::null())?; (heirs.clone()).set_at(0i32, __v); };
                 { let __v: J<SyntaxTreeNode> = tn.clone(); (heirs.clone()).set_at(1i32, __v); };
                 let _ = (self.jread(|o| o.OperatorStack.clone())).pushOnStack(SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_GenInfixOp, heirs.clone())?, self.jread(|o| o.lastOp.clone()))?;
@@ -17807,7 +17807,7 @@ impl J<TLAplusParser> {
                             return Err(JThrow::ParseException(ParseException::new_0()?));
                         }
                     }
-                    { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); heirs = __v; };
+                    { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; heirs = __v; };
                     { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, JNull::null())?; (heirs.clone()).set_at(0i32, __v); };
                     { let __v: J<SyntaxTreeNode> = tn.clone(); (heirs.clone()).set_at(1i32, __v); };
                     let _ = (self.jread(|o| o.OperatorStack.clone())).pushOnStack(SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), kind, heirs.clone())?, self.jread(|o| o.lastOp.clone()))?;
@@ -17966,27 +17966,27 @@ impl J<TLAplusParser> {
                         }
                         { let __v: JArr<J<SyntaxTreeNode>> = self.getLastHeirs()?; tnBangs = __v; };
                         if (tnBangs.clone()).is_null() {
-                            { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); heirs = __v; };
-                            { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, JArr::new_array(0i32, JNull::null()))?; (heirs.clone()).set_at(0i32, __v); };
+                            { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; heirs = __v; };
+                            { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) })?; (heirs.clone()).set_at(0i32, __v); };
                             { let __v: J<SyntaxTreeNode> = tn0.clone(); (heirs.clone()).set_at(1i32, __v); };
                             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_GeneralId, heirs.clone())?; tn1 = __v; };
                             if (tnOpArgs.clone()).is_null() {
                                 { let __v: J<SyntaxTreeNode> = tn1.clone(); tn = __v; };
                             } else {
-                                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); heirs = __v; };
+                                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; heirs = __v; };
                                 { let __v: J<SyntaxTreeNode> = tn1.clone(); (heirs.clone()).set_at(0i32, __v); };
                                 { let __v: J<SyntaxTreeNode> = tnOpArgs.clone(); (heirs.clone()).set_at(1i32, __v); };
                                 { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_OpApplication, heirs.clone())?; tn = __v; };
                             }
                         } else {
-                            { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(tnBangs.clone().length(), JNull::null()); heirs = __v; };
+                            { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = tnBangs.clone().length(); JArr::new_array(__d0, JNull::null()) }; heirs = __v; };
                             let mut eltHeirs: JArr<J<SyntaxTreeNode>> = JNull::null();
                             if (tnOpArgs.clone()).is_null() {
-                                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); eltHeirs = __v; };
+                                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; eltHeirs = __v; };
                                 { let __v: J<SyntaxTreeNode> = tn0.clone(); (eltHeirs.clone()).set_at(0i32, __v); };
                                 { let __v: J<SyntaxTreeNode> = (tnBangs.clone().at(0i32)).heirs()?.at(0i32); (eltHeirs.clone()).set_at(1i32, __v); };
                             } else {
-                                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(3i32, JNull::null()); eltHeirs = __v; };
+                                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) }; eltHeirs = __v; };
                                 { let __v: J<SyntaxTreeNode> = tn0.clone(); (eltHeirs.clone()).set_at(0i32, __v); };
                                 { let __v: J<SyntaxTreeNode> = tnOpArgs.clone(); (eltHeirs.clone()).set_at(1i32, __v); };
                                 { let __v: J<SyntaxTreeNode> = (tnBangs.clone().at(0i32)).heirs()?.at(0i32); (eltHeirs.clone()).set_at(2i32, __v); };
@@ -17997,7 +17997,7 @@ impl J<TLAplusParser> {
                                 'loop201: loop {
                                     if !((i < (tnBangs.clone().length()).wrapping_sub(1i32))) { break; }
                                     'forbody202: {
-                                        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array((tnBangs.clone().at(i)).heirs()?.length(), JNull::null()); eltHeirs = __v; };
+                                        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = (tnBangs.clone().at(i)).heirs()?.length(); JArr::new_array(__d0, JNull::null()) }; eltHeirs = __v; };
                                         {
                                             let mut j: i32 = 0i32;
                                             'loop203: loop {
@@ -18015,14 +18015,14 @@ impl J<TLAplusParser> {
                                 }
                             }
                             let mut lastBang: JArr<J<SyntaxTreeNode>> = (tnBangs.clone().at((tnBangs.clone().length()).wrapping_sub(1i32))).heirs()?;
-                            let mut genIdHeirs: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null());
+                            let mut genIdHeirs: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
                             { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_IdPrefix, heirs.clone())?; (genIdHeirs.clone()).set_at(0i32, __v); };
                             { let __v: J<SyntaxTreeNode> = lastBang.clone().at(1i32); (genIdHeirs.clone()).set_at(1i32, __v); };
                             let mut genId: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_GeneralId, genIdHeirs.clone())?;
                             if (lastBang.clone().length() == 2i32) {
                                 { let __v: J<SyntaxTreeNode> = genId.clone(); tn = __v; };
                             } else {
-                                { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(2i32, JNull::null()); heirs = __v; };
+                                { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; heirs = __v; };
                                 { let __v: J<SyntaxTreeNode> = genId.clone(); (heirs.clone()).set_at(0i32, __v); };
                                 { let __v: J<SyntaxTreeNode> = lastBang.clone().at(2i32); (heirs.clone()).set_at(1i32, __v); };
                                 { let __v: J<SyntaxTreeNode> = SyntaxTreeNode::new_3_1(self.jread(|o| o.mn.clone()), SyntaxTreeConstants::N_OpApplication, heirs.clone())?; tn = __v; };
@@ -18167,7 +18167,7 @@ impl J<TLAplusParser> {
                     }
                 }
             }
-            let mut heirs: JArr<J<SyntaxTreeNode>> = JArr::new_array(1i32, JNull::null());
+            let mut heirs: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
             { let __v: J<SyntaxTreeNode> = tn.clone(); (heirs.clone()).set_at(0i32, __v); };
             {
                 if true {
@@ -24766,7 +24766,7 @@ impl J<TLAplusParser> {
             { let __v: i32 = kind; (self.jread(|o| o.jj_lasttokens.clone())).set_at({ let __old = self.jread(|o| o.jj_endpos); { let __v: i32 = (self.jread(|o| o.jj_endpos)).wrapping_add(1i32); self.jget_mut().jj_endpos = __v; }; __old }, __v); };
         } else {
             if (self.jread(|o| o.jj_endpos) != 0i32) {
-                { let __v: JArr<i32> = JArr::new_array(self.jread(|o| o.jj_endpos), 0); self.jget_mut().jj_expentry = __v; };
+                { let __v: JArr<i32> = { let __d0: i32 = self.jread(|o| o.jj_endpos); JArr::new_array(__d0, 0) }; self.jget_mut().jj_expentry = __v; };
                 {
                     let mut i: i32 = 0i32;
                     'loop389: loop {
@@ -24819,7 +24819,7 @@ impl J<TLAplusParser> {
     }
     pub(crate) fn generateParseException(&self) -> JResult<J<ParseExceptionObj>> {
         let _ = (self.jread(|o| o.jj_expentries.clone())).removeAllElements();
-        let mut la1tokens: JArr<bool> = JArr::new_array(295i32, false);
+        let mut la1tokens: JArr<bool> = { let __d0: i32 = 295i32; JArr::new_array(__d0, false) };
         {
             let mut i: i32 = 0i32;
             'loop395: loop {
@@ -24890,7 +24890,7 @@ impl J<TLAplusParser> {
                 if !((i < 295i32)) { break; }
                 'forbody402: {
                     if la1tokens.clone().at(i) {
-                        { let __v: JArr<i32> = JArr::new_array(1i32, 0); self.jget_mut().jj_expentry = __v; };
+                        { let __v: JArr<i32> = { let __d0: i32 = 1i32; JArr::new_array(__d0, 0) }; self.jget_mut().jj_expentry = __v; };
                         { let __v: i32 = i; (self.jread(|o| o.jj_expentry.clone())).set_at(0i32, __v); };
                         let _ = (self.jread(|o| o.jj_expentries.clone())).addElement(self.jread(|o| o.jj_expentry.clone()));
                     }
@@ -24901,7 +24901,7 @@ impl J<TLAplusParser> {
         { let __v: i32 = 0i32; self.jget_mut().jj_endpos = __v; };
         let _ = self.jj_rescan_token()?;
         let _ = self.jj_add_error_token(0i32, 0i32)?;
-        let mut exptokseq: JArr<JArr<i32>> = JArr::new_array((self.jread(|o| o.jj_expentries.clone())).size(), JNull::null());
+        let mut exptokseq: JArr<JArr<i32>> = { let __d0: i32 = (self.jread(|o| o.jj_expentries.clone())).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop403: loop {
@@ -25502,7 +25502,7 @@ impl J<SemanticNodeObj> {
                     let mut symb: J<SemanticNodeObj> = (instancerST.clone()).resolveSymbol((decl.clone()).getName_0_3()?)?;
                     if !(symb.clone()).is_null() {
                         if (((decl.clone()).getKind()? == ASTConstants::VariableDeclKind) || (((decl.clone()).getKind()? == ASTConstants::ConstantDeclKind) && ((decl.clone()).getArity_0_0()? == 0i32))) {
-                            let _ = (vtemp.clone()).addElement(Subst::new_4(decl.clone(), OpApplNode::new_5_0(symb.clone(), JArr::new_array(0i32, JNull::null()), treeNode.clone(), self.jread(|o| o.APSubstInNode_instantiatingModule().clone()), errors.clone())?, JNull::null(), true)?);
+                            let _ = (vtemp.clone()).addElement(Subst::new_4(decl.clone(), OpApplNode::new_5_0(symb.clone(), { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }, treeNode.clone(), self.jread(|o| o.APSubstInNode_instantiatingModule().clone()), errors.clone())?, JNull::null(), true)?);
                         } else {
                             let _ = (vtemp.clone()).addElement(Subst::new_4(decl.clone(), OpArgNode::new_3(symb.clone(), treeNode.clone(), self.jread(|o| o.APSubstInNode_instantiatingModule().clone()))?, JNull::null(), true)?);
                         }
@@ -25511,7 +25511,7 @@ impl J<SemanticNodeObj> {
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
             }
         }
-        { let __v: JArr<J<Subst>> = JArr::new_array((vtemp.clone()).size(), JNull::null()); *(self.clone()).jget_mut().APSubstInNode_substs_mut() = __v; };
+        { let __v: JArr<J<Subst>> = { let __d0: i32 = (vtemp.clone()).size(); JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().APSubstInNode_substs_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop3: loop {
@@ -25553,7 +25553,7 @@ impl J<SemanticNodeObj> {
             }
             if !(lhsSymbol.clone()).is_null() {
                 let mut newlength: i32 = ((self.clone()).jread(|o| o.APSubstInNode_substs().clone()).length()).wrapping_add(1i32);
-                let mut newSubsts: JArr<J<Subst>> = JArr::new_array(newlength, JNull::null());
+                let mut newSubsts: JArr<J<Subst>> = { let __d0: i32 = newlength; JArr::new_array(__d0, JNull::null()) };
                 let mut newSubst: J<Subst> = Subst::new_4(lhsSymbol.clone(), sub.clone(), stn.clone(), false)?;
                 let _ = System::arraycopy(&(self.clone()).jread(|o| o.APSubstInNode_substs().clone()), 0i32, &newSubsts.clone(), 0i32, (newlength).wrapping_sub(1i32));
                 { let __v: J<Subst> = newSubst.clone(); (newSubsts.clone()).set_at((newlength).wrapping_sub(1i32), __v); };
@@ -25672,7 +25672,7 @@ impl J<SemanticNodeObj> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn getChildren__APSubstInNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array(((self.clone()).jread(|o| o.APSubstInNode_substs().clone()).length()).wrapping_add(1i32), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ((self.clone()).jread(|o| o.APSubstInNode_substs().clone()).length()).wrapping_add(1i32); JArr::new_array(__d0, JNull::null()) };
         { let __v: J<SemanticNodeObj> = (self.clone()).jread(|o| o.APSubstInNode_body().clone()); (res.clone()).set_at(0i32, __v); };
         {
             let mut i: i32 = 0i32;
@@ -26484,7 +26484,7 @@ impl J<SemanticNodeObj> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn getChildren__AssumeProveNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array(((self.clone()).jread(|o| o.AssumeProveNode_assumes().clone()).length()).wrapping_add(1i32), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ((self.clone()).jread(|o| o.AssumeProveNode_assumes().clone()).length()).wrapping_add(1i32); JArr::new_array(__d0, JNull::null()) };
         { let __v: J<SemanticNodeObj> = (self.clone()).jread(|o| o.AssumeProveNode_prove().clone()); (res.clone()).set_at(self.jread(|o| o.AssumeProveNode_assumes().clone()).length(), __v); };
         {
             let mut i: i32 = 0i32;
@@ -27559,7 +27559,7 @@ impl J<SemanticNodeObj> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn getChildren__DefStepNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array(self.jread(|o| o.DefStepNode_defs().clone()).length(), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = self.jread(|o| o.DefStepNode_defs().clone()).length(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop1: loop {
@@ -27654,7 +27654,7 @@ impl J<Errors> {
     }
     pub(crate) fn getErrors(&self) -> JResult<JArr<JStr>> {
         let mut ds: J<ArrayList<J<ErrorDetails>>> = (self.clone()).getErrorDetails()?;
-        let mut out: JArr<JStr> = JArr::new_array((ds.clone()).size(), JNull::null());
+        let mut out: JArr<JStr> = { let __d0: i32 = (ds.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop3: loop {
@@ -27676,7 +27676,7 @@ impl J<Errors> {
     }
     pub(crate) fn getWarnings(&self) -> JResult<JArr<JStr>> {
         let mut ds: J<ArrayList<J<ErrorDetails>>> = (self.clone()).getWarningDetails()?;
-        let mut out: JArr<JStr> = JArr::new_array((ds.clone()).size(), JNull::null());
+        let mut out: JArr<JStr> = { let __d0: i32 = (ds.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop5: loop {
@@ -28018,7 +28018,7 @@ impl J<ExternalModuleTable> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn getModuleNodes(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
-        let mut mods: JArr<J<SemanticNodeObj>> = JArr::new_array((self.jread(|o| o.moduleNodeVector.clone())).size(), JNull::null());
+        let mut mods: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.jread(|o| o.moduleNodeVector.clone())).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop1: loop {
@@ -28365,6 +28365,18 @@ impl FrontEndStatics {
 }
 
 impl FrontEnd {
+    pub(crate) fn parseAll(mut nis: J<NamedInputStream>, mut nkind: i32, mut cobj: J<FilenameToStream>) -> JResult<JArr<J<SyntaxTreeNode>>> {
+        FrontEnd::statics();
+        return Ok(JNull::null());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn parseOne(mut nis: J<NamedInputStream>, mut nkind: i32) -> JResult<J<SyntaxTreeNode>> {
+        FrontEnd::statics();
+        return Ok(JNull::null());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
     pub(crate) fn semanticAnalysis(mut cst: J<SyntaxTreeNode>, mut nkind: i32, mut ctxt: J<Context>) -> JResult<J<SemanticNodeObj>> {
         FrontEnd::statics();
         return Ok(JNull::null());
@@ -28578,12 +28590,12 @@ impl J<Generator> {
         { let __v = 33i32; self.jget_mut().FindingSubExpr = __v; }
         { let __v = 0i32; self.jget_mut().assumeProveDepth = __v; }
         { let __v = JNull::null(); self.jget_mut().currentGoal = __v; }
-        { let __v = JArr::new_array(Generator::maxAPDepth, false); self.jget_mut().inScopeOfAPDecl = __v; }
+        { let __v = { let __d0: i32 = Generator::maxAPDepth; JArr::new_array(__d0, false) }; self.jget_mut().inScopeOfAPDecl = __v; }
         { let __v = Vector::new_0(); self.jget_mut().LSlabels = __v; }
         { let __v = Vector::new_0(); self.jget_mut().LSparamSeq = __v; }
         { let __v = 100i32; self.jget_mut().MaxLetInLevel = __v; }
         { let __v = 0i32; self.jget_mut().curLevel = __v; }
-        { let __v = JArr::new_array(self.jread(|o| o.MaxLetInLevel), 0); self.jget_mut().unresolvedCnt = __v; }
+        { let __v = { let __d0: i32 = self.jread(|o| o.MaxLetInLevel); JArr::new_array(__d0, 0) }; self.jget_mut().unresolvedCnt = __v; }
         { let __v = 0i32; self.jget_mut().unresolvedSum = __v; }
         { let __v = 0i32; self.jget_mut().recursiveSectionCount = __v; }
         { let __v = 0i32; self.jget_mut().max_dfs = __v; }
@@ -28794,7 +28806,7 @@ impl J<Generator> {
                                     let _ = (self.jread(|o| o.errors.clone())).addMessage(ErrorCode::of("OPERATOR_GIVEN_INCORRECT_NUMBER_OF_ARGUMENTS"), (if (opArgs.clone()).is_null() { ((sel.clone()).jread(|o| o.selSTN.clone())).getLocation()? } else { ((sel.clone()).jread(|o| o.args.clone()).at(idx)).getLocation()? }), JStr::of("The operator %s requires %s arguments."), J::new(vec![Object::of((curName.clone()).toString()), Object::of((nodeArity).wrapping_sub(opDefArityFound))]))?;
                                     return Ok(self.jread(|o| o.nullOAN.clone()));
                                 }
-                                let mut opArgNodes: JArr<J<SemanticNodeObj>> = JArr::new_array((tempArgs.clone()).size(), JNull::null());
+                                let mut opArgNodes: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (tempArgs.clone()).size(); JArr::new_array(__d0, JNull::null()) };
                                 {
                                     let mut i: i32 = 0i32;
                                     'loop12: loop {
@@ -29050,7 +29062,7 @@ impl J<Generator> {
                                                                             { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
                                                                         }
                                                                     }
-                                                                    { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(numSymbs, JNull::null()); temp = __v; };
+                                                                    { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = numSymbs; JArr::new_array(__d0, JNull::null()) }; temp = __v; };
                                                                     let mut k: i32 = 0i32;
                                                                     {
                                                                         let mut i: i32 = 0i32;
@@ -29293,7 +29305,7 @@ impl J<Generator> {
                 return Ok(self.jread(|o| o.nullOAN.clone()));
             }
         }
-        let mut opDefArgArray: JArr<J<SemanticNodeObj>> = JArr::new_array((opDefArgs.clone()).size(), JNull::null());
+        let mut opDefArgArray: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (opDefArgs.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop39: loop {
@@ -29324,7 +29336,7 @@ impl J<Generator> {
                     { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
                 }
             }
-            let mut temp: JArr<J<SemanticNodeObj>> = JArr::new_array(nodeParams.clone().length(), JNull::null());
+            let mut temp: JArr<J<SemanticNodeObj>> = { let __d0: i32 = nodeParams.clone().length(); JArr::new_array(__d0, JNull::null()) };
             {
                 let mut i: i32 = 0i32;
                 'loop43: loop {
@@ -29334,7 +29346,7 @@ impl J<Generator> {
                         let mut newpm: J<SemanticNodeObj> = FormalParamNode::new_5((pm.clone()).getName_0_3()?, (pm.clone()).getArity_0_0()?, (pm.clone()).jread(|o| o.SemanticNode_stn().clone()), JNull::null(), cm.clone())?;
                         let mut eoag: J<SemanticNodeObj> = JNull::null();
                         if ((pm.clone()).getArity_0_0()? == 0i32) {
-                            { let __v: J<SemanticNodeObj> = OpApplNode::new_5_0(newpm.clone(), JArr::new_array(0i32, JNull::null()), (sel.clone()).jread(|o| o.selSTN.clone()), cm.clone(), self.jread(|o| o.errors.clone()))?; eoag = __v; };
+                            { let __v: J<SemanticNodeObj> = OpApplNode::new_5_0(newpm.clone(), { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }, (sel.clone()).jread(|o| o.selSTN.clone()), cm.clone(), self.jread(|o| o.errors.clone()))?; eoag = __v; };
                         } else {
                             { let __v: J<SemanticNodeObj> = OpArgNode::new_3(newpm.clone(), (sel.clone()).jread(|o| o.selSTN.clone()), cm.clone())?; eoag = __v; };
                         }
@@ -29359,7 +29371,7 @@ impl J<Generator> {
                 return Ok(self.jread(|o| o.nullOAN.clone()));
             }
             if (((params.clone()).size()).wrapping_add((substInPrefix.clone()).size()) > 0i32) {
-                let mut temp2: JArr<J<SemanticNodeObj>> = JArr::new_array((curOpArgNode.clone()).getArity_0_1()?, JNull::null());
+                let mut temp2: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (curOpArgNode.clone()).getArity_0_1()?; JArr::new_array(__d0, JNull::null()) };
                 {
                     let mut i: i32 = 0i32;
                     'loop45: loop {
@@ -29451,7 +29463,7 @@ impl J<Generator> {
             }
             { let __v: i32 = (temp).wrapping_sub(1i32); temp = __v; };
         }
-        let mut paramsArray: JArr<J<SemanticNodeObj>> = JArr::new_array((params.clone()).size(), JNull::null());
+        let mut paramsArray: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (params.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop48: loop {
@@ -29478,13 +29490,13 @@ impl J<Generator> {
             return Ok(self.jread(|o| o.nullOAN.clone()));
         }
         if (paramsArray.clone().length() == 0i32) {
-            let mut args: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+            let mut args: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
             { let __v: J<SemanticNodeObj> = curExprNode.clone(); (args.clone()).set_at(0i32, __v); };
             let mut ln: J<SemanticNodeObj> = OpApplNode::new_4(ASTConstants::statics().jread(|o| o.OP_nop.clone()), args.clone(), (sel.clone()).jread(|o| o.selSTN.clone()), cm.clone())?;
             { let __v: J<SemanticNodeObj> = subExprOf.clone(); *(ln.clone()).jget_mut().OpApplNode_subExpressionOf_mut() = __v; };
             return Ok(ln.clone());
         }
-        let mut allArgsArray: JArr<J<SemanticNodeObj>> = JArr::new_array((allArgs.clone()).size(), JNull::null());
+        let mut allArgsArray: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (allArgs.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop50: loop {
@@ -29517,7 +29529,7 @@ impl J<Generator> {
     }
     pub(crate) fn init__Generator_2(&self, mut moduleTable: J<ExternalModuleTable>, mut errs: J<Errors>) -> JResult<()> {
         { self.init_fields__Generator()?; };
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); self.jget_mut().nullParam = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().nullParam = __v; };
         { let __v: J<SemanticNodeObj> = OpDefNode::new_1_0(UniqueString::uniqueStringOf(JStr::of("nullODN")))?; self.jget_mut().nullODN = __v; };
         { let __v: J<SemanticNodeObj> = OpApplNode::new_1(self.jread(|o| o.nullODN.clone()))?; self.jget_mut().nullOAN = __v; };
         { let __v: J<SemanticNodeObj> = OpArgNode::new_1(UniqueString::uniqueStringOf(JStr::of("nullOpArg")))?; self.jget_mut().nullOpArg = __v; };
@@ -29785,7 +29797,7 @@ impl J<Generator> {
         let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(ctxt.clone())?;
         if (children.clone().at(0i32)).isKind(SyntaxTreeConstants::N_IdentLHS)? {
             if (ss.clone().length() > 2i32) {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(((ss.clone().length()).wrapping_sub(2i32)).wrapping_div(2i32), JNull::null()); params = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ((ss.clone().length()).wrapping_sub(2i32)).wrapping_div(2i32); JArr::new_array(__d0, JNull::null()) }; params = __v; };
                 {
                     let mut lvi: i32 = 2i32;
                     'loop63: loop {
@@ -29819,23 +29831,23 @@ impl J<Generator> {
                     }
                 }
             } else {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); params = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; params = __v; };
             }
             { let __v: UniqueString = (ss.clone().at(0i32)).getUS()?; name = __v; };
         } else {
             if (children.clone().at(0i32)).isKind(SyntaxTreeConstants::N_PrefixLHS)? {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); params = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; params = __v; };
                 { let __v: J<SemanticNodeObj> = FormalParamNode::new_5((ss.clone().at(1i32)).getUS()?, 0i32, ss.clone().at(1i32), self.jread(|o| o.symbolTable.clone()), cm.clone())?; (params.clone()).set_at(0i32, __v); };
                 { let __v: UniqueString = Operators::resolveSynonym((ss.clone().at(0i32)).getUS()?)?; name = __v; };
             } else {
                 if (children.clone().at(0i32)).isKind(SyntaxTreeConstants::N_InfixLHS)? {
-                    { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null()); params = __v; };
+                    { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; params = __v; };
                     { let __v: J<SemanticNodeObj> = FormalParamNode::new_5((ss.clone().at(0i32)).getUS()?, 0i32, ss.clone().at(0i32), self.jread(|o| o.symbolTable.clone()), cm.clone())?; (params.clone()).set_at(0i32, __v); };
                     { let __v: J<SemanticNodeObj> = FormalParamNode::new_5((ss.clone().at(2i32)).getUS()?, 0i32, ss.clone().at(2i32), self.jread(|o| o.symbolTable.clone()), cm.clone())?; (params.clone()).set_at(1i32, __v); };
                     { let __v: UniqueString = Operators::resolveSynonym((ss.clone().at(1i32)).getUS()?)?; name = __v; };
                 } else {
                     if (children.clone().at(0i32)).isKind(SyntaxTreeConstants::N_PostfixLHS)? {
-                        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); params = __v; };
+                        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; params = __v; };
                         { let __v: J<SemanticNodeObj> = FormalParamNode::new_5((ss.clone().at(0i32)).getUS()?, 0i32, ss.clone().at(0i32), self.jread(|o| o.symbolTable.clone()), cm.clone())?; (params.clone()).set_at(0i32, __v); };
                         { let __v: UniqueString = Operators::resolveSynonym((ss.clone().at(1i32)).getUS()?)?; name = __v; };
                     } else {
@@ -29921,7 +29933,7 @@ impl J<Generator> {
                     if (ss.clone().at(0i32)).isKind(SyntaxTreeConstants::N_IdentifierTuple)? {
                         { let __v: bool = true; (bt.clone()).set_at(lvi, __v); };
                         let mut sss: JArr<J<SyntaxTreeNode>> = (ss.clone().at(0i32)).heirs()?;
-                        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((sss.clone().length()).wrapping_div(2i32), JNull::null()); (odna.clone()).set_at(lvi, __v); };
+                        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (sss.clone().length()).wrapping_div(2i32); JArr::new_array(__d0, JNull::null()) }; (odna.clone()).set_at(lvi, __v); };
                         {
                             let mut lvj: i32 = 0i32;
                             'loop71: loop {
@@ -29934,7 +29946,7 @@ impl J<Generator> {
                         }
                     } else {
                         { let __v: bool = false; (bt.clone()).set_at(lvi, __v); };
-                        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(((ss.clone().length()).wrapping_sub(1i32)).wrapping_div(2i32), JNull::null()); (odna.clone()).set_at(lvi, __v); };
+                        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ((ss.clone().length()).wrapping_sub(1i32)).wrapping_div(2i32); JArr::new_array(__d0, JNull::null()) }; (odna.clone()).set_at(lvi, __v); };
                         {
                             let mut lvj: i32 = 0i32;
                             'loop73: loop {
@@ -29960,11 +29972,11 @@ impl J<Generator> {
         let mut ql: i32 = ((ss.clone().length()).wrapping_sub(4i32)).wrapping_div(2i32);
         let mut oan: J<SemanticNodeObj> = JNull::null();
         let mut odn: J<SemanticNodeObj> = JNull::null();
-        let mut quants: JArr<JArr<J<SemanticNodeObj>>> = JArr::new_array(0i32, JNull::null());
-        let mut fcnDeclForRecursion: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
-        let mut tuples: JArr<bool> = JArr::new_array(ql, false);
-        let mut domains: JArr<J<SemanticNodeObj>> = JArr::new_array(ql, JNull::null());
-        let mut lhs: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+        let mut quants: JArr<JArr<J<SemanticNodeObj>>> = { let __d0: i32 = ql; let __d1: i32 = 0i32; JArr::new_array_with(__d0, || JArr::new_array(__d1, JNull::null())) };
+        let mut fcnDeclForRecursion: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
+        let mut tuples: JArr<bool> = { let __d0: i32 = ql; JArr::new_array(__d0, false) };
+        let mut domains: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ql; JArr::new_array(__d0, JNull::null()) };
+        let mut lhs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
         let mut newContext: J<Context> = Context::new_1(self.jread(|o| o.moduleTable.clone()))?;
         let mut isRecursive: bool = false;
         let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(newContext.clone())?;
@@ -29977,7 +29989,7 @@ impl J<Generator> {
         }
         { let __v: J<SemanticNodeObj> = FormalParamNode::new_5(name.clone(), 0i32, treeNode.clone(), st.clone(), cm.clone())?; (fcnDeclForRecursion.clone()).set_at(0i32, __v); };
         let _ = (self.jread(|o| o.symbolTable.clone())).popContext()?;
-        { let __v: J<SemanticNodeObj> = OpApplNode::new_8(ASTConstants::statics().jread(|o| o.OP_nrfs.clone()), fcnDeclForRecursion.clone(), JArr::new_array(0i32, JNull::null()), quants.clone(), tuples.clone(), domains.clone(), syntaxTreeNode.clone(), cm.clone())?; oan = __v; };
+        { let __v: J<SemanticNodeObj> = OpApplNode::new_8(ASTConstants::statics().jread(|o| o.OP_nrfs.clone()), fcnDeclForRecursion.clone(), { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }, quants.clone(), tuples.clone(), domains.clone(), syntaxTreeNode.clone(), cm.clone())?; oan = __v; };
         if (symbolNode.clone()).is_null() {
             { let __v: J<SemanticNodeObj> = OpDefNode::new_10((ss.clone().at(0i32)).getUS()?, ASTConstants::UserDefinedOpKind, self.jread(|o| o.nullParam.clone()), local, oan.clone(), cm.clone(), self.jread(|o| o.symbolTable.clone()), syntaxTreeNode.clone(), true, JNull::null())?; odn = __v; };
             let _ = self.setOpDefNodeRecursionFields(odn.clone(), cm.clone())?;
@@ -30078,7 +30090,7 @@ impl J<Generator> {
             { let __v: i32 = 0i32; self.jget_mut().curLevel = __v; };
         }
         let mut body: J<SemanticNodeObj> = self.generateExpression(children.clone().at(3i32), cm.clone())?;
-        let mut opDefs: JArr<J<SemanticNodeObj>> = JArr::new_array((defVec.clone()).size(), JNull::null());
+        let mut opDefs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (defVec.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop78: loop {
@@ -30089,7 +30101,7 @@ impl J<Generator> {
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
             }
         }
-        let mut insts: JArr<J<SemanticNodeObj>> = JArr::new_array((instVec.clone()).size(), JNull::null());
+        let mut insts: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (instVec.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop80: loop {
@@ -30144,7 +30156,7 @@ impl J<Generator> {
             }
             if __k <= 4 {
                 { let __v: J<GenID> = self.generateGenID_2(children.clone().at(1i32), cm.clone())?; genID = __v; };
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 { let __v: J<SemanticNodeObj> = (self.jread(|o| o.symbolTable.clone())).resolveSymbol(Operators::resolveSynonym((genID.clone()).getCompoundIDUS()?)?)?; opn = __v; };
                 if (opn.clone()).is_null() {
                     let _ = (self.jread(|o| o.errors.clone())).addMessage(ErrorCode::of("SUSPECTED_UNREACHABLE_CHECK"), (treeNode.clone()).getLocation()?, JStr::of("Couldn't resolve infix operator symbol `%s'."), J::new(vec![Object::of((genID.clone()).getCompoundIDUS()?)]))?;
@@ -30158,7 +30170,7 @@ impl J<Generator> {
                 { let __v: JArr<J<SyntaxTreeNode>> = (children.clone().at(0i32)).heirs()?; ss = __v; };
                 { let __v: J<SyntaxTreeNode> = ss.clone().at(1i32); op = __v; };
                 { let __v: J<GenID> = self.generateGenID_3(children.clone().at(0i32), cm.clone(), true)?; genID = __v; };
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 { let __v: J<SemanticNodeObj> = (self.jread(|o| o.symbolTable.clone())).resolveSymbol(Operators::resolveSynonym((genID.clone()).getCompoundIDUS()?)?)?; opn = __v; };
                 if (opn.clone()).is_null() {
                     let _ = (self.jread(|o| o.errors.clone())).addMessage(ErrorCode::of("SUSPECTED_UNREACHABLE_CHECK"), (treeNode.clone()).getLocation()?, JStr::of("Couldn't resolve prefix operator symbol `%s'."), J::new(vec![Object::of((genID.clone()).getCompoundIDUS()?)]))?;
@@ -30169,7 +30181,7 @@ impl J<Generator> {
             }
             if __k <= 6 {
                 { let __v: J<GenID> = self.generateGenID_2(children.clone().at(1i32), cm.clone())?; genID = __v; };
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 { let __v: J<SemanticNodeObj> = (self.jread(|o| o.symbolTable.clone())).resolveSymbol(Operators::resolveSynonym((genID.clone()).getCompoundIDUS()?)?)?; opn = __v; };
                 if (opn.clone()).is_null() {
                     let _ = (self.jread(|o| o.errors.clone())).addMessage(ErrorCode::of("SUSPECTED_UNREACHABLE_CHECK"), (treeNode.clone()).getLocation()?, JStr::of("Couldn't resolve postfix operator symbol `%s'."), J::new(vec![Object::of((genID.clone()).getCompoundIDUS()?)]))?;
@@ -30179,7 +30191,7 @@ impl J<Generator> {
                 return Ok(OpApplNode::new_5_0(opn.clone(), sns.clone(), treeNode.clone(), cm.clone(), self.jread(|o| o.errors.clone()))?);
             }
             if __k <= 7 {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(((children.clone().length()).wrapping_add(1i32)).wrapping_div(2i32), JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ((children.clone().length()).wrapping_add(1i32)).wrapping_div(2i32); JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 {
                     let mut lvi: i32 = 0i32;
                     'loop83: loop {
@@ -30194,7 +30206,7 @@ impl J<Generator> {
             }
             if __k <= 8 {
                 { let __v: i32 = ((children.clone().length()).wrapping_sub(1i32)).wrapping_div(2i32); size = __v; };
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(size, JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = size; JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 {
                     let mut lvi: i32 = 0i32;
                     'loop85: loop {
@@ -30236,7 +30248,7 @@ impl J<Generator> {
             }
             if __k <= 11 {
                 { let __v: i32 = ((children.clone().length()).wrapping_sub(1i32)).wrapping_div(2i32); size = __v; };
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(size, JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = size; JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 {
                     let mut lvi: i32 = 0i32;
                     'loop87: loop {
@@ -30251,7 +30263,7 @@ impl J<Generator> {
             }
             if __k <= 12 {
                 { let __v: i32 = ((children.clone().length()).wrapping_sub(2i32)).wrapping_div(2i32); numArgs = __v; };
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(0i32), cm.clone())?; (sns.clone()).set_at(0i32, __v); };
                 if (sns.clone().at(0i32)).is_null() {
                     return Ok(JNull::null());
@@ -30276,7 +30288,7 @@ impl J<Generator> {
                 if (numArgs == 1i32) {
                     { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(2i32), cm.clone())?; (sns.clone()).set_at(1i32, __v); };
                 } else {
-                    let mut exprs: JArr<J<SemanticNodeObj>> = JArr::new_array(numArgs, JNull::null());
+                    let mut exprs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = numArgs; JArr::new_array(__d0, JNull::null()) };
                     {
                         let mut lvi: i32 = 0i32;
                         'loop89: loop {
@@ -30301,7 +30313,7 @@ impl J<Generator> {
                 return Ok(self.processUnboundQuant(treeNode.clone(), children.clone(), cm.clone())?);
             }
             if __k <= 16 {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(3i32, JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 3i32; JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(1i32), cm.clone())?; (sns.clone()).set_at(0i32, __v); };
                 { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(3i32), cm.clone())?; (sns.clone()).set_at(1i32, __v); };
                 { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(5i32), cm.clone())?; (sns.clone()).set_at(2i32, __v); };
@@ -30311,7 +30323,7 @@ impl J<Generator> {
                 return Ok(self.processCase(treeNode.clone(), children.clone(), cm.clone())?);
             }
             if __k <= 18 {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(children.clone().length(), JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = children.clone().length(); JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 {
                     let mut lvi: i32 = 0i32;
                     'loop91: loop {
@@ -30329,13 +30341,13 @@ impl J<Generator> {
                 }
             }
             if __k <= 19 {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(0i32), cm.clone())?; (sns.clone()).set_at(0i32, __v); };
                 { let __v: J<SemanticNodeObj> = StringNode::new_2(children.clone().at(2i32), false)?; (sns.clone()).set_at(1i32, __v); };
                 return Ok(OpApplNode::new_4(ASTConstants::statics().jread(|o| o.OP_rs.clone()), sns.clone(), treeNode.clone(), cm.clone())?);
             }
             if __k <= 20 {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null()); sns = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; sns = __v; };
                 { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(1i32), cm.clone())?; (sns.clone()).set_at(0i32, __v); };
                 { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(3i32), cm.clone())?; (sns.clone()).set_at(1i32, __v); };
                 return Ok(OpApplNode::new_4(ASTConstants::statics().jread(|o| o.OP_sof.clone()), sns.clone(), treeNode.clone(), cm.clone())?);
@@ -30444,9 +30456,9 @@ impl J<Generator> {
             }
         }
         let _ = (apn.clone()).setIsBoxAssumeProve(isBoxAssumeProve)?;
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(numOfAssumptions, JNull::null()); *(apn.clone()).jget_mut().AssumeProveNode_assumes_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = numOfAssumptions; JArr::new_array(__d0, JNull::null()) }; *(apn.clone()).jget_mut().AssumeProveNode_assumes_mut() = __v; };
         let mut inDeclScope: bool = false;
-        { let __v: JArr<bool> = JArr::new_array((numOfAssumptions).wrapping_add(1i32), false); *(apn.clone()).jget_mut().AssumeProveNode_inScopeOfDecl_mut() = __v; };
+        { let __v: JArr<bool> = { let __d0: i32 = (numOfAssumptions).wrapping_add(1i32); JArr::new_array(__d0, false) }; *(apn.clone()).jget_mut().AssumeProveNode_inScopeOfDecl_mut() = __v; };
         { let __v: bool = false; ((apn.clone()).jread(|o| o.AssumeProveNode_inScopeOfDecl().clone())).set_at(0i32, __v); };
         { let __v: bool = false; (self.jread(|o| o.inScopeOfAPDecl.clone())).set_at(self.jread(|o| o.assumeProveDepth), __v); };
         if (self.jread(|o| o.assumeProveDepth) != 1i32) {
@@ -30483,7 +30495,7 @@ impl J<Generator> {
                             { let __v: J<SemanticNodeObj> = self.generateNewSymb(tn.clone(), cm.clone())?; ((apn.clone()).jread(|o| o.AssumeProveNode_assumes().clone())).set_at(i, __v); };
                             { let __v: bool = true; ((apn.clone()).jread(|o| o.AssumeProveNode_inScopeOfDecl().clone())).set_at((i).wrapping_add(1i32), __v); };
                             { let __v: bool = true; (self.jread(|o| o.inScopeOfAPDecl.clone())).set_at(self.jread(|o| o.assumeProveDepth), __v); };
-                            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); odn = __v; };
+                            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; odn = __v; };
                             { let __v: J<SemanticNodeObj> = ((apn.clone()).jread(|o| o.AssumeProveNode_assumes().clone()).at(i)).getOpDeclNode()?; (odn.clone()).set_at(0i32, __v); };
                             break 'sw97;
                         }
@@ -30560,7 +30572,7 @@ impl J<Generator> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn processChoose(&self, mut treeNode: J<SyntaxTreeNode>, mut children: JArr<J<SyntaxTreeNode>>, mut cm: J<SemanticNodeObj>) -> JResult<J<SemanticNodeObj>> {
-        let mut semanticNode: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+        let mut semanticNode: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
         let mut syntaxTreeNode: JArr<J<SyntaxTreeNode>> = (children.clone().at(2i32)).heirs()?;
         let mut result: J<SemanticNodeObj> = JNull::null();
         let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(Context::new_1(self.jread(|o| o.moduleTable.clone()))?)?;
@@ -30569,7 +30581,7 @@ impl J<Generator> {
             let mut tuple: bool = false;
             if (children.clone().at(1i32)).isKind(SyntaxTreeConstants::N_IdentifierTuple)? {
                 { let __v: JArr<J<SyntaxTreeNode>> = (children.clone().at(1i32)).heirs()?; syntaxTreeNode = __v; };
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((syntaxTreeNode.clone().length()).wrapping_div(2i32), JNull::null()); odn = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (syntaxTreeNode.clone().length()).wrapping_div(2i32); JArr::new_array(__d0, JNull::null()) }; odn = __v; };
                 {
                     let mut lvj: i32 = 0i32;
                     'loop99: loop {
@@ -30582,7 +30594,7 @@ impl J<Generator> {
                 }
                 { let __v: bool = true; tuple = __v; };
             } else {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); odn = __v; };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; odn = __v; };
                 { let __v: J<SemanticNodeObj> = FormalParamNode::new_5((children.clone().at(1i32)).getUS()?, 0i32, children.clone().at(0i32), self.jread(|o| o.symbolTable.clone()), cm.clone())?; (odn.clone()).set_at(0i32, __v); };
                 { let __v: bool = false; tuple = __v; };
             }
@@ -30591,13 +30603,13 @@ impl J<Generator> {
             let _ = self.popFormalParams()?;
             { let __v: J<SemanticNodeObj> = OpApplNode::new_5_1(ASTConstants::statics().jread(|o| o.OP_uc.clone()), semanticNode.clone(), odn.clone(), treeNode.clone(), cm.clone())?; result = __v; };
         } else {
-            let mut odna: JArr<JArr<J<SemanticNodeObj>>> = JArr::new_array(0i32, JNull::null());
-            let mut tuples: JArr<bool> = JArr::new_array(1i32, false);
-            let mut exprs: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+            let mut odna: JArr<JArr<J<SemanticNodeObj>>> = { let __d0: i32 = 1i32; let __d1: i32 = 0i32; JArr::new_array_with(__d0, || JArr::new_array(__d1, JNull::null())) };
+            let mut tuples: JArr<bool> = { let __d0: i32 = 1i32; JArr::new_array(__d0, false) };
+            let mut exprs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
             { let __v: J<SemanticNodeObj> = self.generateExpression(syntaxTreeNode.clone().at(1i32), cm.clone())?; (exprs.clone()).set_at(0i32, __v); };
             if (children.clone().at(1i32)).isKind(SyntaxTreeConstants::N_IdentifierTuple)? {
                 { let __v: JArr<J<SyntaxTreeNode>> = (children.clone().at(1i32)).heirs()?; syntaxTreeNode = __v; };
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((syntaxTreeNode.clone().length()).wrapping_div(2i32), JNull::null()); (odna.clone()).set_at(0i32, __v); };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (syntaxTreeNode.clone().length()).wrapping_div(2i32); JArr::new_array(__d0, JNull::null()) }; (odna.clone()).set_at(0i32, __v); };
                 {
                     let mut lvj: i32 = 0i32;
                     'loop101: loop {
@@ -30610,7 +30622,7 @@ impl J<Generator> {
                 }
                 { let __v: bool = true; (tuples.clone()).set_at(0i32, __v); };
             } else {
-                { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); (odna.clone()).set_at(0i32, __v); };
+                { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; (odna.clone()).set_at(0i32, __v); };
                 { let __v: J<SemanticNodeObj> = FormalParamNode::new_5((children.clone().at(1i32)).getUS()?, 0i32, children.clone().at(1i32), self.jread(|o| o.symbolTable.clone()), cm.clone())?; (odna.clone().at(0i32)).set_at(0i32, __v); };
                 { let __v: bool = false; (tuples.clone()).set_at(0i32, __v); };
             }
@@ -30626,12 +30638,12 @@ impl J<Generator> {
     }
     pub(crate) fn processBoundQuant(&self, mut treeNode: J<SyntaxTreeNode>, mut children: JArr<J<SyntaxTreeNode>>, mut cm: J<SemanticNodeObj>) -> JResult<J<SemanticNodeObj>> {
         let mut length: i32 = ((children.clone().length()).wrapping_sub(2i32)).wrapping_div(2i32);
-        let mut odna: JArr<JArr<J<SemanticNodeObj>>> = JArr::new_array(0i32, JNull::null());
-        let mut bt: JArr<bool> = JArr::new_array(length, false);
-        let mut ea: JArr<J<SemanticNodeObj>> = JArr::new_array(length, JNull::null());
+        let mut odna: JArr<JArr<J<SemanticNodeObj>>> = { let __d0: i32 = length; let __d1: i32 = 0i32; JArr::new_array_with(__d0, || JArr::new_array(__d1, JNull::null())) };
+        let mut bt: JArr<bool> = { let __d0: i32 = length; JArr::new_array(__d0, false) };
+        let mut ea: JArr<J<SemanticNodeObj>> = { let __d0: i32 = length; JArr::new_array(__d0, JNull::null()) };
         let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(Context::new_1(self.jread(|o| o.moduleTable.clone()))?)?;
         let _ = self.processQuantBoundArgs(children.clone(), 1i32, odna.clone(), bt.clone(), ea.clone(), cm.clone())?;
-        let mut semanticNode: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+        let mut semanticNode: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
         let _ = self.pushFormalParams(self.flattenParams(odna.clone())?)?;
         { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at((children.clone().length()).wrapping_sub(1i32)), cm.clone())?; (semanticNode.clone()).set_at(0i32, __v); };
         let _ = self.popFormalParams()?;
@@ -30682,7 +30694,7 @@ impl J<Generator> {
             }
         }
         let mut length: i32 = ((children.clone().length()).wrapping_sub(2i32)).wrapping_div(2i32);
-        let mut odn: JArr<J<SemanticNodeObj>> = JArr::new_array(length, JNull::null());
+        let mut odn: JArr<J<SemanticNodeObj>> = { let __d0: i32 = length; JArr::new_array(__d0, JNull::null()) };
         let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(Context::new_1(self.jread(|o| o.moduleTable.clone()))?)?;
         {
             let mut lvi: i32 = 0i32;
@@ -30694,7 +30706,7 @@ impl J<Generator> {
                 { let __v: i32 = (lvi).wrapping_add(1i32); lvi = __v; };
             }
         }
-        let mut semanticNode: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+        let mut semanticNode: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
         let _ = self.pushFormalParams(odn.clone())?;
         { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at((children.clone().length()).wrapping_sub(1i32)), cm.clone())?; (semanticNode.clone()).set_at(0i32, __v); };
         let _ = self.popFormalParams()?;
@@ -30705,7 +30717,7 @@ impl J<Generator> {
     }
     pub(crate) fn processCase(&self, mut treeNode: J<SyntaxTreeNode>, mut children: JArr<J<SyntaxTreeNode>>, mut cm: J<SemanticNodeObj>) -> JResult<J<SemanticNodeObj>> {
         let mut armCount: i32 = (children.clone().length()).wrapping_div(2i32);
-        let mut casePairs: JArr<J<SemanticNodeObj>> = JArr::new_array(armCount, JNull::null());
+        let mut casePairs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = armCount; JArr::new_array(__d0, JNull::null()) };
         {
             let mut lvi: i32 = 0i32;
             'loop106: loop {
@@ -30713,7 +30725,7 @@ impl J<Generator> {
                 'forbody107: {
                     let mut caseArm: J<SyntaxTreeNode> = children.clone().at(((2i32).wrapping_mul(lvi)).wrapping_add(1i32));
                     let mut ss: JArr<J<SyntaxTreeNode>> = (caseArm.clone()).heirs()?;
-                    let mut sops: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null());
+                    let mut sops: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
                     if !((caseArm.clone()).isKind(SyntaxTreeConstants::N_OtherArm)?) {
                         { let __v: J<SemanticNodeObj> = (self.clone()).generateExpression(ss.clone().at(0i32), cm.clone())?; (sops.clone()).set_at(0i32, __v); };
                     }
@@ -30728,15 +30740,15 @@ impl J<Generator> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn processSubsetOf(&self, mut treeNode: J<SyntaxTreeNode>, mut children: JArr<J<SyntaxTreeNode>>, mut cm: J<SemanticNodeObj>) -> JResult<J<SemanticNodeObj>> {
-        let mut ops: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
-        let mut odna: JArr<JArr<J<SemanticNodeObj>>> = JArr::new_array(0i32, JNull::null());
-        let mut tuples: JArr<bool> = JArr::new_array(1i32, false);
-        let mut exprs: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+        let mut ops: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
+        let mut odna: JArr<JArr<J<SemanticNodeObj>>> = { let __d0: i32 = 1i32; let __d1: i32 = 0i32; JArr::new_array_with(__d0, || JArr::new_array(__d1, JNull::null())) };
+        let mut tuples: JArr<bool> = { let __d0: i32 = 1i32; JArr::new_array(__d0, false) };
+        let mut exprs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
         { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(3i32), cm.clone())?; (exprs.clone()).set_at(0i32, __v); };
         let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(Context::new_1(self.jread(|o| o.moduleTable.clone()))?)?;
         if (children.clone().at(1i32)).isKind(SyntaxTreeConstants::N_IdentifierTuple)? {
             let mut ss: JArr<J<SyntaxTreeNode>> = (children.clone().at(1i32)).heirs()?;
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((ss.clone().length()).wrapping_div(2i32), JNull::null()); (odna.clone()).set_at(0i32, __v); };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (ss.clone().length()).wrapping_div(2i32); JArr::new_array(__d0, JNull::null()) }; (odna.clone()).set_at(0i32, __v); };
             {
                 let mut lvj: i32 = 0i32;
                 'loop108: loop {
@@ -30749,7 +30761,7 @@ impl J<Generator> {
             }
             { let __v: bool = true; (tuples.clone()).set_at(0i32, __v); };
         } else {
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); (odna.clone()).set_at(0i32, __v); };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; (odna.clone()).set_at(0i32, __v); };
             { let __v: J<SemanticNodeObj> = FormalParamNode::new_5((children.clone().at(1i32)).getUS()?, 0i32, children.clone().at(1i32), self.jread(|o| o.symbolTable.clone()), cm.clone())?; (odna.clone().at(0i32)).set_at(0i32, __v); };
             { let __v: bool = false; (tuples.clone()).set_at(0i32, __v); };
         }
@@ -30762,11 +30774,11 @@ impl J<Generator> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn processSetOfAll(&self, mut treeNode: J<SyntaxTreeNode>, mut children: JArr<J<SyntaxTreeNode>>, mut cm: J<SemanticNodeObj>) -> JResult<J<SemanticNodeObj>> {
-        let mut ops: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+        let mut ops: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
         let mut length: i32 = ((children.clone().length()).wrapping_sub(3i32)).wrapping_div(2i32);
-        let mut odna: JArr<JArr<J<SemanticNodeObj>>> = JArr::new_array(0i32, JNull::null());
-        let mut tuples: JArr<bool> = JArr::new_array(length, false);
-        let mut exprs: JArr<J<SemanticNodeObj>> = JArr::new_array(length, JNull::null());
+        let mut odna: JArr<JArr<J<SemanticNodeObj>>> = { let __d0: i32 = length; let __d1: i32 = 0i32; JArr::new_array_with(__d0, || JArr::new_array(__d1, JNull::null())) };
+        let mut tuples: JArr<bool> = { let __d0: i32 = length; JArr::new_array(__d0, false) };
+        let mut exprs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = length; JArr::new_array(__d0, JNull::null()) };
         let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(Context::new_1(self.jread(|o| o.moduleTable.clone()))?)?;
         let _ = self.processQuantBoundArgs(children.clone(), 3i32, odna.clone(), tuples.clone(), exprs.clone(), cm.clone())?;
         let _ = self.pushFormalParams(self.flattenParams(odna.clone())?)?;
@@ -30778,11 +30790,11 @@ impl J<Generator> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn processFcnConst(&self, mut treeNode: J<SyntaxTreeNode>, mut children: JArr<J<SyntaxTreeNode>>, mut cm: J<SemanticNodeObj>) -> JResult<J<SemanticNodeObj>> {
-        let mut ops: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+        let mut ops: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
         let mut length: i32 = ((children.clone().length()).wrapping_sub(3i32)).wrapping_div(2i32);
-        let mut odna: JArr<JArr<J<SemanticNodeObj>>> = JArr::new_array(0i32, JNull::null());
-        let mut tuples: JArr<bool> = JArr::new_array(length, false);
-        let mut exprs: JArr<J<SemanticNodeObj>> = JArr::new_array(length, JNull::null());
+        let mut odna: JArr<JArr<J<SemanticNodeObj>>> = { let __d0: i32 = length; let __d1: i32 = 0i32; JArr::new_array_with(__d0, || JArr::new_array(__d1, JNull::null())) };
+        let mut tuples: JArr<bool> = { let __d0: i32 = length; JArr::new_array(__d0, false) };
+        let mut exprs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = length; JArr::new_array(__d0, JNull::null()) };
         let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(Context::new_1(self.jread(|o| o.moduleTable.clone()))?)?;
         let _ = self.processQuantBoundArgs(children.clone(), 1i32, odna.clone(), tuples.clone(), exprs.clone(), cm.clone())?;
         let _ = self.pushFormalParams(self.flattenParams(odna.clone())?)?;
@@ -30795,15 +30807,15 @@ impl J<Generator> {
     }
     pub(crate) fn processRcdForms(&self, mut operator: UniqueString, mut treeNode: J<SyntaxTreeNode>, mut children: JArr<J<SyntaxTreeNode>>, mut cm: J<SemanticNodeObj>) -> JResult<J<SemanticNodeObj>> {
         let mut length: i32 = ((children.clone().length()).wrapping_sub(1i32)).wrapping_div(2i32);
-        let mut fieldPairs: JArr<J<SemanticNodeObj>> = JArr::new_array(length, JNull::null());
-        let mut labels: JArr<UniqueString> = JArr::new_array(length, JNull::null());
+        let mut fieldPairs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = length; JArr::new_array(__d0, JNull::null()) };
+        let mut labels: JArr<UniqueString> = { let __d0: i32 = length; JArr::new_array(__d0, JNull::null()) };
         {
             let mut lvi: i32 = 0i32;
             'loop110: loop {
                 if !((lvi < length)) { break; }
                 'forbody111: {
                     let mut syntaxTreeNode: JArr<J<SyntaxTreeNode>> = (children.clone().at(((2i32).wrapping_mul(lvi)).wrapping_add(1i32))).heirs()?;
-                    let mut sops: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null());
+                    let mut sops: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
                     { let __v: J<SemanticNodeObj> = StringNode::new_2(syntaxTreeNode.clone().at(0i32), false)?; (sops.clone()).set_at(0i32, __v); };
                     { let __v: UniqueString = (sops.clone().at(0i32)).getRep()?; (labels.clone()).set_at(lvi, __v); };
                     {
@@ -30863,7 +30875,7 @@ impl J<Generator> {
                 }
             }
         }
-        let mut ops: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null());
+        let mut ops: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
         { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(1i32), cm.clone())?; (ops.clone()).set_at(0i32, __v); };
         { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(3i32), cm.clone())?; (ops.clone()).set_at(1i32, __v); };
         return Ok(OpApplNode::new_4(r#match.clone(), ops.clone(), treeNode.clone(), cm.clone())?);
@@ -30872,7 +30884,7 @@ impl J<Generator> {
     }
     pub(crate) fn processExcept(&self, mut treeNode: J<SyntaxTreeNode>, mut children: JArr<J<SyntaxTreeNode>>, mut cm: J<SemanticNodeObj>) -> JResult<J<SemanticNodeObj>> {
         let mut numExcepts: i32 = ((children.clone().length()).wrapping_sub(3i32)).wrapping_div(2i32);
-        let mut operands: JArr<J<SemanticNodeObj>> = JArr::new_array((numExcepts).wrapping_add(1i32), JNull::null());
+        let mut operands: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (numExcepts).wrapping_add(1i32); JArr::new_array(__d0, JNull::null()) };
         let mut excNode: J<SemanticNodeObj> = JNull::null();
         let mut excSpecNode: J<SemanticNodeObj> = JNull::null();
         { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(1i32), cm.clone())?; (operands.clone()).set_at(0i32, __v); };
@@ -30883,9 +30895,9 @@ impl J<Generator> {
                 if !((excSpecIx < numExcepts)) { break; }
                 'forbody116: {
                     let mut syntaxTreeNode: JArr<J<SyntaxTreeNode>> = (children.clone().at((3i32).wrapping_add((2i32).wrapping_mul(excSpecIx)))).heirs()?;
-                    let mut sops: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null());
+                    let mut sops: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
                     let mut slength: i32 = (syntaxTreeNode.clone().length()).wrapping_sub(3i32);
-                    let mut ssops: JArr<J<SemanticNodeObj>> = JArr::new_array(slength, JNull::null());
+                    let mut ssops: JArr<J<SemanticNodeObj>> = { let __d0: i32 = slength; JArr::new_array(__d0, JNull::null()) };
                     {
                         let mut excCompIx: i32 = 0i32;
                         'loop117: loop {
@@ -30895,7 +30907,7 @@ impl J<Generator> {
                                 if (subSyntaxTreeNode.clone().at(0i32)).isKind(TLAplusParserConstants::LSB)? {
                                     if (subSyntaxTreeNode.clone().length() > 3i32) {
                                         let mut sslength: i32 = ((subSyntaxTreeNode.clone().length()).wrapping_sub(1i32)).wrapping_div(2i32);
-                                        let mut sssops: JArr<J<SemanticNodeObj>> = JArr::new_array(sslength, JNull::null());
+                                        let mut sssops: JArr<J<SemanticNodeObj>> = { let __d0: i32 = sslength; JArr::new_array(__d0, JNull::null()) };
                                         {
                                             let mut fArgIx: i32 = 0i32;
                                             'loop119: loop {
@@ -31018,7 +31030,7 @@ impl J<Generator> {
         { let __v: JArr<J<SyntaxTreeNode>> = (children.clone().at(0i32)).heirs()?; prefix = __v; };
         { let __v: J<GenID> = GenID::new_1(self.clone(), syntaxTreeNode.clone())?; genID = __v; };
         let mut len: i32 = prefix.clone().length();
-        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(len, JNull::null()); allArgs = __v; };
+        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = len; JArr::new_array(__d0, JNull::null()) }; allArgs = __v; };
         {
             let mut i: i32 = 0i32;
             'loop121: loop {
@@ -31067,7 +31079,7 @@ impl J<Generator> {
         let mut arity: i32 = ((children.clone().length()).wrapping_sub(2i32)).wrapping_div(2i32);
         let mut ctxt: J<Context> = Context::new_1(self.jread(|o| o.moduleTable.clone()))?;
         let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(ctxt.clone())?;
-        let mut params: JArr<J<SemanticNodeObj>> = JArr::new_array(arity, JNull::null());
+        let mut params: JArr<J<SemanticNodeObj>> = { let __d0: i32 = arity; JArr::new_array(__d0, JNull::null()) };
         let mut argPos: i32 = 1i32;
         {
             let mut i: i32 = 0i32;
@@ -31108,7 +31120,7 @@ impl J<Generator> {
         if ((genID.clone()).is_null() || ((genID.clone()).getFullyQualifiedOp()?).is_null()) {
             return Ok(self.jread(|o| o.nullOAN.clone()));
         }
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(primaryArgCount, JNull::null()); args = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = primaryArgCount; JArr::new_array(__d0, JNull::null()) }; args = __v; };
         { let __v: JArr<J<SyntaxTreeNode>> = (primaryArgs.clone()).heirs()?; argsList = __v; };
         {
             let mut ia: i32 = 1i32;
@@ -31122,7 +31134,7 @@ impl J<Generator> {
             }
         }
         let mut genIDArgList: J<Vector<J<SemanticNodeObj>>> = (genID.clone()).getArgsVector()?;
-        let mut finalArgList: JArr<J<SemanticNodeObj>> = JArr::new_array(((genIDArgList.clone()).size()).wrapping_add(iarg), JNull::null());
+        let mut finalArgList: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ((genIDArgList.clone()).size()).wrapping_add(iarg); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop131: loop {
@@ -31156,7 +31168,7 @@ impl J<Generator> {
         let mut args: JArr<J<SemanticNodeObj>> = self.jread(|o| o.nullParam.clone());
         let mut parmCtxt: J<Context> = JNull::null();
         if (children.clone().length() > 1i32) {
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(((children.clone().length()).wrapping_div(2i32)).wrapping_sub(1i32), JNull::null()); args = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ((children.clone().length()).wrapping_div(2i32)).wrapping_sub(1i32); JArr::new_array(__d0, JNull::null()) }; args = __v; };
             { let __v: J<Context> = Context::new_1(self.jread(|o| o.moduleTable.clone()))?; parmCtxt = __v; };
             let _ = (self.jread(|o| o.symbolTable.clone())).pushContext(parmCtxt.clone())?;
             {
@@ -31223,7 +31235,7 @@ impl J<Generator> {
                         let mut compoundID: JStr = concat(&concat(&name.clone(), &JStr::of("!")), &(odn.clone()).getName_0_3()?);
                         let mut qualifiedName: UniqueString = UniqueString::uniqueStringOf(compoundID.clone());
                         let mut fpn: JArr<J<SemanticNodeObj>> = (odn.clone()).getParams()?;
-                        let mut params: JArr<J<SemanticNodeObj>> = JArr::new_array((fpn.clone().length()).wrapping_add(args.clone().length()), JNull::null());
+                        let mut params: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (fpn.clone().length()).wrapping_add(args.clone().length()); JArr::new_array(__d0, JNull::null()) };
                         let _ = System::arraycopy(&args.clone(), 0i32, &params.clone(), 0i32, args.clone().length());
                         let _ = System::arraycopy(&fpn.clone(), 0i32, &params.clone(), args.clone().length(), fpn.clone().length());
                         let mut newOdn: J<SemanticNodeObj> = JNull::null();
@@ -31231,7 +31243,7 @@ impl J<Generator> {
                             if ((substIn.clone()).getSubsts_0_1()?.length() > 0i32) {
                                 let mut substInNode: J<SemanticNodeObj> = SubstInNode::new_6_1(treeNode.clone(), substIn.clone(), (odn.clone()).getBody_0_3()?, cm.clone(), instanceeModule.clone(), self.jread(|o| o.errors.clone()))?;
                                 let mut cIDTail: JArr<UniqueString> = (odn.clone()).getCompoundId()?;
-                                let mut cID: JArr<UniqueString> = JArr::new_array((cIDTail.clone().length()).wrapping_add(1i32), JNull::null());
+                                let mut cID: JArr<UniqueString> = { let __d0: i32 = (cIDTail.clone().length()).wrapping_add(1i32); JArr::new_array(__d0, JNull::null()) };
                                 { let __v: UniqueString = name.clone(); (cID.clone()).set_at(0i32, __v); };
                                 let _ = System::arraycopy(&cIDTail.clone(), 0i32, &cID.clone(), 1i32, cIDTail.clone().length());
                                 { let __v: J<SemanticNodeObj> = OpDefNode::new_11(qualifiedName.clone(), ASTConstants::UserDefinedOpKind, params.clone(), localness, substInNode.clone(), cm.clone(), self.jread(|o| o.symbolTable.clone()), treeNode.clone(), true, (odn.clone()).getSource()?, cID.clone())?; newOdn = __v; };
@@ -31266,7 +31278,7 @@ impl J<Generator> {
                         let mut compoundID: JStr = concat(&concat(&name.clone(), &JStr::of("!")), &(taOdn.clone()).getName_0_3()?);
                         let mut qualifiedName: UniqueString = UniqueString::uniqueStringOf(compoundID.clone());
                         let mut fpn: JArr<J<SemanticNodeObj>> = (taOdn.clone()).getParams()?;
-                        let mut params: JArr<J<SemanticNodeObj>> = JArr::new_array((fpn.clone().length()).wrapping_add(args.clone().length()), JNull::null());
+                        let mut params: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (fpn.clone().length()).wrapping_add(args.clone().length()); JArr::new_array(__d0, JNull::null()) };
                         let _ = System::arraycopy(&args.clone(), 0i32, &params.clone(), 0i32, args.clone().length());
                         let _ = System::arraycopy(&fpn.clone(), 0i32, &params.clone(), args.clone().length(), fpn.clone().length());
                         let mut newtaOdn: J<SemanticNodeObj> = JNull::null();
@@ -31597,7 +31609,7 @@ impl J<Generator> {
         if ((heirs.clone().at(0i32)).getKind()? == TLAplusParserConstants::PROOF) {
             { let __v: i32 = 1i32; offset = __v; };
         }
-        let mut steps: JArr<J<SemanticNodeObj>> = JArr::new_array((heirs.clone().length()).wrapping_sub(offset), JNull::null());
+        let mut steps: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (heirs.clone().length()).wrapping_sub(offset); JArr::new_array(__d0, JNull::null()) };
         let mut iVec: J<Vector<J<SemanticNodeObj>>> = Vector::new_0();
         let mut prevIsInfix: bool = false;
         let mut prevRHS: J<SemanticNodeObj> = JNull::null();
@@ -31677,7 +31689,7 @@ impl J<Generator> {
                             if ((defSTNs.clone().at(0i32)).getKind()? == TLAplusParserConstants::DEFINE) {
                                 { let __v: i32 = 1i32; defOffSet = __v; };
                             }
-                            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((defSTNs.clone().length()).wrapping_sub(defOffSet), JNull::null()); defs = __v; };
+                            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (defSTNs.clone().length()).wrapping_sub(defOffSet); JArr::new_array(__d0, JNull::null()) }; defs = __v; };
                             {
                                 let mut j: i32 = defOffSet;
                                 'loop153: loop {
@@ -31762,7 +31774,7 @@ impl J<Generator> {
                                     } else {
                                         let mut curExpr: J<SyntaxTreeNode> = bodyHeirs.clone().at(bodyNext);
                                         if isSuffices {
-                                            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); args = __v; };
+                                            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; args = __v; };
                                             { let __v: J<SemanticNodeObj> = self.generateExpression(curExpr.clone(), cm.clone())?; (args.clone()).set_at(0i32, __v); };
                                             { let __v: J<SemanticNodeObj> = OpApplNode::new_4(ASTConstants::statics().jread(|o| o.OP_suffices.clone()), args.clone(), stepBodySTN.clone(), cm.clone())?; body = __v; };
                                         } else {
@@ -31773,14 +31785,14 @@ impl J<Generator> {
                                             if ((((((prevIsInfix && !(curLHS.clone()).is_null()) && ((curLHS.clone()).heirs()?.length() > 0i32)) && (((curLHS.clone()).heirs()?.at(0i32)).heirs()?.length() == 0i32)) && ((curLHS.clone()).heirs()?.length() > 1i32)) && (((curLHS.clone()).heirs()?.at(1i32)).getKind()? == TLAplusParserConstants::IDENTIFIER)) && (((curLHS.clone()).heirs()?.at(1i32)).getUS()?).same(&self.jread(|o| o.AtUS.clone()))) {
                                                 let mut children: JArr<J<SyntaxTreeNode>> = (curExpr.clone()).heirs()?;
                                                 let mut genID: J<GenID> = self.generateGenID_2(children.clone().at(1i32), cm.clone())?;
-                                                let mut sns: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null());
+                                                let mut sns: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) };
                                                 let mut opn: J<SemanticNodeObj> = (self.jread(|o| o.symbolTable.clone())).resolveSymbol(Operators::resolveSynonym((genID.clone()).getCompoundIDUS()?)?)?;
                                                 if (opn.clone()).is_null() {
                                                     let _ = (self.jread(|o| o.errors.clone())).addMessage(ErrorCode::of("SUSPECTED_UNREACHABLE_CHECK"), (curExpr.clone()).getLocation()?, JStr::of("Couldn't resolve infix operator symbol `%s'."), J::new(vec![Object::of((genID.clone()).getCompoundIDUS()?)]))?;
                                                     return Ok(JNull::null());
                                                 }
                                                 { let __v: J<SemanticNodeObj> = self.generateExpression(children.clone().at(2i32), cm.clone())?; (sns.clone()).set_at(1i32, __v); };
-                                                let mut nopArgs: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+                                                let mut nopArgs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
                                                 { let __v: J<SemanticNodeObj> = prevRHS.clone(); (nopArgs.clone()).set_at(0i32, __v); };
                                                 { let __v: J<SemanticNodeObj> = OpApplNode::new_4(ASTConstants::statics().jread(|o| o.OP_nop.clone()), nopArgs.clone(), curLHS.clone(), cm.clone())?; (sns.clone()).set_at(0i32, __v); };
                                                 { let __v: J<SemanticNodeObj> = OpApplNode::new_5_0(opn.clone(), sns.clone(), curExpr.clone(), cm.clone(), self.jread(|o| o.errors.clone()))?; body = __v; };
@@ -31802,7 +31814,7 @@ impl J<Generator> {
                                     } else {
                                         { let __v: UniqueString = ASTConstants::statics().jread(|o| o.OP_pfcase.clone()); op = __v; };
                                     }
-                                    { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); args = __v; };
+                                    { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; args = __v; };
                                     { let __v: J<SemanticNodeObj> = self.generateExpression(bodyHeirs.clone().at(1i32), cm.clone())?; (args.clone()).set_at(0i32, __v); };
                                     { let __v: J<SemanticNodeObj> = OpApplNode::new_4(op.clone(), args.clone(), stepBodySTN.clone(), cm.clone())?; body = __v; };
                                     break 'sw156;
@@ -31822,20 +31834,20 @@ impl J<Generator> {
                                             { let __v: i32 = (quants).wrapping_add(1i32); quants = __v; };
                                             { let __v: i32 = (nextTok).wrapping_add(2i32); nextTok = __v; };
                                         }
-                                        let mut params: JArr<JArr<J<SemanticNodeObj>>> = JArr::new_array(0i32, JNull::null());
-                                        let mut bt: JArr<bool> = JArr::new_array(quants, false);
-                                        let mut paramBounds: JArr<J<SemanticNodeObj>> = JArr::new_array(quants, JNull::null());
+                                        let mut params: JArr<JArr<J<SemanticNodeObj>>> = { let __d0: i32 = quants; let __d1: i32 = 0i32; JArr::new_array_with(__d0, || JArr::new_array(__d1, JNull::null())) };
+                                        let mut bt: JArr<bool> = { let __d0: i32 = quants; JArr::new_array(__d0, false) };
+                                        let mut paramBounds: JArr<J<SemanticNodeObj>> = { let __d0: i32 = quants; JArr::new_array(__d0, JNull::null()) };
                                         let _ = self.processQuantBoundArgs(bodyHeirs.clone(), 1i32, params.clone(), bt.clone(), paramBounds.clone(), cm.clone())?;
                                         if isPick {
                                             { let __v: J<Context> = (self.jread(|o| o.symbolTable.clone())).getContext()?; pickContext = __v; };
                                             { let __v: i32 = (nextTok).wrapping_add(1i32); nextTok = __v; };
-                                            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); args = __v; };
+                                            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; args = __v; };
                                             let _ = self.pushFormalParams(self.flattenParams(params.clone())?)?;
                                             { let __v: J<SemanticNodeObj> = self.generateExpression(bodyHeirs.clone().at(nextTok), cm.clone())?; (args.clone()).set_at(0i32, __v); };
                                             let _ = self.popFormalParams()?;
                                             let _ = (self.jread(|o| o.symbolTable.clone())).popContext()?;
                                         } else {
-                                            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); args = __v; };
+                                            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; args = __v; };
                                         }
                                         { let __v: J<SemanticNodeObj> = OpApplNode::new_8(op.clone(), JNull::null(), args.clone(), params.clone(), bt.clone(), paramBounds.clone(), stepBodySTN.clone(), cm.clone())?; body = __v; };
                                     } else {
@@ -31843,7 +31855,7 @@ impl J<Generator> {
                                         'loop158: while (((2i32).wrapping_mul(ids) < bodyHeirs.clone().length()) && ((bodyHeirs.clone().at((2i32).wrapping_mul(ids))).getKind()? == TLAplusParserConstants::COMMA)) {
                                             { let __v: i32 = (ids).wrapping_add(1i32); ids = __v; };
                                         }
-                                        let mut params: JArr<J<SemanticNodeObj>> = JArr::new_array(ids, JNull::null());
+                                        let mut params: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ids; JArr::new_array(__d0, JNull::null()) };
                                         {
                                             let mut j: i32 = 0i32;
                                             'loop159: loop {
@@ -31857,12 +31869,12 @@ impl J<Generator> {
                                         if isPick {
                                             { let __v: J<Context> = (self.jread(|o| o.symbolTable.clone())).getContext()?; pickContext = __v; };
                                             let _ = self.pushFormalParams(params.clone())?;
-                                            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); args = __v; };
+                                            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; args = __v; };
                                             { let __v: J<SemanticNodeObj> = self.generateExpression(bodyHeirs.clone().at(((2i32).wrapping_mul(ids)).wrapping_add(1i32)), cm.clone())?; (args.clone()).set_at(0i32, __v); };
                                             let _ = self.popFormalParams()?;
                                             let _ = (self.jread(|o| o.symbolTable.clone())).popContext()?;
                                         } else {
-                                            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); args = __v; };
+                                            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; args = __v; };
                                         }
                                         { let __v: J<SemanticNodeObj> = OpApplNode::new_5_1(op.clone(), args.clone(), params.clone(), stepBodySTN.clone(), cm.clone())?; body = __v; };
                                     }
@@ -31873,7 +31885,7 @@ impl J<Generator> {
                                     'loop161: while (((2i32).wrapping_mul(ids) < bodyHeirs.clone().length()) && ((bodyHeirs.clone().at((2i32).wrapping_mul(ids))).getKind()? == TLAplusParserConstants::COMMA)) {
                                         { let __v: i32 = (ids).wrapping_add(1i32); ids = __v; };
                                     }
-                                    { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(ids, JNull::null()); args = __v; };
+                                    { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ids; JArr::new_array(__d0, JNull::null()) }; args = __v; };
                                     {
                                         let mut j: i32 = 0i32;
                                         'loop162: loop {
@@ -31888,7 +31900,7 @@ impl J<Generator> {
                                     break 'sw156;
                                 }
                                 if __k <= 4 {
-                                    { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); args = __v; };
+                                    { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; args = __v; };
                                     { let __v: J<SemanticNodeObj> = OpApplNode::new_4(ASTConstants::statics().jread(|o| o.OP_qed.clone()), args.clone(), stepBodySTN.clone(), cm.clone())?; body = __v; };
                                     break 'sw156;
                                 }
@@ -31941,7 +31953,7 @@ impl J<Generator> {
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
             }
         }
-        let mut insts: JArr<J<SemanticNodeObj>> = JArr::new_array((iVec.clone()).size(), JNull::null());
+        let mut insts: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (iVec.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop165: loop {
@@ -31992,8 +32004,8 @@ impl J<Generator> {
                 let _ = (self.jread(|o| o.errors.clone())).addMessage(ErrorCode::of("INTERNAL_ERROR"), (stn.clone()).getLocation()?, JStr::of("Empty BY"), J::new(vec![]))?;
             }
         } else {
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); facts = __v; };
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); defs = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; facts = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; defs = __v; };
             if ((heirs.clone().at(nextTok)).getKind()? == TLAplusParserConstants::OMITTED) {
                 { let __v: bool = true; omitted = __v; };
             }
@@ -32015,7 +32027,7 @@ impl J<Generator> {
         }
         if (nextTok >= heirs.clone().length()) {
             let _ = (self.jread(|o| o.errors.clone())).addMessage(ErrorCode::of("INTERNAL_ERROR"), (stn.clone()).getLocation()?, JStr::of("Empty BY, USE, or HIDE"), J::new(vec![]))?;
-            return Ok(UseOrHideNode::new_5(kind, stn.clone(), JArr::new_array(0i32, JNull::null()), JArr::new_array(0i32, JNull::null()), isOnly)?);
+            return Ok(UseOrHideNode::new_5(kind, stn.clone(), { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }, { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }, isOnly)?);
         }
         let mut vec: J<Vector<J<SemanticNodeObj>>> = Vector::new_0();
         if ((heirs.clone().at(nextTok)).getKind()? == TLAplusParserConstants::ONLY) {
@@ -32051,7 +32063,7 @@ impl J<Generator> {
                 { let __v: i32 = (nextTok).wrapping_add(1i32); nextTok = __v; };
             }
         }
-        let mut facts: JArr<J<SemanticNodeObj>> = JArr::new_array((vec.clone()).size(), JNull::null());
+        let mut facts: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (vec.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop171: loop {
@@ -32064,7 +32076,7 @@ impl J<Generator> {
         }
         let mut defs: JArr<J<SemanticNodeObj>> = JNull::null();
         if (nextTok >= heirs.clone().length()) {
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); defs = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; defs = __v; };
         } else {
             { let __v: J<Vector<J<SemanticNodeObj>>> = Vector::new_0(); vec = __v; };
             { let __v: i32 = (nextTok).wrapping_add(1i32); nextTok = __v; };
@@ -32096,7 +32108,7 @@ impl J<Generator> {
                     { let __v: i32 = (nextTok).wrapping_add(1i32); nextTok = __v; };
                 }
             }
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((vec.clone()).size(), JNull::null()); defs = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (vec.clone()).size(); JArr::new_array(__d0, JNull::null()) }; defs = __v; };
             {
                 let mut i: i32 = 0i32;
                 'loop174: loop {
@@ -32127,7 +32139,7 @@ impl J<Generator> {
                 'forbody177: {
                     let mut declNode: J<SyntaxTreeNode> = children.clone().at(i);
                     let mut odn: J<SemanticNodeObj> = self.buildParameter(declNode.clone(), ASTConstants::ConstantDeclKind, LevelConstants::ConstantLevel, cm.clone(), false)?;
-                    let mut params: JArr<J<SemanticNodeObj>> = JArr::new_array((odn.clone()).getArity_0_0()?, JNull::null());
+                    let mut params: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (odn.clone()).getArity_0_0()?; JArr::new_array(__d0, JNull::null()) };
                     {
                         let mut ip: i32 = 0i32;
                         'loop178: loop {
@@ -32175,7 +32187,7 @@ impl J<Generator> {
         let mut params: JArr<J<SemanticNodeObj>> = JNull::null();
         if ((labelExpChildren.clone().at(0i32)).getKind()? == SyntaxTreeConstants::N_GeneralId) {
             { let __v: UniqueString = ((labelExpChildren.clone().at(0i32)).heirs()?.at(1i32)).getUS()?; name = __v; };
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); params = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; params = __v; };
         } else {
             if ((labelExpChildren.clone().at(0i32)).getKind()? != SyntaxTreeConstants::N_OpApplication) {
                 return Err(JThrow::new_extern("WrongInvocationException", JStr::of("Label has unexpected syntax tree kind.")));
@@ -32184,7 +32196,7 @@ impl J<Generator> {
             { let __v: UniqueString = ((opApplChildren.clone().at(0i32)).heirs()?.at(1i32)).getUS()?; name = __v; };
             let mut opArgsChildren: JArr<J<SyntaxTreeNode>> = (opApplChildren.clone().at(1i32)).heirs()?;
             let mut numOfParams: i32 = ((opArgsChildren.clone().length()).wrapping_sub(1i32)).wrapping_div(2i32);
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(numOfParams, JNull::null()); params = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = numOfParams; JArr::new_array(__d0, JNull::null()) }; params = __v; };
             {
                 let mut i: i32 = 0i32;
                 'loop180: loop {
@@ -32351,7 +32363,7 @@ impl J<Generator> {
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
             }
         }
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array(size, JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = size; JArr::new_array(__d0, JNull::null()) };
         let mut k: i32 = 0i32;
         {
             let mut i: i32 = 0i32;
@@ -32654,7 +32666,7 @@ impl J<GenID> {
         Ok(())
     }
     pub(crate) fn finalizeID(&self) -> JResult<()> {
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((self.jread(|o| o.argsVector.clone())).size(), JNull::null()); self.jget_mut().args = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.jread(|o| o.argsVector.clone())).size(); JArr::new_array(__d0, JNull::null()) }; self.jget_mut().args = __v; };
         {
             let mut i: i32 = 0i32;
             'loop1: loop {
@@ -32761,10 +32773,10 @@ impl J<Selector> {
     }
     pub(crate) fn finish(&self) -> JResult<()> {
         let mut arrayLen: i32 = (self.jread(|o| o.opVec.clone())).size();
-        { let __v: JArr<i32> = JArr::new_array(arrayLen, 0); self.jget_mut().ops = __v; };
-        { let __v: JArr<UniqueString> = JArr::new_array(arrayLen, JNull::null()); self.jget_mut().opNames = __v; };
-        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(arrayLen, JNull::null()); self.jget_mut().opsSTN = __v; };
-        { let __v: JArr<J<SyntaxTreeNode>> = JArr::new_array(arrayLen, JNull::null()); self.jget_mut().args = __v; };
+        { let __v: JArr<i32> = { let __d0: i32 = arrayLen; JArr::new_array(__d0, 0) }; self.jget_mut().ops = __v; };
+        { let __v: JArr<UniqueString> = { let __d0: i32 = arrayLen; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().opNames = __v; };
+        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = arrayLen; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().opsSTN = __v; };
+        { let __v: JArr<J<SyntaxTreeNode>> = { let __d0: i32 = arrayLen; JArr::new_array(__d0, JNull::null()) }; self.jget_mut().args = __v; };
         {
             let mut i: i32 = 0i32;
             'loop1: loop {
@@ -32934,9 +32946,9 @@ impl J<SemanticNodeObj> {
         let _ = { self.init__LevelNode_2(ASTConstants::InstanceKind, stn.clone())?; self.init_fields__InstanceNode()?; };
         { let __v: UniqueString = name.clone(); *(self.clone()).jget_mut().InstanceNode_name_mut() = __v; };
         { let __v: bool = localness; *(self.clone()).jget_mut().InstanceNode_local_mut() = __v; };
-        { let __v: JArr<J<SemanticNodeObj>> = (if !(params.clone()).is_null() { params.clone() } else { JArr::new_array(0i32, JNull::null()) }); *(self.clone()).jget_mut().InstanceNode_params_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = (if !(params.clone()).is_null() { params.clone() } else { { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) } }); *(self.clone()).jget_mut().InstanceNode_params_mut() = __v; };
         { let __v: J<SemanticNodeObj> = module.clone(); *(self.clone()).jget_mut().InstanceNode_module_mut() = __v; };
-        { let __v: JArr<J<Subst>> = (if !(substs.clone()).is_null() { substs.clone() } else { JArr::new_array(0i32, JNull::null()) }); *(self.clone()).jget_mut().InstanceNode_substs_mut() = __v; };
+        { let __v: JArr<J<Subst>> = (if !(substs.clone()).is_null() { substs.clone() } else { { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) } }); *(self.clone()).jget_mut().InstanceNode_substs_mut() = __v; };
         #[allow(unreachable_code)]
         Ok(())
     }
@@ -33169,7 +33181,7 @@ impl J<SemanticNodeObj> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn getChildren__InstanceNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array(self.jread(|o| o.InstanceNode_substs().clone()).length(), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = self.jread(|o| o.InstanceNode_substs().clone()).length(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop26: loop {
@@ -33319,7 +33331,7 @@ impl J<SemanticNodeObj> {
     pub(crate) fn init__LabelNode_1(&self, mut bdy: J<SemanticNodeObj>) -> JResult<()> {
         let _ = { self.init__ExprNode_2(ASTConstants::LabelKind, SyntaxTreeNode::statics().jread(|o| o.nullSTN.clone()))?; self.init_fields__LabelNode()?; };
         { let __v: UniqueString = UniqueString::uniqueStringOf(JStr::of("nullLabelNode")); *(self.clone()).jget_mut().LabelNode_name_mut() = __v; };
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); *(self.clone()).jget_mut().LabelNode_params_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().LabelNode_params_mut() = __v; };
         { let __v: i32 = 0i32; *(self.clone()).jget_mut().LabelNode_arity_mut() = __v; };
         { let __v: J<SemanticNodeObj> = JNull::null(); *(self.clone()).jget_mut().LabelNode_goal_mut() = __v; };
         { let __v: J<SemanticNodeObj> = bdy.clone(); *(self.clone()).jget_mut().LabelNode_body_mut() = __v; };
@@ -33358,14 +33370,14 @@ impl J<SemanticNodeObj> {
     }
     pub(crate) fn getLabels__LabelNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
         if (self.jread(|o| o.LabelNode_labels().clone())).is_null() {
-            return Ok(JArr::new_array(0i32, JNull::null()));
+            return Ok({ let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) });
         }
         let mut v: J<Vector<J<SemanticNodeObj>>> = Vector::new_0();
         let mut e: J<Enumeration<J<SemanticNodeObj>>> = (self.jread(|o| o.LabelNode_labels().clone())).elements();
         'loop1: while (e.clone()).hasMoreElements() {
             let _ = (v.clone()).addElement((e.clone()).nextElement());
         }
-        let mut retVal: JArr<J<SemanticNodeObj>> = JArr::new_array((v.clone()).size(), JNull::null());
+        let mut retVal: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (v.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop2: loop {
@@ -33611,7 +33623,7 @@ impl J<SemanticNodeObj> {
         if (((self.clone()).jread(|o| o.LeafProofNode_facts().clone())).is_null() || ((self.clone()).jread(|o| o.LeafProofNode_facts().clone()).length() == 0i32)) {
             return Ok(JNull::null());
         }
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array((self.clone()).jread(|o| o.LeafProofNode_facts().clone()).length(), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.clone()).jread(|o| o.LeafProofNode_facts().clone()).length(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop1: loop {
@@ -33747,7 +33759,7 @@ impl J<SemanticNodeObj> {
                     { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
                 }
             }
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(cnt, JNull::null()); *self.jget_mut().LetInNode_gottenLets_mut() = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = cnt; JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().LetInNode_gottenLets_mut() = __v; };
             { let __v: i32 = 0i32; cnt = __v; };
             {
                 let mut i: i32 = 0i32;
@@ -33841,7 +33853,7 @@ impl J<SemanticNodeObj> {
                 if !((i < (self.clone()).jread(|o| o.LetInNode_opDefs().clone()).length())) { break; }
                 'forbody14: {
                     if (((self.clone()).jread(|o| o.LetInNode_opDefs().clone()).at(i)).getKind()? != ASTConstants::ModuleInstanceKind) {
-                        let mut params: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null());
+                        let mut params: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) };
                         if (((self.clone()).jread(|o| o.LetInNode_opDefs().clone()).at(i)).getKind()? != ASTConstants::ThmOrAssumpDefKind) {
                             { let __v: JArr<J<SemanticNodeObj>> = ((self.clone()).jread(|o| o.LetInNode_opDefs().clone()).at(i)).getParams()?; params = __v; };
                         }
@@ -33872,7 +33884,7 @@ impl J<SemanticNodeObj> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn getChildren__LetInNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array((((self.clone()).jread(|o| o.LetInNode_opDefs().clone()).length()).wrapping_add((self.clone()).jread(|o| o.LetInNode_insts().clone()).length())).wrapping_add(1i32), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (((self.clone()).jread(|o| o.LetInNode_opDefs().clone()).length()).wrapping_add((self.clone()).jread(|o| o.LetInNode_insts().clone()).length())).wrapping_add(1i32); JArr::new_array(__d0, JNull::null()) };
         { let __v: J<SemanticNodeObj> = (self.clone()).jread(|o| o.LetInNode_body().clone()); (res.clone()).set_at((res.clone().length()).wrapping_sub(1i32), __v); };
         let mut i: i32 = 0;
         {
@@ -34357,7 +34369,7 @@ impl ModuleNode {
 
 impl J<SemanticNodeObj> {
     pub(crate) fn init_fields__ModuleNode(&self) -> JResult<()> {
-        { let __v = JArr::new_array(0i32, JNull::null()); *self.jget_mut().ModuleNode_extendees_mut() = __v; }
+        { let __v = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_extendees_mut() = __v; }
         { let __v = HashMap::new_0(); *self.jget_mut().ModuleNode_depthAllExtendeesMap_mut() = __v; }
         { let __v = JNull::null(); *self.jget_mut().ModuleNode_constantDecls_mut() = __v; }
         { let __v = JNull::null(); *self.jget_mut().ModuleNode_variableDecls_mut() = __v; }
@@ -34420,7 +34432,7 @@ impl J<SemanticNodeObj> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn createExtendeeArray__ModuleNode(&self, mut extendeeVec: J<Vector<J<SemanticNodeObj>>>) -> JResult<()> {
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((extendeeVec.clone()).size(), JNull::null()); *self.jget_mut().ModuleNode_extendees_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (extendeeVec.clone()).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_extendees_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop1: loop {
@@ -34439,7 +34451,7 @@ impl J<SemanticNodeObj> {
             return Ok(self.jread(|o| o.ModuleNode_constantDecls().clone()));
         }
         let mut contextVec: J<Vector<J<SemanticNodeObj>>> = (self.jread(|o| o.ModuleNode_ctxt().clone())).getConstantDecls()?;
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((contextVec.clone()).size(), JNull::null()); *self.jget_mut().ModuleNode_constantDecls_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (contextVec.clone()).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_constantDecls_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             let mut j: i32 = (self.jread(|o| o.ModuleNode_constantDecls().clone()).length()).wrapping_sub(1i32);
@@ -34460,7 +34472,7 @@ impl J<SemanticNodeObj> {
             return Ok(self.jread(|o| o.ModuleNode_variableDecls().clone()));
         }
         let mut contextVec: J<Vector<J<SemanticNodeObj>>> = (self.jread(|o| o.ModuleNode_ctxt().clone())).getVariableDecls()?;
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((contextVec.clone()).size(), JNull::null()); *self.jget_mut().ModuleNode_variableDecls_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (contextVec.clone()).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_variableDecls_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             let mut j: i32 = (self.jread(|o| o.ModuleNode_variableDecls().clone()).length()).wrapping_sub(1i32);
@@ -34481,7 +34493,7 @@ impl J<SemanticNodeObj> {
             return Ok(self.jread(|o| o.ModuleNode_opDefs().clone()));
         }
         let mut contextVec: J<Vector<J<SemanticNodeObj>>> = (self.jread(|o| o.ModuleNode_ctxt().clone())).getOpDefs()?;
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((contextVec.clone()).size(), JNull::null()); *self.jget_mut().ModuleNode_opDefs_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (contextVec.clone()).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_opDefs_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             let mut j: i32 = (self.jread(|o| o.ModuleNode_opDefs().clone()).length()).wrapping_sub(1i32);
@@ -34528,7 +34540,7 @@ impl J<SemanticNodeObj> {
             return Ok(self.jread(|o| o.ModuleNode_thmOrAssDefs().clone()));
         }
         let mut contextVec: J<Vector<J<SemanticNodeObj>>> = (self.jread(|o| o.ModuleNode_ctxt().clone())).getThmOrAssDefs()?;
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((contextVec.clone()).size(), JNull::null()); *self.jget_mut().ModuleNode_thmOrAssDefs_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (contextVec.clone()).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_thmOrAssDefs_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             let mut j: i32 = (self.jread(|o| o.ModuleNode_thmOrAssDefs().clone()).length()).wrapping_sub(1i32);
@@ -34553,7 +34565,7 @@ impl J<SemanticNodeObj> {
         if !(self.jread(|o| o.ModuleNode_instantiations().clone())).is_null() {
             return Ok(self.jread(|o| o.ModuleNode_instantiations().clone()));
         }
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((self.jread(|o| o.ModuleNode_instanceVec().clone())).size(), JNull::null()); *self.jget_mut().ModuleNode_instantiations_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.jread(|o| o.ModuleNode_instanceVec().clone())).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_instantiations_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop13: loop {
@@ -34579,7 +34591,7 @@ impl J<SemanticNodeObj> {
             return Ok(self.jread(|o| o.ModuleNode_modDefs().clone()));
         }
         let mut v: J<Vector<J<SemanticNodeObj>>> = (self.jread(|o| o.ModuleNode_ctxt().clone())).getModDefs()?;
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((v.clone()).size(), JNull::null()); *self.jget_mut().ModuleNode_modDefs_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (v.clone()).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_modDefs_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop15: loop {
@@ -34595,7 +34607,7 @@ impl J<SemanticNodeObj> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn getRecords__ModuleNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
-        let mut records: JArr<J<SemanticNodeObj>> = JArr::new_array((self.jread(|o| o.ModuleNode_recordVec().clone())).size(), JNull::null());
+        let mut records: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.jread(|o| o.ModuleNode_recordVec().clone())).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop17: loop {
@@ -34614,7 +34626,7 @@ impl J<SemanticNodeObj> {
         if !(self.jread(|o| o.ModuleNode_assumptions().clone())).is_null() {
             return Ok(self.jread(|o| o.ModuleNode_assumptions().clone()));
         }
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((self.jread(|o| o.ModuleNode_assumptionVec().clone())).size(), JNull::null()); *self.jget_mut().ModuleNode_assumptions_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.jread(|o| o.ModuleNode_assumptionVec().clone())).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_assumptions_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop19: loop {
@@ -34633,7 +34645,7 @@ impl J<SemanticNodeObj> {
         if !(self.jread(|o| o.ModuleNode_theorems().clone())).is_null() {
             return Ok(self.jread(|o| o.ModuleNode_theorems().clone()));
         }
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((self.jread(|o| o.ModuleNode_theoremVec().clone())).size(), JNull::null()); *self.jget_mut().ModuleNode_theorems_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.jread(|o| o.ModuleNode_theoremVec().clone())).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_theorems_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop21: loop {
@@ -34652,7 +34664,7 @@ impl J<SemanticNodeObj> {
         if !(self.jread(|o| o.ModuleNode_topLevel().clone())).is_null() {
             return Ok(self.jread(|o| o.ModuleNode_topLevel().clone()));
         }
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((self.jread(|o| o.ModuleNode_topLevelVec().clone())).size(), JNull::null()); *self.jget_mut().ModuleNode_topLevel_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.jread(|o| o.ModuleNode_topLevelVec().clone())).size(); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_topLevel_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop23: loop {
@@ -35111,7 +35123,7 @@ impl J<SemanticNodeObj> {
             return Ok(self.jread(|o| o.ModuleNode_children().clone()));
         }
         let mut opDefs: JArr<J<SemanticNodeObj>> = (self.clone()).getOpDefs()?;
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array((opDefs.clone().length()).wrapping_add((self.clone()).jread(|o| o.ModuleNode_topLevel().clone()).length()), JNull::null()); *self.jget_mut().ModuleNode_children_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (opDefs.clone().length()).wrapping_add((self.clone()).jread(|o| o.ModuleNode_topLevel().clone()).length()); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ModuleNode_children_mut() = __v; };
         let mut i: i32 = 0;
         {
             { let __v: i32 = 0i32; i = __v; };
@@ -35450,7 +35462,7 @@ impl J<SemanticNodeObj> {
         if ((self.clone()).jread(|o| *o.LevelNode_levelChecked()) >= iter) {
             return Ok((self.clone()).jread(|o| *o.LevelNode_levelCorrect()));
         }
-        let mut ln: JArr<J<SemanticNodeObj>> = JArr::new_array((self.jread(|o| o.NonLeafProofNode_steps().clone()).length()).wrapping_add(self.jread(|o| o.NonLeafProofNode_insts().clone()).length()), JNull::null());
+        let mut ln: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.jread(|o| o.NonLeafProofNode_steps().clone()).length()).wrapping_add(self.jread(|o| o.NonLeafProofNode_insts().clone()).length()); JArr::new_array(__d0, JNull::null()) };
         let _ = System::arraycopy(&self.jread(|o| o.NonLeafProofNode_steps().clone()), 0i32, &ln.clone(), 0i32, self.jread(|o| o.NonLeafProofNode_steps().clone()).length());
         let _ = System::arraycopy(&self.jread(|o| o.NonLeafProofNode_insts().clone()), 0i32, &ln.clone(), self.jread(|o| o.NonLeafProofNode_steps().clone()).length(), self.jread(|o| o.NonLeafProofNode_insts().clone()).length());
         return Ok((self.clone()).levelCheckSubnodes(iter, ln.clone(), errors.clone())?);
@@ -35461,7 +35473,7 @@ impl J<SemanticNodeObj> {
         if (((self.clone()).jread(|o| o.NonLeafProofNode_steps().clone())).is_null() || ((self.clone()).jread(|o| o.NonLeafProofNode_steps().clone()).length() == 0i32)) {
             return Ok(JNull::null());
         }
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array((self.clone()).jread(|o| o.NonLeafProofNode_steps().clone()).length(), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.clone()).jread(|o| o.NonLeafProofNode_steps().clone()).length(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop1: loop {
@@ -35751,10 +35763,10 @@ impl J<SemanticNodeObj> {
     pub(crate) fn init__OpApplNode_1(&self, mut sn: J<SemanticNodeObj>) -> JResult<()> {
         let _ = { self.init__ExprNode_2(ASTConstants::OpApplKind, SyntaxTreeNode::statics().jread(|o| o.nullSTN.clone()))?; self.init_fields__OpApplNode()?; };
         { let __v: J<SemanticNodeObj> = sn.clone(); *(self.clone()).jget_mut().OpApplNode_operator_mut() = __v; };
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); *(self.clone()).jget_mut().OpApplNode_operands_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().OpApplNode_operands_mut() = __v; };
         { let __v: JArr<J<SemanticNodeObj>> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_unboundedBoundSymbols_mut() = __v; };
         { let __v: JArr<JArr<J<SemanticNodeObj>>> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_boundedBoundSymbols_mut() = __v; };
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); *(self.clone()).jget_mut().OpApplNode_ranges_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().OpApplNode_ranges_mut() = __v; };
         { let __v: JArr<bool> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_tupleOrs_mut() = __v; };
         #[allow(unreachable_code)]
         Ok(())
@@ -35766,7 +35778,7 @@ impl J<SemanticNodeObj> {
         { let __v: JArr<J<SemanticNodeObj>> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_unboundedBoundSymbols_mut() = __v; };
         { let __v: JArr<JArr<J<SemanticNodeObj>>> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_boundedBoundSymbols_mut() = __v; };
         { let __v: JArr<bool> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_tupleOrs_mut() = __v; };
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); *(self.clone()).jget_mut().OpApplNode_ranges_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().OpApplNode_ranges_mut() = __v; };
         let _ = (op.clone()).match_3(self.clone(), mn.clone(), errors.clone())?;
         #[allow(unreachable_code)]
         Ok(())
@@ -35777,7 +35789,7 @@ impl J<SemanticNodeObj> {
         { let __v: JArr<J<SemanticNodeObj>> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_unboundedBoundSymbols_mut() = __v; };
         { let __v: JArr<JArr<J<SemanticNodeObj>>> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_boundedBoundSymbols_mut() = __v; };
         { let __v: JArr<bool> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_tupleOrs_mut() = __v; };
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); *(self.clone()).jget_mut().OpApplNode_ranges_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().OpApplNode_ranges_mut() = __v; };
         { let __v: J<SemanticNodeObj> = (Context::getGlobalContext()?).getSymbol(Object::of(us.clone()))?; *(self.clone()).jget_mut().OpApplNode_operator_mut() = __v; };
         #[allow(unreachable_code)]
         Ok(())
@@ -35788,7 +35800,7 @@ impl J<SemanticNodeObj> {
         { let __v: JArr<J<SemanticNodeObj>> = odns.clone(); *(self.clone()).jget_mut().OpApplNode_unboundedBoundSymbols_mut() = __v; };
         { let __v: JArr<JArr<J<SemanticNodeObj>>> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_boundedBoundSymbols_mut() = __v; };
         { let __v: JArr<bool> = JNull::null(); *(self.clone()).jget_mut().OpApplNode_tupleOrs_mut() = __v; };
-        { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(0i32, JNull::null()); *(self.clone()).jget_mut().OpApplNode_ranges_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().OpApplNode_ranges_mut() = __v; };
         { let __v: J<SemanticNodeObj> = (Context::getGlobalContext()?).getSymbol(Object::of(us.clone()))?; *(self.clone()).jget_mut().OpApplNode_operator_mut() = __v; };
         #[allow(unreachable_code)]
         Ok(())
@@ -36637,7 +36649,7 @@ impl J<SemanticNodeObj> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn getChildren__OpApplNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array(((self.clone()).jread(|o| o.OpApplNode_ranges().clone()).length()).wrapping_add((self.clone()).jread(|o| o.OpApplNode_operands().clone()).length()), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ((self.clone()).jread(|o| o.OpApplNode_ranges().clone()).length()).wrapping_add((self.clone()).jread(|o| o.OpApplNode_operands().clone()).length()); JArr::new_array(__d0, JNull::null()) };
         let mut i: i32 = 0;
         {
             { let __v: i32 = 0i32; i = __v; };
@@ -37176,7 +37188,7 @@ impl J<SemanticNodeObj> {
     pub(crate) fn init__OpDefNode_1_1(&self, mut op: J<BuiltInOperator>) -> JResult<()> {
         let _ = { self.init__OpDefOrDeclNode_6((op.clone()).jread(|o| o.Name.clone()), ASTConstants::BuiltInKind, (op.clone()).jread(|o| o.Arity), JNull::null(), JNull::null(), SyntaxTreeNode::new_1((op.clone()).jread(|o| o.Name.clone()))?)?; self.init_fields__OpDefNode()?; };
         if (self.jread(|o| *o.OpDefOrDeclNode_arity()) >= 0i32) {
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(self.jread(|o| *o.OpDefOrDeclNode_arity()), JNull::null()); *self.jget_mut().OpDefNode_params_mut() = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = self.jread(|o| *o.OpDefOrDeclNode_arity()); JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().OpDefNode_params_mut() = __v; };
             {
                 let mut i: i32 = 0i32;
                 'loop1: loop {
@@ -37201,14 +37213,14 @@ impl J<SemanticNodeObj> {
     pub(crate) fn init__OpDefNode_10(&self, mut us: UniqueString, mut k: i32, mut parms: JArr<J<SemanticNodeObj>>, mut localness: bool, mut exp: J<SemanticNodeObj>, mut oModNode: J<SemanticNodeObj>, mut symbolTable: J<SymbolTable>, mut stn: J<SyntaxTreeNode>, mut defined: bool, mut src: J<SemanticNodeObj>) -> JResult<()> {
         let _ = { self.init__OpDefOrDeclNode_6(us.clone(), k, (if !(parms.clone()).is_null() { parms.clone().length() } else { 0i32 }), oModNode.clone(), symbolTable.clone(), stn.clone())?; self.init_fields__OpDefNode()?; };
         { let __v: bool = localness; *(self.clone()).jget_mut().OpDefNode_local_mut() = __v; };
-        { let __v: JArr<J<SemanticNodeObj>> = (if !(parms.clone()).is_null() { parms.clone() } else { JArr::new_array(0i32, JNull::null()) }); *(self.clone()).jget_mut().OpDefNode_params_mut() = __v; };
+        { let __v: JArr<J<SemanticNodeObj>> = (if !(parms.clone()).is_null() { parms.clone() } else { { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) } }); *(self.clone()).jget_mut().OpDefNode_params_mut() = __v; };
         { let __v: J<SemanticNodeObj> = exp.clone(); *(self.clone()).jget_mut().OpDefNode_body_mut() = __v; };
         { let __v: bool = defined; *(self.clone()).jget_mut().OpDefNode_isDefined_mut() = __v; };
         { let __v: J<SemanticNodeObj> = src.clone(); *(self.clone()).jget_mut().OpDefNode_source_mut() = __v; };
-        { let __v: JArr<i32> = JArr::new_array((self.clone()).jread(|o| o.OpDefNode_params().clone()).length(), 0); *(self.clone()).jget_mut().OpDefNode_maxLevels_mut() = __v; };
-        { let __v: JArr<i32> = JArr::new_array((self.clone()).jread(|o| o.OpDefNode_params().clone()).length(), 0); *(self.clone()).jget_mut().OpDefNode_weights_mut() = __v; };
+        { let __v: JArr<i32> = { let __d0: i32 = (self.clone()).jread(|o| o.OpDefNode_params().clone()).length(); JArr::new_array(__d0, 0) }; *(self.clone()).jget_mut().OpDefNode_maxLevels_mut() = __v; };
+        { let __v: JArr<i32> = { let __d0: i32 = (self.clone()).jread(|o| o.OpDefNode_params().clone()).length(); JArr::new_array(__d0, 0) }; *(self.clone()).jget_mut().OpDefNode_weights_mut() = __v; };
         { let __v: bool = true; *(self.clone()).jget_mut().OpDefNode_isLeibniz_mut() = __v; };
-        { let __v: JArr<bool> = JArr::new_array((self.clone()).jread(|o| o.OpDefNode_params().clone()).length(), false); *(self.clone()).jget_mut().OpDefNode_isLeibnizArg_mut() = __v; };
+        { let __v: JArr<bool> = { let __d0: i32 = (self.clone()).jread(|o| o.OpDefNode_params().clone()).length(); JArr::new_array(__d0, false) }; *(self.clone()).jget_mut().OpDefNode_isLeibnizArg_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop3: loop {
@@ -37466,14 +37478,14 @@ impl J<SemanticNodeObj> {
     }
     pub(crate) fn getLabels__OpDefNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
         if (self.jread(|o| o.OpDefNode_labels().clone())).is_null() {
-            return Ok(JArr::new_array(0i32, JNull::null()));
+            return Ok({ let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) });
         }
         let mut v: J<Vector<J<SemanticNodeObj>>> = Vector::new_0();
         let mut e: J<Enumeration<J<SemanticNodeObj>>> = (self.jread(|o| o.OpDefNode_labels().clone())).elements();
         'loop13: while (e.clone()).hasMoreElements() {
             let _ = (v.clone()).addElement((e.clone()).nextElement());
         }
-        let mut retVal: JArr<J<SemanticNodeObj>> = JArr::new_array((v.clone()).size(), JNull::null());
+        let mut retVal: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (v.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop14: loop {
@@ -37506,20 +37518,20 @@ impl J<SemanticNodeObj> {
     pub(crate) fn setBuiltInLevel__OpDefNode(&self, mut op: J<BuiltInOperator>) -> JResult<()> {
         if (self.jread(|o| *o.OpDefOrDeclNode_arity()) == (1i32).wrapping_neg()) {
             if ((op.clone()).jread(|o| o.ArgMaxLevels.clone()).length() > 0i32) {
-                { let __v: JArr<i32> = JArr::new_array(1i32, 0); *(self.clone()).jget_mut().OpDefNode_maxLevels_mut() = __v; };
+                { let __v: JArr<i32> = { let __d0: i32 = 1i32; JArr::new_array(__d0, 0) }; *(self.clone()).jget_mut().OpDefNode_maxLevels_mut() = __v; };
                 { let __v: i32 = (op.clone()).jread(|o| o.ArgMaxLevels.clone()).at(0i32); ((self.clone()).jread(|o| o.OpDefNode_maxLevels().clone())).set_at(0i32, __v); };
-                { let __v: JArr<i32> = JArr::new_array(1i32, 0); *(self.clone()).jget_mut().OpDefNode_weights_mut() = __v; };
+                { let __v: JArr<i32> = { let __d0: i32 = 1i32; JArr::new_array(__d0, 0) }; *(self.clone()).jget_mut().OpDefNode_weights_mut() = __v; };
                 { let __v: i32 = (op.clone()).jread(|o| o.ArgWeights.clone()).at(0i32); ((self.clone()).jread(|o| o.OpDefNode_weights().clone())).set_at(0i32, __v); };
             } else {
-                { let __v: JArr<i32> = JArr::new_array(0i32, 0); *(self.clone()).jget_mut().OpDefNode_maxLevels_mut() = __v; };
-                { let __v: JArr<i32> = JArr::new_array(0i32, 0); *(self.clone()).jget_mut().OpDefNode_weights_mut() = __v; };
+                { let __v: JArr<i32> = { let __d0: i32 = 0i32; JArr::new_array(__d0, 0) }; *(self.clone()).jget_mut().OpDefNode_maxLevels_mut() = __v; };
+                { let __v: JArr<i32> = { let __d0: i32 = 0i32; JArr::new_array(__d0, 0) }; *(self.clone()).jget_mut().OpDefNode_weights_mut() = __v; };
             }
         } else {
             { let __v: JArr<i32> = (op.clone()).jread(|o| o.ArgMaxLevels.clone()); *(self.clone()).jget_mut().OpDefNode_maxLevels_mut() = __v; };
             { let __v: JArr<i32> = (op.clone()).jread(|o| o.ArgWeights.clone()); *(self.clone()).jget_mut().OpDefNode_weights_mut() = __v; };
         }
         { let __v: bool = true; *(self.clone()).jget_mut().OpDefNode_isLeibniz_mut() = __v; };
-        { let __v: JArr<bool> = JArr::new_array((op.clone()).jread(|o| o.ArgWeights.clone()).length(), false); *(self.clone()).jget_mut().OpDefNode_isLeibnizArg_mut() = __v; };
+        { let __v: JArr<bool> = { let __d0: i32 = (op.clone()).jread(|o| o.ArgWeights.clone()).length(); JArr::new_array(__d0, false) }; *(self.clone()).jget_mut().OpDefNode_isLeibnizArg_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop16: loop {
@@ -37542,7 +37554,7 @@ impl J<SemanticNodeObj> {
         }
         { let __v: i32 = itr; *(self.clone()).jget_mut().LevelNode_levelChecked_mut() = __v; };
         if ((self.clone()).getKind()? == ASTConstants::NumberedProofStepKind) {
-            let mut subs: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null());
+            let mut subs: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) };
             { let __v: J<SemanticNodeObj> = self.jread(|o| o.OpDefNode_stepNode().clone()); (subs.clone()).set_at(0i32, __v); };
             { let __v: bool = ((self.clone()).jread(|o| o.OpDefNode_stepNode().clone())).levelCheck_2(itr, errors.clone())?; *(self.clone()).jget_mut().LevelNode_levelCorrect_mut() = __v; };
             return Ok((self.clone()).levelCheckSubnodes(itr, subs.clone(), errors.clone())?);
@@ -37575,7 +37587,7 @@ impl J<SemanticNodeObj> {
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
             }
         }
-        { let __v: JArr<JArr<i32>> = JArr::new_array((self.clone()).jread(|o| o.OpDefNode_params().clone()).length(), JNull::null()); *(self.clone()).jget_mut().OpDefNode_minMaxLevel_mut() = __v; };
+        { let __v: JArr<JArr<i32>> = { let __d0: i32 = (self.clone()).jread(|o| o.OpDefNode_params().clone()).length(); JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().OpDefNode_minMaxLevel_mut() = __v; };
         let mut alcSet: J<SetOfArgLevelConstraints> = ((self.clone()).jread(|o| o.OpDefNode_body().clone())).getArgLevelConstraints()?;
         {
             let mut i: i32 = 0i32;
@@ -37583,7 +37595,7 @@ impl J<SemanticNodeObj> {
                 if !((i < (self.clone()).jread(|o| o.OpDefNode_params().clone()).length())) { break; }
                 'forbody23: {
                     let mut alen: i32 = ((self.clone()).jread(|o| o.OpDefNode_params().clone()).at(i)).getArity_0_0()?;
-                    { let __v: JArr<i32> = JArr::new_array(alen, 0); ((self.clone()).jread(|o| o.OpDefNode_minMaxLevel().clone())).set_at(i, __v); };
+                    { let __v: JArr<i32> = { let __d0: i32 = alen; JArr::new_array(__d0, 0) }; ((self.clone()).jread(|o| o.OpDefNode_minMaxLevel().clone())).set_at(i, __v); };
                     {
                         let mut j: i32 = 0i32;
                         'loop24: loop {
@@ -37603,7 +37615,7 @@ impl J<SemanticNodeObj> {
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
             }
         }
-        { let __v: JArr<JArr<JArr<bool>>> = JArr::new_array((self.clone()).jread(|o| o.OpDefNode_params().clone()).length(), JNull::null()); *(self.clone()).jget_mut().OpDefNode_opLevelCond_mut() = __v; };
+        { let __v: JArr<JArr<JArr<bool>>> = { let __d0: i32 = (self.clone()).jread(|o| o.OpDefNode_params().clone()).length(); let __d1: i32 = (self.clone()).jread(|o| o.OpDefNode_params().clone()).length(); JArr::new_array_with(__d0, || JArr::new_array(__d1, JNull::null())) }; *(self.clone()).jget_mut().OpDefNode_opLevelCond_mut() = __v; };
         let mut alpSet: J<HashSet<J<ArgLevelParam>>> = ((self.clone()).jread(|o| o.OpDefNode_body().clone())).getArgLevelParams()?;
         {
             let mut i: i32 = 0i32;
@@ -37615,7 +37627,7 @@ impl J<SemanticNodeObj> {
                         'loop28: loop {
                             if !((j < (self.clone()).jread(|o| o.OpDefNode_params().clone()).length())) { break; }
                             'forbody29: {
-                                { let __v: JArr<bool> = JArr::new_array(((self.clone()).jread(|o| o.OpDefNode_params().clone()).at(i)).getArity_0_0()?, false); ((self.clone()).jread(|o| o.OpDefNode_opLevelCond().clone()).at(i)).set_at(j, __v); };
+                                { let __v: JArr<bool> = { let __d0: i32 = ((self.clone()).jread(|o| o.OpDefNode_params().clone()).at(i)).getArity_0_0()?; JArr::new_array(__d0, false) }; ((self.clone()).jread(|o| o.OpDefNode_opLevelCond().clone()).at(i)).set_at(j, __v); };
                                 {
                                     let mut k: i32 = 0i32;
                                     'loop30: loop {
@@ -38243,7 +38255,7 @@ impl SemanticNode {
     }
 
     fn static_init() -> JResult<()> {
-        { let __v = JArr::new_array(0i32, JNull::null()); SemanticNode::statics().jget_mut().EmptyArr = __v; }
+        { let __v = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; SemanticNode::statics().jget_mut().EmptyArr = __v; }
         { let __v = AtomicInteger::new_0(); SemanticNode::statics().jget_mut().uid = __v; }
         { let __v = NullSemanticNode::new_0()?; SemanticNode::statics().jget_mut().nullSN = __v; }
         Ok(())
@@ -38316,7 +38328,7 @@ impl J<SemanticNodeObj> {
     }
     pub(crate) fn setToolObject__SemanticNode(&self, mut toolId: i32, mut obj: J<Object>) -> JResult<()> {
         if ((self.clone()).jread(|o| o.SemanticNode_tools().clone()).length() <= toolId) {
-            let mut newTools: JArr<J<Object>> = JArr::new_array((toolId).wrapping_add(1i32), JNull::null());
+            let mut newTools: JArr<J<Object>> = { let __d0: i32 = (toolId).wrapping_add(1i32); JArr::new_array(__d0, JNull::null()) };
             let _ = System::arraycopy(&(self.clone()).jread(|o| o.SemanticNode_tools().clone()), 0i32, &newTools.clone(), 0i32, (self.clone()).jread(|o| o.SemanticNode_tools().clone()).length());
             { let __v: JArr<J<Object>> = newTools.clone(); *(self.clone()).jget_mut().SemanticNode_tools_mut() = __v; };
         }
@@ -39234,7 +39246,7 @@ impl J<SemanticNodeObj> {
                     let mut symb: J<SemanticNodeObj> = (instancerST.clone()).resolveSymbol((decl.clone()).getName_0_3()?)?;
                     if !(symb.clone()).is_null() {
                         if (((decl.clone()).getKind()? == ASTConstants::VariableDeclKind) || (((decl.clone()).getKind()? == ASTConstants::ConstantDeclKind) && ((decl.clone()).getArity_0_0()? == 0i32))) {
-                            let _ = (vtemp.clone()).addElement(Subst::new_4(decl.clone(), OpApplNode::new_5_0(symb.clone(), JArr::new_array(0i32, JNull::null()), treeNode.clone(), self.jread(|o| o.SubstInNode_instantiatingModule().clone()), errors.clone())?, JNull::null(), true)?);
+                            let _ = (vtemp.clone()).addElement(Subst::new_4(decl.clone(), OpApplNode::new_5_0(symb.clone(), { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }, treeNode.clone(), self.jread(|o| o.SubstInNode_instantiatingModule().clone()), errors.clone())?, JNull::null(), true)?);
                         } else {
                             let _ = (vtemp.clone()).addElement(Subst::new_4(decl.clone(), OpArgNode::new_3(symb.clone(), treeNode.clone(), self.jread(|o| o.SubstInNode_instantiatingModule().clone()))?, JNull::null(), true)?);
                         }
@@ -39243,7 +39255,7 @@ impl J<SemanticNodeObj> {
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
             }
         }
-        { let __v: JArr<J<Subst>> = JArr::new_array((vtemp.clone()).size(), JNull::null()); *(self.clone()).jget_mut().SubstInNode_substs_mut() = __v; };
+        { let __v: JArr<J<Subst>> = { let __d0: i32 = (vtemp.clone()).size(); JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().SubstInNode_substs_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop3: loop {
@@ -39282,7 +39294,7 @@ impl J<SemanticNodeObj> {
             let mut lhsSymbol: J<SemanticNodeObj> = (instanceCtxt.clone()).getSymbol(Object::of(lhs.clone()))?;
             if (lhsSymbol.clone()).jtest(|o| o.is_OpDeclNode()) {
                 let mut newlength: i32 = ((self.clone()).jread(|o| o.SubstInNode_substs().clone()).length()).wrapping_add(1i32);
-                let mut newSubsts: JArr<J<Subst>> = JArr::new_array(newlength, JNull::null());
+                let mut newSubsts: JArr<J<Subst>> = { let __d0: i32 = newlength; JArr::new_array(__d0, JNull::null()) };
                 let mut newSubst: J<Subst> = Subst::new_4(lhsSymbol.clone(), sub.clone(), stn.clone(), false)?;
                 let _ = System::arraycopy(&(self.clone()).jread(|o| o.SubstInNode_substs().clone()), 0i32, &newSubsts.clone(), 0i32, (newlength).wrapping_sub(1i32));
                 { let __v: J<Subst> = newSubst.clone(); (newSubsts.clone()).set_at((newlength).wrapping_sub(1i32), __v); };
@@ -39415,7 +39427,7 @@ impl J<SemanticNodeObj> {
         unreachable!("javac: missing return")
     }
     pub(crate) fn getChildren__SubstInNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array(((self.clone()).jread(|o| o.SubstInNode_substs().clone()).length()).wrapping_add(1i32), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = ((self.clone()).jread(|o| o.SubstInNode_substs().clone()).length()).wrapping_add(1i32); JArr::new_array(__d0, JNull::null()) };
         { let __v: J<SemanticNodeObj> = (self.clone()).jread(|o| o.SubstInNode_body().clone()); (res.clone()).set_at(0i32, __v); };
         {
             let mut i: i32 = 0i32;
@@ -40048,10 +40060,10 @@ impl J<SemanticNodeObj> {
         { let __v: i32 = iter; *self.jget_mut().TheoremNode_levelChecked_mut() = __v; };
         let mut sub: JArr<J<SemanticNodeObj>> = JNull::null();
         if !((self.clone()).jread(|o| o.TheoremNode_proof().clone())).is_null() {
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(2i32, JNull::null()); sub = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 2i32; JArr::new_array(__d0, JNull::null()) }; sub = __v; };
             { let __v: J<SemanticNodeObj> = self.jread(|o| o.TheoremNode_proof().clone()); (sub.clone()).set_at(1i32, __v); };
         } else {
-            { let __v: JArr<J<SemanticNodeObj>> = JArr::new_array(1i32, JNull::null()); sub = __v; };
+            { let __v: JArr<J<SemanticNodeObj>> = { let __d0: i32 = 1i32; JArr::new_array(__d0, JNull::null()) }; sub = __v; };
         }
         if !((self.clone()).jread(|o| o.TheoremNode_def().clone())).is_null() {
             { let __v: J<SemanticNodeObj> = (self.clone()).jread(|o| o.TheoremNode_def().clone()); (sub.clone()).set_at(0i32, __v); };
@@ -40226,7 +40238,7 @@ impl J<SemanticNodeObj> {
         { let __v = false; *self.jget_mut().ThmOrAssumpDefNode_suffices_mut() = __v; }
         { let __v = JNull::null(); *self.jget_mut().ThmOrAssumpDefNode_labels_mut() = __v; }
         { let __v = 0i32; *self.jget_mut().ThmOrAssumpDefNode_arity_mut() = __v; }
-        { let __v = JArr::new_array(0i32, JNull::null()); *self.jget_mut().ThmOrAssumpDefNode_params_mut() = __v; }
+        { let __v = { let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) }; *self.jget_mut().ThmOrAssumpDefNode_params_mut() = __v; }
         { let __v = JNull::null(); *self.jget_mut().ThmOrAssumpDefNode_instantiatedFrom_mut() = __v; }
         { let __v = JNull::null(); *self.jget_mut().ThmOrAssumpDefNode_source_mut() = __v; }
         { let __v = false; *self.jget_mut().ThmOrAssumpDefNode_local_mut() = __v; }
@@ -40375,14 +40387,14 @@ impl J<SemanticNodeObj> {
     }
     pub(crate) fn getLabels__ThmOrAssumpDefNode(&self) -> JResult<JArr<J<SemanticNodeObj>>> {
         if (self.jread(|o| o.ThmOrAssumpDefNode_labels().clone())).is_null() {
-            return Ok(JArr::new_array(0i32, JNull::null()));
+            return Ok({ let __d0: i32 = 0i32; JArr::new_array(__d0, JNull::null()) });
         }
         let mut v: J<Vector<J<SemanticNodeObj>>> = Vector::new_0();
         let mut e: J<Enumeration<J<SemanticNodeObj>>> = (self.jread(|o| o.ThmOrAssumpDefNode_labels().clone())).elements();
         'loop1: while (e.clone()).hasMoreElements() {
             let _ = (v.clone()).addElement((e.clone()).nextElement());
         }
-        let mut retVal: JArr<J<SemanticNodeObj>> = JArr::new_array((v.clone()).size(), JNull::null());
+        let mut retVal: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (v.clone()).size(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop2: loop {
@@ -40412,8 +40424,8 @@ impl J<SemanticNodeObj> {
             return Ok((self.clone()).jread(|o| *o.LevelNode_levelCorrect()));
         }
         { let __v: i32 = itr; *(self.clone()).jget_mut().LevelNode_levelChecked_mut() = __v; };
-        { let __v: JArr<i32> = JArr::new_array((self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(), 0); *(self.clone()).jget_mut().ThmOrAssumpDefNode_maxLevels_mut() = __v; };
-        { let __v: JArr<i32> = JArr::new_array((self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(), 0); *(self.clone()).jget_mut().ThmOrAssumpDefNode_weights_mut() = __v; };
+        { let __v: JArr<i32> = { let __d0: i32 = (self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(); JArr::new_array(__d0, 0) }; *(self.clone()).jget_mut().ThmOrAssumpDefNode_maxLevels_mut() = __v; };
+        { let __v: JArr<i32> = { let __d0: i32 = (self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(); JArr::new_array(__d0, 0) }; *(self.clone()).jget_mut().ThmOrAssumpDefNode_weights_mut() = __v; };
         {
             let mut i: i32 = 0i32;
             'loop4: loop {
@@ -40422,7 +40434,7 @@ impl J<SemanticNodeObj> {
                     { let __v: i32 = LevelConstants::MaxLevel; ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_maxLevels().clone())).set_at(i, __v); };
                     { let __v: i32 = 0i32; ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_weights().clone())).set_at(i, __v); };
                     { let __v: bool = true; *(self.clone()).jget_mut().ThmOrAssumpDefNode_isLeibniz_mut() = __v; };
-                    { let __v: JArr<bool> = JArr::new_array((self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(), false); *(self.clone()).jget_mut().ThmOrAssumpDefNode_isLeibnizArg_mut() = __v; };
+                    { let __v: JArr<bool> = { let __d0: i32 = (self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(); JArr::new_array(__d0, false) }; *(self.clone()).jget_mut().ThmOrAssumpDefNode_isLeibnizArg_mut() = __v; };
                     { let __v: bool = true; ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_isLeibnizArg().clone())).set_at(i, __v); };
                 }
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
@@ -40456,7 +40468,7 @@ impl J<SemanticNodeObj> {
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
             }
         }
-        { let __v: JArr<JArr<i32>> = JArr::new_array((self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(), JNull::null()); *(self.clone()).jget_mut().ThmOrAssumpDefNode_minMaxLevel_mut() = __v; };
+        { let __v: JArr<JArr<i32>> = { let __d0: i32 = (self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(); JArr::new_array(__d0, JNull::null()) }; *(self.clone()).jget_mut().ThmOrAssumpDefNode_minMaxLevel_mut() = __v; };
         let mut alcSet: J<SetOfArgLevelConstraints> = ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_body().clone())).getArgLevelConstraints()?;
         {
             let mut i: i32 = 0i32;
@@ -40464,7 +40476,7 @@ impl J<SemanticNodeObj> {
                 if !((i < (self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length())) { break; }
                 'forbody11: {
                     let mut alen: i32 = ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).at(i)).getArity_0_0()?;
-                    { let __v: JArr<i32> = JArr::new_array(alen, 0); ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_minMaxLevel().clone())).set_at(i, __v); };
+                    { let __v: JArr<i32> = { let __d0: i32 = alen; JArr::new_array(__d0, 0) }; ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_minMaxLevel().clone())).set_at(i, __v); };
                     {
                         let mut j: i32 = 0i32;
                         'loop12: loop {
@@ -40484,7 +40496,7 @@ impl J<SemanticNodeObj> {
                 { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
             }
         }
-        { let __v: JArr<JArr<JArr<bool>>> = JArr::new_array((self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(), JNull::null()); *(self.clone()).jget_mut().ThmOrAssumpDefNode_opLevelCond_mut() = __v; };
+        { let __v: JArr<JArr<JArr<bool>>> = { let __d0: i32 = (self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(); let __d1: i32 = (self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length(); JArr::new_array_with(__d0, || JArr::new_array(__d1, JNull::null())) }; *(self.clone()).jget_mut().ThmOrAssumpDefNode_opLevelCond_mut() = __v; };
         let mut alpSet: J<HashSet<J<ArgLevelParam>>> = ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_body().clone())).getArgLevelParams()?;
         {
             let mut i: i32 = 0i32;
@@ -40496,7 +40508,7 @@ impl J<SemanticNodeObj> {
                         'loop16: loop {
                             if !((j < (self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).length())) { break; }
                             'forbody17: {
-                                { let __v: JArr<bool> = JArr::new_array(((self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).at(i)).getArity_0_0()?, false); ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_opLevelCond().clone()).at(i)).set_at(j, __v); };
+                                { let __v: JArr<bool> = { let __d0: i32 = ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_params().clone()).at(i)).getArity_0_0()?; JArr::new_array(__d0, false) }; ((self.clone()).jread(|o| o.ThmOrAssumpDefNode_opLevelCond().clone()).at(i)).set_at(j, __v); };
                                 {
                                     let mut k: i32 = 0i32;
                                     'loop18: loop {
@@ -40783,7 +40795,7 @@ impl J<SemanticNodeObj> {
         if (((self.clone()).jread(|o| o.UseOrHideNode_facts().clone())).is_null() || ((self.clone()).jread(|o| o.UseOrHideNode_facts().clone()).length() == 0i32)) {
             return Ok(JNull::null());
         }
-        let mut res: JArr<J<SemanticNodeObj>> = JArr::new_array((self.clone()).jread(|o| o.UseOrHideNode_facts().clone()).length(), JNull::null());
+        let mut res: JArr<J<SemanticNodeObj>> = { let __d0: i32 = (self.clone()).jread(|o| o.UseOrHideNode_facts().clone()).length(); JArr::new_array(__d0, JNull::null()) };
         {
             let mut i: i32 = 0i32;
             'loop3: loop {
@@ -40825,6 +40837,1462 @@ impl J<SemanticNodeObj> {
             }
         }
         return Ok(ret.clone());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+}
+
+pub(crate) struct ModuleContext {
+    pub(crate) context: J<Hashtable<JStr, J<ModulePointer>>>,
+}
+
+impl ModuleContext {
+    /// Java's default field values.
+    pub(crate) fn java_default() -> Self {
+        ModuleContext {
+            context: JNull::null(),
+        }
+    }
+}
+
+impl ModuleContext {
+    pub(crate) fn new_0() -> JResult<J<ModuleContext>> {
+        let this = J::new(ModuleContext::java_default());
+        this.init__ModuleContext_0()?;
+        Ok(this)
+    }
+}
+
+impl J<ModuleContext> {
+    pub(crate) fn init_fields__ModuleContext(&self) -> JResult<()> {
+        { let __v = Hashtable::new_0(); self.jget_mut().context = __v; }
+        Ok(())
+    }
+
+    pub(crate) fn resolve(&self, mut modName: JStr) -> JResult<J<ModulePointer>> {
+        return Ok((self.jread(|o| o.context.clone())).get(modName.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn bind(&self, mut modName: JStr, mut modPointer: J<ModulePointer>) -> JResult<()> {
+        let _ = (self.jread(|o| o.context.clone())).put(modName.clone(), modPointer.clone());
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn bindIfNotBound(&self, mut modName: JStr, mut modPointer: J<ModulePointer>) -> JResult<()> {
+        if ((self.jread(|o| o.context.clone())).get(modName.clone())).is_null() {
+            let _ = (self.jread(|o| o.context.clone())).put(modName.clone(), modPointer.clone());
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn union(&self, mut unionee: J<ModuleContext>) -> JResult<()> {
+        let mut Enum: J<Enumeration<JStr>> = ((unionee.clone()).jread(|o| o.context.clone())).keys();
+        'loop1: while (Enum.clone()).hasMoreElements() {
+            let mut key: JStr = (Enum.clone()).nextElement();
+            let _ = (self.clone()).bindIfNotBound(key.clone(), (unionee.clone()).resolve(key.clone())?)?;
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn toString(&self) -> JResult<JStr> {
+        let mut ret: JStr = JStr::of("Context:\n");
+        let mut Enum: J<Enumeration<JStr>> = (self.jread(|o| o.context.clone())).keys();
+        'loop2: while (Enum.clone()).hasMoreElements() {
+            let mut key: JStr = (Enum.clone()).nextElement();
+            let mut modPointer: J<ModulePointer> = (self.jread(|o| o.context.clone())).get(key.clone());
+            { let __v: JStr = concat(&concat(&concat(&concat(&ret.clone(), &JStr::of("  ")), &key.clone()), &JStr::of("-->")), &(if !(modPointer.clone()).is_null() { (modPointer.clone()).toStringAbbrev()? } else { JStr::of("null") })); ret = __v; };
+        }
+        return Ok(ret.clone());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn init__ModuleContext_0(&self) -> JResult<()> {
+        { self.init_fields__ModuleContext()?; };
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+}
+
+pub(crate) struct ModulePointer {
+    pub(crate) moduleRelatives: J<ModuleRelatives>,
+    pub(crate) parseUnit: J<ParseUnit>,
+    pub(crate) spec: J<SpecObj>,
+    pub(crate) treeNode: J<SyntaxTreeNode>,
+}
+
+impl ModulePointer {
+    /// Java's default field values.
+    pub(crate) fn java_default() -> Self {
+        ModulePointer {
+            moduleRelatives: JNull::null(),
+            parseUnit: JNull::null(),
+            spec: JNull::null(),
+            treeNode: JNull::null(),
+        }
+    }
+}
+
+impl ModulePointer {
+    pub(crate) fn new_3(spec: J<SpecObj>, p: J<ParseUnit>, t: J<SyntaxTreeNode>) -> JResult<J<ModulePointer>> {
+        let this = J::new(ModulePointer::java_default());
+        this.init__ModulePointer_3(spec, p, t)?;
+        Ok(this)
+    }
+}
+
+impl J<ModulePointer> {
+    pub(crate) fn init_fields__ModulePointer(&self) -> JResult<()> {
+        Ok(())
+    }
+
+    pub(crate) fn init__ModulePointer_3(&self, mut spec: J<SpecObj>, mut p: J<ParseUnit>, mut t: J<SyntaxTreeNode>) -> JResult<()> {
+        { self.init_fields__ModulePointer()?; };
+        { let __v: J<SpecObj> = spec.clone(); (self.clone()).jget_mut().spec = __v; };
+        { let __v: J<ParseUnit> = p.clone(); (self.clone()).jget_mut().parseUnit = __v; };
+        { let __v: J<SyntaxTreeNode> = t.clone(); (self.clone()).jget_mut().treeNode = __v; };
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn getParseUnit(&self) -> JResult<J<ParseUnit>> {
+        return Ok(self.jread(|o| o.parseUnit.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getTreeNode(&self) -> JResult<J<SyntaxTreeNode>> {
+        return Ok(self.jread(|o| o.treeNode.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getName(&self) -> JResult<JStr> {
+        return Ok((((self.jread(|o| o.treeNode.clone())).heirs()?.at(0i32)).heirs()?.at(1i32)).getImage()?);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getContext(&self) -> JResult<J<ModuleContext>> {
+        return Ok((self.jread(|o| o.moduleRelatives.clone())).jread(|o| o.context.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getRelatives(&self) -> JResult<J<ModuleRelatives>> {
+        return Ok(self.jread(|o| o.moduleRelatives.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn putRelatives(&self, mut relatives: J<ModuleRelatives>) -> JResult<()> {
+        { let __v: J<ModuleRelatives> = relatives.clone(); self.jget_mut().moduleRelatives = __v; };
+        let _ = ((self.jread(|o| o.spec.clone())).getModuleRelationships()?).putRelatives(self.clone(), relatives.clone())?;
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn getNamesOfModulesExtended(&self) -> JResult<J<Vector<JStr>>> {
+        return Ok((self.jread(|o| o.moduleRelatives.clone())).jread(|o| o.directlyExtendedModuleNames.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getNamesOfModulesInstantiated(&self) -> JResult<J<Vector<JStr>>> {
+        return Ok((self.jread(|o| o.moduleRelatives.clone())).jread(|o| o.directlyInstantiatedModuleNames.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getDirectInnerModules(&self) -> JResult<J<Vector<J<ModulePointer>>>> {
+        return Ok((self.jread(|o| o.moduleRelatives.clone())).jread(|o| o.directInnerModules.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getExtendsDecl(&self) -> JResult<J<SyntaxTreeNode>> {
+        return Ok((self.jread(|o| o.treeNode.clone())).heirs()?.at(1i32));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getBody(&self) -> JResult<J<SyntaxTreeNode>> {
+        return Ok((self.jread(|o| o.treeNode.clone())).heirs()?.at(2i32));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn toString(&self) -> JResult<JStr> {
+        return Ok(concat(&concat(&concat(&concat(&concat(&concat(&concat(&concat(&JStr::of("ModulePointer ("), &(self.jread(|o| o.parseUnit.clone())).getFileName()?), &JStr::of(",$")), &(self.clone()).getName()?), &JStr::of(",")), &self.jread(|o| o.treeNode.clone())), &JStr::of(")\n")), &JStr::of("Relatives:\n")), &(self.jread(|o| o.moduleRelatives.clone())).toString()?));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn toStringAbbrev(&self) -> JResult<JStr> {
+        return Ok(concat(&concat(&concat(&concat(&concat(&concat(&JStr::of("ModPtr("), &(self.jread(|o| o.parseUnit.clone())).getFileName()?), &JStr::of(",$")), &(self.clone()).getName()?), &JStr::of(",")), &self.jread(|o| o.treeNode.clone())), &JStr::of(")\n")));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+}
+
+pub(crate) struct ModuleRelationships {
+    pub(crate) modRelHashtable: J<Hashtable<J<ModulePointer>, J<ModuleRelatives>>>,
+}
+
+impl ModuleRelationships {
+    /// Java's default field values.
+    pub(crate) fn java_default() -> Self {
+        ModuleRelationships {
+            modRelHashtable: JNull::null(),
+        }
+    }
+}
+
+impl ModuleRelationships {
+    pub(crate) fn new_0() -> JResult<J<ModuleRelationships>> {
+        let this = J::new(ModuleRelationships::java_default());
+        this.init__ModuleRelationships_0()?;
+        Ok(this)
+    }
+}
+
+impl J<ModuleRelationships> {
+    pub(crate) fn init_fields__ModuleRelationships(&self) -> JResult<()> {
+        { let __v = Hashtable::new_0(); self.jget_mut().modRelHashtable = __v; }
+        Ok(())
+    }
+
+    pub(crate) fn putRelatives(&self, mut modulePointer: J<ModulePointer>, mut relatives: J<ModuleRelatives>) -> JResult<()> {
+        let _ = (self.jread(|o| o.modRelHashtable.clone())).put(modulePointer.clone(), relatives.clone());
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn getContext(&self, mut module: J<ModulePointer>) -> JResult<J<ModuleContext>> {
+        return Ok(((module.clone()).getRelatives()?).jread(|o| o.context.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getKeys(&self) -> JResult<J<Enumeration<J<ModulePointer>>>> {
+        return Ok((self.jread(|o| o.modRelHashtable.clone())).keys());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn union(&self, mut otherMR: J<ModuleRelationships>) -> JResult<()> {
+        let mut otherKeys: J<Enumeration<J<ModulePointer>>> = (otherMR.clone()).getKeys()?;
+        'loop1: while (otherKeys.clone()).hasMoreElements() {
+            let mut key: J<ModulePointer> = (otherKeys.clone()).nextElement();
+            if ((key.clone()).getRelatives()?).is_null() {
+                let _ = (self.clone()).putRelatives(key.clone(), (key.clone()).getRelatives()?)?;
+            }
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn toString(&self) -> JResult<JStr> {
+        let mut ret: JStr = JStr::of("");
+        let mut e: J<Enumeration<J<ModulePointer>>> = (self.jread(|o| o.modRelHashtable.clone())).keys();
+        'loop2: while (e.clone()).hasMoreElements() {
+            let mut modPtr: J<ModulePointer> = (e.clone()).nextElement();
+            { let __v: JStr = concat(&concat(&concat(&ret.clone(), &JStr::of("\n----------- Module '")), &(modPtr.clone()).getName()?), &JStr::of("'\n")); ret = __v; };
+            { let __v: JStr = concat(&ret.clone(), &((modPtr.clone()).getRelatives()?).toString()?); ret = __v; };
+            { let __v: JStr = concat(&concat(&ret.clone(), &JStr::of("-----------")), &JStr::of("\n")); ret = __v; };
+        }
+        return Ok(ret.clone());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn init__ModuleRelationships_0(&self) -> JResult<()> {
+        { self.init_fields__ModuleRelationships()?; };
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+}
+
+pub(crate) struct ModuleRelatives {
+    pub(crate) context: J<ModuleContext>,
+    pub(crate) currentModule: J<ModulePointer>,
+    pub(crate) directInnerModules: J<Vector<J<ModulePointer>>>,
+    pub(crate) directlyExtendedModuleNames: J<Vector<JStr>>,
+    pub(crate) directlyInstantiatedModuleNames: J<Vector<JStr>>,
+    pub(crate) outerModule: J<ModulePointer>,
+    pub(crate) parseUnit: J<ParseUnit>,
+}
+
+impl ModuleRelatives {
+    /// Java's default field values.
+    pub(crate) fn java_default() -> Self {
+        ModuleRelatives {
+            context: JNull::null(),
+            currentModule: JNull::null(),
+            directInnerModules: JNull::null(),
+            directlyExtendedModuleNames: JNull::null(),
+            directlyInstantiatedModuleNames: JNull::null(),
+            outerModule: JNull::null(),
+            parseUnit: JNull::null(),
+        }
+    }
+}
+
+impl ModuleRelatives {
+    pub(crate) fn new_2(pu: J<ParseUnit>, node: J<ModulePointer>) -> JResult<J<ModuleRelatives>> {
+        let this = J::new(ModuleRelatives::java_default());
+        this.init__ModuleRelatives_2(pu, node)?;
+        Ok(this)
+    }
+}
+
+impl J<ModuleRelatives> {
+    pub(crate) fn init_fields__ModuleRelatives(&self) -> JResult<()> {
+        { let __v = JNull::null(); self.jget_mut().currentModule = __v; }
+        { let __v = JNull::null(); self.jget_mut().outerModule = __v; }
+        { let __v = Vector::new_0(); self.jget_mut().directInnerModules = __v; }
+        { let __v = Vector::new_0(); self.jget_mut().directlyExtendedModuleNames = __v; }
+        { let __v = Vector::new_0(); self.jget_mut().directlyInstantiatedModuleNames = __v; }
+        { let __v = ModuleContext::new_0()?; self.jget_mut().context = __v; }
+        Ok(())
+    }
+
+    pub(crate) fn init__ModuleRelatives_2(&self, mut pu: J<ParseUnit>, mut node: J<ModulePointer>) -> JResult<()> {
+        { self.init_fields__ModuleRelatives()?; };
+        { let __v: J<ParseUnit> = pu.clone(); self.jget_mut().parseUnit = __v; };
+        { let __v: J<ModulePointer> = node.clone(); self.jget_mut().currentModule = __v; };
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn toString(&self) -> JResult<JStr> {
+        let mut ret: JStr = concat(&JStr::of("currentModuleName: "), &(self.jread(|o| o.currentModule.clone())).getName()?);
+        { let __v: JStr = concat(&ret.clone(), &concat(&JStr::of("\nouterModule: "), &(if (self.jread(|o| o.outerModule.clone())).is_null() { JStr::of("<null>") } else { (self.jread(|o| o.outerModule.clone())).getName()? }))); ret = __v; };
+        { let __v: JStr = concat(&ret.clone(), &JStr::of("\ndirectInnerModules: ")); ret = __v; };
+        {
+            let mut i: i32 = 0i32;
+            'loop1: loop {
+                if !((i < (self.jread(|o| o.directInnerModules.clone())).size())) { break; }
+                'forbody2: {
+                    { let __v: JStr = concat(&ret.clone(), &concat(&((self.jread(|o| o.directInnerModules.clone())).elementAt(i)).getName()?, &JStr::of(" "))); ret = __v; };
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        { let __v: JStr = concat(&ret.clone(), &JStr::of("\ndirectlyExtendedModuleNames: ")); ret = __v; };
+        {
+            let mut i: i32 = 0i32;
+            'loop3: loop {
+                if !((i < (self.jread(|o| o.directlyExtendedModuleNames.clone())).size())) { break; }
+                'forbody4: {
+                    { let __v: JStr = concat(&ret.clone(), &concat(&(self.jread(|o| o.directlyExtendedModuleNames.clone())).elementAt(i), &JStr::of(" "))); ret = __v; };
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        { let __v: JStr = concat(&ret.clone(), &JStr::of("\ndirectlyInstantiatedModuleNames: ")); ret = __v; };
+        {
+            let mut i: i32 = 0i32;
+            'loop5: loop {
+                if !((i < (self.jread(|o| o.directlyInstantiatedModuleNames.clone())).size())) { break; }
+                'forbody6: {
+                    { let __v: JStr = concat(&ret.clone(), &concat(&(self.jread(|o| o.directlyInstantiatedModuleNames.clone())).elementAt(i), &JStr::of(" "))); ret = __v; };
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        { let __v: JStr = concat(&ret.clone(), &concat(&JStr::of("\n"), &(self.jread(|o| o.context.clone())).toString()?)); ret = __v; };
+        return Ok(ret.clone());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn addExtendee(&self, mut module: JStr) -> JResult<()> {
+        let _ = (self.jread(|o| o.directlyExtendedModuleNames.clone())).addElement(module.clone());
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+}
+
+pub(crate) struct ParseUnit {
+    pub(crate) nis: J<NamedInputStream>,
+    pub(crate) parseStamp: i64,
+    pub(crate) parseTree: J<TLAplusParser>,
+    pub(crate) parseUnitRelatives: J<ParseUnitRelatives>,
+    pub(crate) rootModule: J<ModulePointer>,
+    pub(crate) rootModuleName: JStr,
+    pub(crate) spec: J<SpecObj>,
+}
+
+impl ParseUnit {
+    /// Java's default field values.
+    pub(crate) fn java_default() -> Self {
+        ParseUnit {
+            nis: JNull::null(),
+            parseStamp: 0,
+            parseTree: JNull::null(),
+            parseUnitRelatives: JNull::null(),
+            rootModule: JNull::null(),
+            rootModuleName: JNull::null(),
+            spec: JNull::null(),
+        }
+    }
+}
+
+impl ParseUnit {
+    pub(crate) fn new_2(spec: J<SpecObj>, source: J<NamedInputStream>) -> JResult<J<ParseUnit>> {
+        let this = J::new(ParseUnit::java_default());
+        this.init__ParseUnit_2(spec, source)?;
+        Ok(this)
+    }
+}
+
+impl J<ParseUnit> {
+    pub(crate) fn init_fields__ParseUnit(&self) -> JResult<()> {
+        { let __v = JNull::null(); self.jget_mut().nis = __v; }
+        { let __v = JNull::null(); self.jget_mut().parseTree = __v; }
+        { let __v = ((0i32) as i64); self.jget_mut().parseStamp = __v; }
+        { let __v = JNull::null(); self.jget_mut().rootModule = __v; }
+        { let __v = ParseUnitRelatives::new_0()?; self.jget_mut().parseUnitRelatives = __v; }
+        Ok(())
+    }
+
+    pub(crate) fn getNis(&self) -> JResult<J<NamedInputStream>> {
+        return Ok((self.clone()).jread(|o| o.nis.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn init__ParseUnit_2(&self, mut spec: J<SpecObj>, mut source: J<NamedInputStream>) -> JResult<()> {
+        { self.init_fields__ParseUnit()?; };
+        { let __v: J<SpecObj> = spec.clone(); (self.clone()).jget_mut().spec = __v; };
+        { let __v: J<NamedInputStream> = source.clone(); (self.clone()).jget_mut().nis = __v; };
+        { let __v: JStr = (if !(source.clone()).is_null() { (self.jread(|o| o.nis.clone())).getModuleName() } else { JNull::null() }); self.jget_mut().rootModuleName = __v; };
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn toString(&self) -> JResult<JStr> {
+        return Ok(concat(&concat(&JStr::of("[ ParseUnit: "), &self.jread(|o| o.rootModuleName.clone())), &JStr::of(" ]")));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn isLoaded(&self) -> JResult<bool> {
+        return Ok(((!(self.jread(|o| o.nis.clone())).is_null() && (self.jread(|o| o.nis.clone())).exists()) && (self.jread(|o| o.parseStamp) != ((0i32) as i64))));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn isLibraryModule(&self) -> JResult<bool> {
+        return Ok((!(self.jread(|o| o.nis.clone())).is_null() && (self.jread(|o| o.nis.clone())).isLibraryModule()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getName(&self) -> JResult<JStr> {
+        return Ok(self.jread(|o| o.rootModuleName.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getSpec(&self) -> JResult<J<SpecObj>> {
+        return Ok(self.jread(|o| o.spec.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getFileName(&self) -> JResult<JStr> {
+        return Ok((if !(self.jread(|o| o.nis.clone())).is_null() { (self.jread(|o| o.nis.clone())).getFileName() } else { JNull::null() }));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getParseTree(&self) -> JResult<J<SyntaxTreeNode>> {
+        return Ok((if !(self.jread(|o| o.parseTree.clone())).is_null() { (self.jread(|o| o.parseTree.clone())).rootNode()? } else { JNull::null() }));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getRootModule(&self) -> JResult<J<ModulePointer>> {
+        return Ok(self.jread(|o| o.rootModule.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getExtendees(&self) -> JResult<J<Vector<J<ParseUnit>>>> {
+        return Ok((self.jread(|o| o.parseUnitRelatives.clone())).jread(|o| o.extendees.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getExtendedBy(&self) -> JResult<J<Vector<J<ParseUnit>>>> {
+        return Ok((self.jread(|o| o.parseUnitRelatives.clone())).jread(|o| o.extendedBy.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getInstancees(&self) -> JResult<J<Vector<J<ParseUnit>>>> {
+        return Ok((self.jread(|o| o.parseUnitRelatives.clone())).jread(|o| o.instancees.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getInstancedBy(&self) -> JResult<J<Vector<J<ParseUnit>>>> {
+        return Ok((self.jread(|o| o.parseUnitRelatives.clone())).jread(|o| o.instancedBy.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn addExtendee(&self, mut pu: J<ParseUnit>) -> JResult<()> {
+        let _ = ((self.jread(|o| o.parseUnitRelatives.clone())).jread(|o| o.extendees.clone())).addElement(pu.clone());
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn addExtendedBy(&self, mut pu: J<ParseUnit>) -> JResult<()> {
+        let _ = ((self.jread(|o| o.parseUnitRelatives.clone())).jread(|o| o.extendedBy.clone())).addElement(pu.clone());
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn addInstancee(&self, mut pu: J<ParseUnit>) -> JResult<()> {
+        let _ = ((self.jread(|o| o.parseUnitRelatives.clone())).jread(|o| o.instancees.clone())).addElement(pu.clone());
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn addInstancedBy(&self, mut pu: J<ParseUnit>) -> JResult<()> {
+        let _ = ((self.jread(|o| o.parseUnitRelatives.clone())).jread(|o| o.instancedBy.clone())).addElement(pu.clone());
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn getRelatives_1(&self, mut module: J<ModulePointer>) -> JResult<J<ModuleRelatives>> {
+        return Ok((module.clone()).getRelatives()?);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getRelatives_0(&self) -> JResult<J<ParseUnitRelatives>> {
+        return Ok(self.jread(|o| o.parseUnitRelatives.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getContext_1_0(&self, mut relatives: J<ModuleRelatives>) -> JResult<J<ModuleContext>> {
+        return Ok((relatives.clone()).jread(|o| o.context.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getContext_1_1(&self, mut module: J<ModulePointer>) -> JResult<J<ModuleContext>> {
+        return Ok(((module.clone()).getRelatives()?).jread(|o| o.context.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getParent(&self, mut module: J<ModulePointer>) -> JResult<J<ModulePointer>> {
+        return Ok(((module.clone()).getRelatives()?).jread(|o| o.outerModule.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getPeers(&self, mut module: J<ModulePointer>) -> JResult<J<Vector<J<ModulePointer>>>> {
+        if !(((module.clone()).getRelatives()?).jread(|o| o.outerModule.clone())).is_null() {
+            return Ok(((((module.clone()).getRelatives()?).jread(|o| o.outerModule.clone())).getRelatives()?).jread(|o| o.directInnerModules.clone()));
+        }
+        return Ok(JNull::null());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn verifyEquivalenceOfFileAndModuleNames(&self, mut errors: J<Errors>) -> JResult<()> {
+        let mut fName: JStr = self.getFileName()?;
+        { let __v: JStr = fName.clone().substring_from((fName.clone().last_index_of(&System::getProperty_1(JStr::of("file.separator")))).wrapping_add(1i32)); fName = __v; };
+        { let __v: JStr = fName.clone().substring(0i32, fName.clone().last_index_of(&JStr::of("."))); fName = __v; };
+        let mut mName: JStr = (((self.getParseTree()?).heirs()?.at(0i32)).heirs()?.at(1i32)).getImage()?;
+        if !(mName.clone().equals(&fName.clone())) {
+            return Err(JThrow::AbortException((errors.clone()).addMessage(ErrorCode::of("MODULE_NAME_DIFFERENT_FROM_FILE_NAME"), Location::nullLoc(), JStr::of("File name '%s' does not match the name '%s' of the top level module it contains."), J::new(vec![Object::of(fName.clone()), Object::of(mName.clone())]))?));
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn parseFile(&self, mut errors: J<Errors>, mut firstCall: bool, mut name: JStr, mut rootParseUnit: J<ParseUnit>, mut out: J<SanyOutput>) -> JResult<()> {
+        if (self.jread(|o| o.parseStamp) != ((0i32) as i64)) {
+            return Ok(());
+        }
+        if !((self.jread(|o| o.nis.clone())).exists()) {
+            return Err(JThrow::AbortException((errors.clone()).addMessage(ErrorCode::of("INTERNAL_ERROR"), Location::nullLoc(), JStr::of("Error: source file '%s' has apparently been deleted."), J::new(vec![Object::of((self.jread(|o| o.nis.clone())).getName())]))?));
+        }
+        let _ = (out.clone()).log_4(LogLevel::INFO(), JStr::of("Parsing file %s%s"), &(self.jread(|o| o.nis.clone())).absoluteResolvedPath(), &(self.jread(|o| o.nis.clone())).originalFilePathSuffix());
+        let mut parseSuccess: bool = false;
+        { let __v: J<TLAplusParser> = FileUtil::newParser(out.clone(), self.jread(|o| o.nis.clone()))?; self.jget_mut().parseTree = __v; };
+        { let __v: bool = (self.jread(|o| o.parseTree.clone())).parse()?; parseSuccess = __v; };
+        { let __v: i64 = System::currentTimeMillis(); self.jget_mut().parseStamp = __v; };
+        if !(parseSuccess) {
+            return Err(JThrow::AbortException((errors.clone()).addMessage(ErrorCode::of("INTERNAL_ERROR"), Location::moduleLocation((self.jread(|o| o.nis.clone())).getModuleName()), JStr::of("Could not parse module %s from file %s"), J::new(vec![Object::of((self.jread(|o| o.nis.clone())).getModuleName()), Object::of((self.jread(|o| o.nis.clone())).getName())]))?));
+        }
+        let mut rootNode: J<SyntaxTreeNode> = (self.jread(|o| o.parseTree.clone())).rootNode()?;
+        let _ = (rootNode.clone()).setLevel(0i32)?;
+        let _ = (rootNode.clone()).setParent()?;
+        if firstCall {
+            let _ = (self.jread(|o| o.spec.clone())).setName((((self.getParseTree()?).heirs()?.at(0i32)).heirs()?.at(1i32)).getImage()?)?;
+        }
+        { let __v: J<ModulePointer> = ModulePointer::new_3(self.jread(|o| o.spec.clone()), self.clone(), self.getParseTree()?)?; self.jget_mut().rootModule = __v; };
+        let _ = self.determineModuleRelationships(self.jread(|o| o.rootModule.clone()), JNull::null())?;
+        let _ = self.verifyEquivalenceOfFileAndModuleNames(errors.clone())?;
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn handleExtensions(&self, mut currentModule: J<ModulePointer>, mut otherModule: J<ModulePointer>) -> JResult<()> {
+        if (otherModule.clone()).is_null() {
+            return Ok(());
+        }
+        let mut currentContext: J<ModuleContext> = self.getContext_1_1(currentModule.clone())?;
+        let mut extendeeNames: J<Vector<JStr>> = (otherModule.clone()).getNamesOfModulesExtended()?;
+        {
+            let mut i: i32 = 0i32;
+            'loop1: loop {
+                if !((i < (extendeeNames.clone()).size())) { break; }
+                'forbody2: {
+                    let mut extendeeName: JStr = (extendeeNames.clone()).elementAt(i);
+                    let mut extendeeResolvant: J<ModulePointer> = (currentContext.clone()).resolve(extendeeName.clone())?;
+                    if !(extendeeResolvant.clone()).is_null() {
+                        let mut directInnerModules: J<Vector<J<ModulePointer>>> = (extendeeResolvant.clone()).getDirectInnerModules()?;
+                        {
+                            let mut j: i32 = 0i32;
+                            'loop3: loop {
+                                if !((j < (directInnerModules.clone()).size())) { break; }
+                                'forbody4: {
+                                    let mut upperInnerMod: J<ModulePointer> = (directInnerModules.clone()).elementAt(j);
+                                    let _ = (currentContext.clone()).bindIfNotBound((upperInnerMod.clone()).getName()?, upperInnerMod.clone())?;
+                                    let _ = self.handleExtensions(currentModule.clone(), extendeeResolvant.clone())?;
+                                }
+                                { let __v: i32 = (j).wrapping_add(1i32); j = __v; };
+                            }
+                        }
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn calculateContextWithinParseUnit(&self, mut currentModule: J<ModulePointer>) -> JResult<()> {
+        let mut currentContext: J<ModuleContext> = self.getContext_1_1(currentModule.clone())?;
+        if !(self.getParent(currentModule.clone())?).is_null() {
+            let _ = (currentContext.clone()).union((self.getParent(currentModule.clone())?).getContext()?)?;
+        }
+        let mut ancestorModule: J<ModulePointer> = currentModule.clone();
+        'loop5: while !(self.getParent(ancestorModule.clone())?).is_null() {
+            let _ = (currentContext.clone()).union((self.getParent(ancestorModule.clone())?).getContext()?)?;
+            let mut peers: J<Vector<J<ModulePointer>>> = self.getPeers(ancestorModule.clone())?;
+            {
+                let mut i: i32 = 0i32;
+                'loop6: loop {
+                    if !((i < ((peers.clone()).size()).wrapping_sub(1i32))) { break; }
+                    'forbody7: {
+                        let mut nextPeer: J<ModulePointer> = (peers.clone()).elementAt(i);
+                        let _ = (currentContext.clone()).bindIfNotBound((nextPeer.clone()).getName()?, nextPeer.clone())?;
+                    }
+                    { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+                }
+            }
+            { let __v: J<ModulePointer> = self.getParent(ancestorModule.clone())?; ancestorModule = __v; };
+        }
+        let _ = self.handleExtensions(currentModule.clone(), currentModule.clone())?;
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn determineModuleRelationships(&self, mut currentModule: J<ModulePointer>, mut parent: J<ModulePointer>) -> JResult<()> {
+        let mut currentRelatives: J<ModuleRelatives> = ModuleRelatives::new_2(self.clone(), currentModule.clone())?;
+        let _ = (currentModule.clone()).putRelatives(currentRelatives.clone())?;
+        { let __v: J<ModulePointer> = parent.clone(); (currentRelatives.clone()).jget_mut().outerModule = __v; };
+        let mut extendNode: J<SyntaxTreeNode> = (currentModule.clone()).getExtendsDecl()?;
+        {
+            let mut i: i32 = 1i32;
+            'loop8: loop {
+                if !((i < (extendNode.clone()).heirs()?.length())) { break; }
+                'forbody9: {
+                    let mut extendedModuleName: JStr = ((extendNode.clone()).heirs()?.at(i)).getImage()?;
+                    let _ = ((currentRelatives.clone()).jread(|o| o.directlyExtendedModuleNames.clone())).addElement(extendedModuleName.clone());
+                }
+                { let __v: i32 = (i).wrapping_add(2i32); i = __v; };
+            }
+        }
+        let _ = self.calculateContextWithinParseUnit(currentModule.clone())?;
+        let mut body: J<SyntaxTreeNode> = (currentModule.clone()).getBody()?;
+        {
+            let mut i: i32 = 0i32;
+            'loop10: loop {
+                if !((i < (body.clone()).heirs()?.length())) { break; }
+                'forbody11: {
+                    let mut def: J<SyntaxTreeNode> = (body.clone()).heirs()?.at(i);
+                    if (def.clone()).getImage()?.equals(&JStr::of("N_Module")) {
+                        let mut innerModule: J<ModulePointer> = ModulePointer::new_3(self.jread(|o| o.spec.clone()), self.clone(), def.clone())?;
+                        let _ = ((currentRelatives.clone()).jread(|o| o.directInnerModules.clone())).addElement(innerModule.clone());
+                        let _ = self.determineModuleRelationships(innerModule.clone(), currentModule.clone())?;
+                    } else {
+                        let _ = (self.clone()).getInstances(def.clone(), currentRelatives.clone())?;
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn getInstanceInLet(&self, mut treeNode: J<SyntaxTreeNode>, mut currentRelatives: J<ModuleRelatives>) -> JResult<()> {
+        let mut children: JArr<J<SyntaxTreeNode>> = (treeNode.clone()).heirs()?;
+        if (treeNode.clone()).getImage()?.equals(&JStr::of("N_LetIn")) {
+            let mut syntaxTreeNode: JArr<J<SyntaxTreeNode>> = (children.clone().at(1i32)).heirs()?;
+            {
+                let mut i: i32 = 0i32;
+                'loop12: loop {
+                    if !((i < syntaxTreeNode.clone().length())) { break; }
+                    'forbody13: {
+                        let mut def: J<SyntaxTreeNode> = syntaxTreeNode.clone().at(i);
+                        if (def.clone()).getImage()?.equals(&JStr::of("N_ModuleDefinition")) {
+                            let mut instanceHeirs: JArr<J<SyntaxTreeNode>> = (def.clone()).heirs()?;
+                            let mut nonLocalInstanceNodeIX: i32 = 2i32;
+                            let mut instanceModuleName: JStr = ((instanceHeirs.clone().at(nonLocalInstanceNodeIX)).heirs()?.at(1i32)).getImage()?;
+                            let _ = ((currentRelatives.clone()).jread(|o| o.directlyInstantiatedModuleNames.clone())).addElement(instanceModuleName.clone());
+                        } else {
+                            let mut defChildren: JArr<J<SyntaxTreeNode>> = (def.clone()).heirs()?;
+                            {
+                                let mut j: i32 = 0i32;
+                                'loop14: loop {
+                                    if !((j < defChildren.clone().length())) { break; }
+                                    'forbody15: {
+                                        let _ = (self.clone()).getInstanceInLet(defChildren.clone().at(j), currentRelatives.clone())?;
+                                    }
+                                    { let __v: i32 = (j).wrapping_add(1i32); j = __v; };
+                                }
+                            }
+                        }
+                    }
+                    { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+                }
+            }
+        } else {
+            {
+                let mut i: i32 = 0i32;
+                'loop16: loop {
+                    if !((i < children.clone().length())) { break; }
+                    'forbody17: {
+                        let _ = (self.clone()).getInstanceInLet(children.clone().at(i), currentRelatives.clone())?;
+                    }
+                    { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+                }
+            }
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn getInstances(&self, mut treeNode: J<SyntaxTreeNode>, mut currentRelatives: J<ModuleRelatives>) -> JResult<()> {
+        let mut children: JArr<J<SyntaxTreeNode>> = (treeNode.clone()).heirs()?;
+        let mut i: i32 = 0i32;
+        if (treeNode.clone()).getImage()?.equals(&JStr::of("N_NonLocalInstance")) {
+            let _ = ((currentRelatives.clone()).jread(|o| o.directlyInstantiatedModuleNames.clone())).addElement((children.clone().at(1i32)).getImage()?);
+            { let __v: i32 = 2i32; i = __v; };
+        }
+        {
+            let mut j: i32 = i;
+            'loop18: loop {
+                if !((j < children.clone().length())) { break; }
+                'forbody19: {
+                    let _ = self.getInstances(children.clone().at(j), currentRelatives.clone())?;
+                }
+                { let __v: i32 = (j).wrapping_add(1i32); j = __v; };
+            }
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+}
+
+pub(crate) struct ParseUnitRelatives {
+    pub(crate) extendedBy: J<Vector<J<ParseUnit>>>,
+    pub(crate) extendees: J<Vector<J<ParseUnit>>>,
+    pub(crate) instancedBy: J<Vector<J<ParseUnit>>>,
+    pub(crate) instancees: J<Vector<J<ParseUnit>>>,
+}
+
+impl ParseUnitRelatives {
+    /// Java's default field values.
+    pub(crate) fn java_default() -> Self {
+        ParseUnitRelatives {
+            extendedBy: JNull::null(),
+            extendees: JNull::null(),
+            instancedBy: JNull::null(),
+            instancees: JNull::null(),
+        }
+    }
+}
+
+impl ParseUnitRelatives {
+    pub(crate) fn new_0() -> JResult<J<ParseUnitRelatives>> {
+        let this = J::new(ParseUnitRelatives::java_default());
+        this.init__ParseUnitRelatives_0()?;
+        Ok(this)
+    }
+}
+
+impl J<ParseUnitRelatives> {
+    pub(crate) fn init_fields__ParseUnitRelatives(&self) -> JResult<()> {
+        { let __v = Vector::new_0(); self.jget_mut().extendees = __v; }
+        { let __v = Vector::new_0(); self.jget_mut().extendedBy = __v; }
+        { let __v = Vector::new_0(); self.jget_mut().instancees = __v; }
+        { let __v = Vector::new_0(); self.jget_mut().instancedBy = __v; }
+        Ok(())
+    }
+
+    pub(crate) fn toString(&self) -> JResult<JStr> {
+        return Ok(concat(&concat(&concat(&concat(&concat(&concat(&concat(&concat(&JStr::of("[ extendees = "), &JStr::of(&(self.jread(|o| o.extendees.clone())).java_string())), &JStr::of(", extendedBy = ")), &JStr::of(&(self.jread(|o| o.extendedBy.clone())).java_string())), &JStr::of(", instancees = ")), &JStr::of(&(self.jread(|o| o.instancees.clone())).java_string())), &JStr::of(", instancedBy = ")), &JStr::of(&(self.jread(|o| o.instancedBy.clone())).java_string())), &JStr::of(" ]")));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn init__ParseUnitRelatives_0(&self) -> JResult<()> {
+        { self.init_fields__ParseUnitRelatives()?; };
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+}
+
+pub(crate) struct SpecObj {
+    pub(crate) errorLevel: i32,
+    pub(crate) extentionFound: bool,
+    pub(crate) externalModuleTable: J<ExternalModuleTable>,
+    pub(crate) instantiationFound: bool,
+    pub(crate) moduleRelationshipsSpec: J<ModuleRelationships>,
+    pub(crate) nextExtenderOrInstancerModule: J<ModulePointer>,
+    pub(crate) nextParseUnitName: JStr,
+    pub(crate) parseErrors: J<Errors>,
+    pub(crate) parseUnitContext: J<Hashtable<JStr, J<ParseUnit>>>,
+    pub(crate) primaryFileName: JStr,
+    pub(crate) resolver: J<FilenameToStream>,
+    pub(crate) rootModule: J<ModulePointer>,
+    pub(crate) rootModuleName: JStr,
+    pub(crate) rootParseUnit: J<ParseUnit>,
+    pub(crate) semanticAnalysisVector: J<Vector<JStr>>,
+    pub(crate) semanticErrors: J<Errors>,
+}
+
+impl SpecObj {
+    /// Java's default field values.
+    pub(crate) fn java_default() -> Self {
+        SpecObj {
+            errorLevel: 0,
+            extentionFound: false,
+            externalModuleTable: JNull::null(),
+            instantiationFound: false,
+            moduleRelationshipsSpec: JNull::null(),
+            nextExtenderOrInstancerModule: JNull::null(),
+            nextParseUnitName: JNull::null(),
+            parseErrors: JNull::null(),
+            parseUnitContext: JNull::null(),
+            primaryFileName: JNull::null(),
+            resolver: JNull::null(),
+            rootModule: JNull::null(),
+            rootModuleName: JNull::null(),
+            rootParseUnit: JNull::null(),
+            semanticAnalysisVector: JNull::null(),
+            semanticErrors: JNull::null(),
+        }
+    }
+}
+
+impl SpecObj {
+    pub(crate) fn new_1(pfn: JStr) -> JResult<J<SpecObj>> {
+        let this = J::new(SpecObj::java_default());
+        this.init__SpecObj_1(pfn)?;
+        Ok(this)
+    }
+    pub(crate) fn new_2(pfn: JStr, ntfis: J<FilenameToStream>) -> JResult<J<SpecObj>> {
+        let this = J::new(SpecObj::java_default());
+        this.init__SpecObj_2(pfn, ntfis)?;
+        Ok(this)
+    }
+}
+
+impl J<SpecObj> {
+    pub(crate) fn init_fields__SpecObj(&self) -> JResult<()> {
+        { let __v = ExternalModuleTable::new_0()?; self.jget_mut().externalModuleTable = __v; }
+        { let __v = Vector::new_0(); self.jget_mut().semanticAnalysisVector = __v; }
+        { let __v = Hashtable::new_0(); self.jget_mut().parseUnitContext = __v; }
+        { let __v = ModuleRelationships::new_0()?; self.jget_mut().moduleRelationshipsSpec = __v; }
+        { let __v = JNull::null(); self.jget_mut().resolver = __v; }
+        { let __v = JNull::null(); self.jget_mut().rootParseUnit = __v; }
+        { let __v = JNull::null(); self.jget_mut().rootModule = __v; }
+        { let __v = Errors::new_0()?; self.jget_mut().parseErrors = __v; }
+        { let __v = Errors::new_0()?; self.jget_mut().semanticErrors = __v; }
+        { let __v = 0i32; self.jget_mut().errorLevel = __v; }
+        { let __v = JStr::of(""); self.jget_mut().nextParseUnitName = __v; }
+        { let __v = JNull::null(); self.jget_mut().nextExtenderOrInstancerModule = __v; }
+        Ok(())
+    }
+
+    pub(crate) fn init__SpecObj_1(&self, mut pfn: JStr) -> JResult<()> {
+        let _ = self.init__SpecObj_2(pfn.clone(), JNull::null())?;
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn init__SpecObj_2(&self, mut pfn: JStr, mut ntfis: J<FilenameToStream>) -> JResult<()> {
+        { self.init_fields__SpecObj()?; };
+        if (ntfis.clone()).is_null() {
+            { let __v: J<FilenameToStream> = ToolIO::getDefaultResolver(); ntfis = __v; };
+        }
+        { let __v: JStr = pfn.clone(); (self.clone()).jget_mut().primaryFileName = __v; };
+        { let __v: J<FilenameToStream> = ntfis.clone(); (self.clone()).jget_mut().resolver = __v; };
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn getErrorLevel(&self) -> JResult<i32> {
+        return Ok(self.jread(|o| o.errorLevel));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getName(&self) -> JResult<JStr> {
+        return Ok(self.jread(|o| o.rootModuleName.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn setName(&self, mut name: JStr) -> JResult<()> {
+        { let __v: JStr = name.clone(); self.jget_mut().rootModuleName = __v; };
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn getFileName(&self) -> JResult<JStr> {
+        return Ok(self.jread(|o| o.primaryFileName.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getRootModule(&self) -> JResult<J<SemanticNodeObj>> {
+        return Ok((self.getExternalModuleTable()?).getRootModule()?);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getExternalModuleTable(&self) -> JResult<J<ExternalModuleTable>> {
+        return Ok(self.jread(|o| o.externalModuleTable.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getParseErrors(&self) -> JResult<J<Errors>> {
+        return Ok(self.jread(|o| o.parseErrors.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getSemanticErrors(&self) -> JResult<J<Errors>> {
+        return Ok(self.jread(|o| o.semanticErrors.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getModuleNames(&self) -> JResult<J<HashSet<JStr>>> {
+        let mut s: J<HashSet<JStr>> = HashSet::new_0();
+        let mut modules: J<Enumeration<J<ModulePointer>>> = self.getModules()?;
+        'loop1: while (modules.clone()).hasMoreElements() {
+            let _ = (s.clone()).add(((modules.clone()).nextElement()).getName()?);
+        }
+        return Ok(s.clone());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getModules(&self) -> JResult<J<Enumeration<J<ModulePointer>>>> {
+        return Ok((self.jread(|o| o.moduleRelationshipsSpec.clone())).getKeys()?);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getModuleRelationships(&self) -> JResult<J<ModuleRelationships>> {
+        return Ok(self.jread(|o| o.moduleRelationshipsSpec.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn findOrCreateParsedUnit(&self, mut name: JStr, mut errors: J<Errors>, mut firstCall: bool, mut out: J<SanyOutput>) -> JResult<J<ParseUnit>> {
+        let mut parseUnit: J<ParseUnit> = JNull::null();
+        { let __v: J<ParseUnit> = (self.jread(|o| o.parseUnitContext.clone())).get(name.clone()); parseUnit = __v; };
+        if (parseUnit.clone()).is_null() {
+            let mut nis: J<NamedInputStream> = JNull::null();
+            if !(self.jread(|o| o.rootParseUnit.clone())).is_null() {
+                { let __v: J<NamedInputStream> = FileUtil::createNamedInputStream_3(name.clone(), (self.clone()).jread(|o| o.resolver.clone()), (self.jread(|o| o.rootParseUnit.clone())).getNis()?); nis = __v; };
+            } else {
+                { let __v: J<NamedInputStream> = FileUtil::createNamedInputStream_2(name.clone(), (self.clone()).jread(|o| o.resolver.clone())); nis = __v; };
+            }
+            if !(nis.clone()).is_null() {
+                { let __v: J<ParseUnit> = ParseUnit::new_2(self.clone(), nis.clone())?; parseUnit = __v; };
+                let _ = (self.jread(|o| o.parseUnitContext.clone())).put((parseUnit.clone()).getName()?, parseUnit.clone());
+            } else {
+                if (self.jread(|o| o.nextExtenderOrInstancerModule.clone())).is_null() {
+                    return Err(JThrow::AbortException((errors.clone()).addMessage(ErrorCode::of("MODULE_FILE_CANNOT_BE_FOUND"), Location::nullLoc(), JStr::of("Cannot find source file for module %s"), J::new(vec![Object::of(name.clone())]))?));
+                } else {
+                    return Err(JThrow::AbortException((errors.clone()).addMessage(ErrorCode::of("MODULE_FILE_CANNOT_BE_FOUND"), Location::moduleLocation((self.jread(|o| o.nextExtenderOrInstancerModule.clone())).getName()?), JStr::of("Cannot find source file for module %s imported in module %s."), J::new(vec![Object::of(name.clone()), Object::of((self.jread(|o| o.nextExtenderOrInstancerModule.clone())).getName()?)]))?));
+                }
+            }
+        }
+        let _ = (parseUnit.clone()).parseFile(errors.clone(), firstCall, name.clone(), self.jread(|o| o.rootParseUnit.clone()), out.clone())?;
+        return Ok(parseUnit.clone());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn calculateDependencies(&self, mut currentParseUnit: J<ParseUnit>) -> JResult<()> {
+        let mut extendees: J<Vector<J<ParseUnit>>> = (currentParseUnit.clone()).getExtendees()?;
+        let mut instancees: J<Vector<J<ParseUnit>>> = (currentParseUnit.clone()).getInstancees()?;
+        {
+            let mut i: i32 = 0i32;
+            'loop2: loop {
+                if !((i < (extendees.clone()).size())) { break; }
+                'forbody3: {
+                    let _ = self.calculateDependencies((extendees.clone()).elementAt(i))?;
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        {
+            let mut i: i32 = 0i32;
+            'loop4: loop {
+                if !((i < (instancees.clone()).size())) { break; }
+                'forbody5: {
+                    let _ = self.calculateDependencies((instancees.clone()).elementAt(i))?;
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        if !((self.jread(|o| o.semanticAnalysisVector.clone())).contains((currentParseUnit.clone()).getName()?)) {
+            let _ = (self.jread(|o| o.semanticAnalysisVector.clone())).addElement((currentParseUnit.clone()).getName()?);
+        }
+        return Ok(());
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn pathToString(&self, mut path: J<Vector<J<ParseUnit>>>) -> JResult<JStr> {
+        let mut ret: JStr = JStr::of("");
+        {
+            let mut i: i32 = 0i32;
+            'loop6: loop {
+                if !((i < (path.clone()).size())) { break; }
+                'forbody7: {
+                    { let __v: JStr = concat(&ret.clone(), &concat(&((path.clone()).elementAt(i)).getFileName()?, &JStr::of(" --> "))); ret = __v; };
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        return Ok(concat(&ret.clone(), &((path.clone()).elementAt(0i32)).getFileName()?));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn nonCircularityTest(&self, mut parseUnit: J<ParseUnit>, mut errors: J<Errors>) -> JResult<()> {
+        let mut alreadyVisited: J<HashSet<J<ParseUnit>>> = HashSet::new_0();
+        let mut circularPath: J<Vector<J<ParseUnit>>> = Vector::new_0();
+        let _ = (circularPath.clone()).addElement(parseUnit.clone());
+        let _ = self.nonCircularityBody(parseUnit.clone(), parseUnit.clone(), errors.clone(), alreadyVisited.clone(), circularPath.clone())?;
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn nonCircularityBody(&self, mut parseUnit: J<ParseUnit>, mut candidate: J<ParseUnit>, mut errors: J<Errors>, mut alreadyVisited: J<HashSet<J<ParseUnit>>>, mut circularPath: J<Vector<J<ParseUnit>>>) -> JResult<()> {
+        if (alreadyVisited.clone()).contains(candidate.clone()) {
+            return Ok(());
+        }
+        let _ = (alreadyVisited.clone()).add(candidate.clone());
+        let mut referencees: J<Vector<J<ParseUnit>>> = (candidate.clone()).getExtendees()?;
+        let _ = (referencees.clone()).appendNoRepeats((candidate.clone()).getInstancees()?);
+        {
+            let mut i: i32 = 0i32;
+            'loop8: loop {
+                if !((i < (referencees.clone()).size())) { break; }
+                'forbody9: {
+                    let mut referencee: J<ParseUnit> = (referencees.clone()).elementAt(i);
+                    if (referencee.clone()).same(&parseUnit.clone()) {
+                        return Err(JThrow::AbortException((errors.clone()).addMessage(ErrorCode::of("MODULE_DEPENDENCIES_ARE_CIRCULAR"), Location::nullLoc(), JStr::of("Circular dependency among .tla files; dependency cycle is:\n\n  %s"), J::new(vec![Object::of(self.pathToString(circularPath.clone())?)]))?));
+                    } else {
+                        let _ = (circularPath.clone()).addElement(referencee.clone());
+                        let _ = self.nonCircularityBody(parseUnit.clone(), referencee.clone(), errors.clone(), alreadyVisited.clone(), circularPath.clone())?;
+                        let _ = (circularPath.clone()).removeElementAt(((circularPath.clone()).size()).wrapping_sub(1i32));
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        return Ok(());
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn findNextUnresolvedExtention(&self, mut currentModule: J<ModulePointer>) -> JResult<bool> {
+        let mut alreadyVisited: J<HashSet<J<ModulePointer>>> = HashSet::new_0();
+        return Ok(self.findNextUnresolvedExtentionBody(currentModule.clone(), alreadyVisited.clone())?);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn findNextUnresolvedExtentionBody(&self, mut currentModule: J<ModulePointer>, mut alreadyVisited: J<HashSet<J<ModulePointer>>>) -> JResult<bool> {
+        if (alreadyVisited.clone()).contains(currentModule.clone()) {
+            { let __v: bool = false; self.jget_mut().extentionFound = __v; };
+            return Ok(false);
+        }
+        let _ = (alreadyVisited.clone()).add(currentModule.clone());
+        let mut currentContext: J<ModuleContext> = (currentModule.clone()).getContext()?;
+        let mut extendees: J<Vector<JStr>> = (currentModule.clone()).getNamesOfModulesExtended()?;
+        let mut instancees: J<Vector<JStr>> = (currentModule.clone()).getNamesOfModulesInstantiated()?;
+        {
+            let mut i: i32 = 0i32;
+            'loop10: loop {
+                if !((i < (extendees.clone()).size())) { break; }
+                'forbody11: {
+                    if ((currentContext.clone()).resolve((extendees.clone()).elementAt(i))?).is_null() {
+                        { let __v: JStr = (extendees.clone()).elementAt(i); self.jget_mut().nextParseUnitName = __v; };
+                        { let __v: J<ModulePointer> = currentModule.clone(); self.jget_mut().nextExtenderOrInstancerModule = __v; };
+                        { let __v: bool = true; self.jget_mut().extentionFound = __v; };
+                        return Ok(true);
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        {
+            let mut i: i32 = 0i32;
+            'loop12: loop {
+                if !((i < (extendees.clone()).size())) { break; }
+                'forbody13: {
+                    if self.findNextUnresolvedExtentionBody((currentContext.clone()).resolve((extendees.clone()).elementAt(i))?, alreadyVisited.clone())? {
+                        { let __v: bool = true; self.jget_mut().extentionFound = __v; };
+                        return Ok(true);
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        {
+            let mut i: i32 = 0i32;
+            'loop14: loop {
+                if !((i < (instancees.clone()).size())) { break; }
+                'forbody15: {
+                    if !((currentContext.clone()).resolve((instancees.clone()).elementAt(i))?).is_null() {
+                        if self.findNextUnresolvedExtentionBody((currentContext.clone()).resolve((instancees.clone()).elementAt(i))?, alreadyVisited.clone())? {
+                            { let __v: bool = true; self.jget_mut().extentionFound = __v; };
+                            return Ok(true);
+                        }
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        let mut innerModules: J<Vector<J<ModulePointer>>> = (currentModule.clone()).getDirectInnerModules()?;
+        {
+            let mut i: i32 = 0i32;
+            'loop16: loop {
+                if !((i < (innerModules.clone()).size())) { break; }
+                'forbody17: {
+                    if self.findNextUnresolvedExtentionBody((innerModules.clone()).elementAt(i), alreadyVisited.clone())? {
+                        { let __v: bool = true; self.jget_mut().extentionFound = __v; };
+                        return Ok(true);
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        { let __v: bool = false; self.jget_mut().extentionFound = __v; };
+        return Ok(false);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn findNextUnresolvedInstantiation(&self, mut currentModule: J<ModulePointer>) -> JResult<bool> {
+        let mut alreadyVisited: J<HashSet<J<ModulePointer>>> = HashSet::new_0();
+        return Ok(self.findNextUnresolvedInstantiationBody(currentModule.clone(), alreadyVisited.clone())?);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn instanceResolvesToInternalModule(&self, mut currentModule: J<ModulePointer>, mut instanceeName: JStr) -> JResult<bool> {
+        let mut body: J<SyntaxTreeNode> = (currentModule.clone()).getBody()?;
+        let mut internalModulesSeen: J<HashSet<JStr>> = HashSet::new_0();
+        {
+            let mut i: i32 = 0i32;
+            'loop18: loop {
+                if !((i < (body.clone()).heirs()?.length())) { break; }
+                'forbody19: {
+                    let mut def: J<SyntaxTreeNode> = (body.clone()).heirs()?.at(i);
+                    if (def.clone()).getImage()?.equals(&JStr::of("N_Module")) {
+                        let mut innerModuleName: JStr = (((def.clone()).heirs()?.at(0i32)).heirs()?.at(1i32)).getImage()?;
+                        let _ = (internalModulesSeen.clone()).add(innerModuleName.clone());
+                    } else {
+                        if (def.clone()).getImage()?.equals(&JStr::of("N_Instance")) {
+                            let mut instanceHeirs: JArr<J<SyntaxTreeNode>> = (def.clone()).heirs()?;
+                            let mut nonLocalInstanceNodeIX: i32 = 0;
+                            if (instanceHeirs.clone().at(0i32)).getImage()?.equals(&JStr::of("LOCAL")) {
+                                { let __v: i32 = 1i32; nonLocalInstanceNodeIX = __v; };
+                            } else {
+                                { let __v: i32 = 0i32; nonLocalInstanceNodeIX = __v; };
+                            }
+                            let mut instanceModuleName: JStr = ((instanceHeirs.clone().at(nonLocalInstanceNodeIX)).heirs()?.at(1i32)).getImage()?;
+                            if instanceModuleName.clone().equals(&instanceeName.clone()) {
+                                return Ok((internalModulesSeen.clone()).contains(instanceeName.clone()));
+                            }
+                        } else {
+                            if (def.clone()).getImage()?.equals(&JStr::of("N_ModuleDefinition")) {
+                                let mut instanceHeirs: JArr<J<SyntaxTreeNode>> = (def.clone()).heirs()?;
+                                let mut nonLocalInstanceNodeIX: i32 = 0;
+                                if (instanceHeirs.clone().at(0i32)).getImage()?.equals(&JStr::of("LOCAL")) {
+                                    { let __v: i32 = 3i32; nonLocalInstanceNodeIX = __v; };
+                                } else {
+                                    { let __v: i32 = 2i32; nonLocalInstanceNodeIX = __v; };
+                                }
+                                let mut instanceModuleName: JStr = ((instanceHeirs.clone().at(nonLocalInstanceNodeIX)).heirs()?.at(1i32)).getImage()?;
+                                if instanceModuleName.clone().equals(&instanceeName.clone()) {
+                                    return Ok((internalModulesSeen.clone()).contains(instanceeName.clone()));
+                                }
+                            }
+                        }
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        return Ok(false);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn findNextUnresolvedInstantiationBody(&self, mut currentModule: J<ModulePointer>, mut alreadyVisited: J<HashSet<J<ModulePointer>>>) -> JResult<bool> {
+        if (alreadyVisited.clone()).contains(currentModule.clone()) {
+            { let __v: bool = false; self.jget_mut().instantiationFound = __v; };
+            return Ok(false);
+        }
+        let _ = (alreadyVisited.clone()).add(currentModule.clone());
+        let mut currentContext: J<ModuleContext> = (currentModule.clone()).getContext()?;
+        let mut extendees: J<Vector<JStr>> = (currentModule.clone()).getNamesOfModulesExtended()?;
+        let mut instancees: J<Vector<JStr>> = (currentModule.clone()).getNamesOfModulesInstantiated()?;
+        {
+            let mut i: i32 = 0i32;
+            'loop20: loop {
+                if !((i < (instancees.clone()).size())) { break; }
+                'forbody21: {
+                    if ((currentContext.clone()).resolve((instancees.clone()).elementAt(i))?).is_null() {
+                        if !(self.instanceResolvesToInternalModule(currentModule.clone(), (instancees.clone()).elementAt(i))?) {
+                            { let __v: JStr = (instancees.clone()).elementAt(i); self.jget_mut().nextParseUnitName = __v; };
+                            { let __v: J<ModulePointer> = currentModule.clone(); self.jget_mut().nextExtenderOrInstancerModule = __v; };
+                            { let __v: bool = true; self.jget_mut().instantiationFound = __v; };
+                            return Ok(true);
+                        }
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        {
+            let mut i: i32 = 0i32;
+            'loop22: loop {
+                if !((i < (extendees.clone()).size())) { break; }
+                'forbody23: {
+                    if self.findNextUnresolvedInstantiationBody((currentContext.clone()).resolve((extendees.clone()).elementAt(i))?, alreadyVisited.clone())? {
+                        { let __v: bool = true; self.jget_mut().instantiationFound = __v; };
+                        return Ok(true);
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        {
+            let mut i: i32 = 0i32;
+            'loop24: loop {
+                if !((i < (instancees.clone()).size())) { break; }
+                'forbody25: {
+                    if !((currentContext.clone()).resolve((instancees.clone()).elementAt(i))?).is_null() {
+                        if self.findNextUnresolvedInstantiationBody((currentContext.clone()).resolve((instancees.clone()).elementAt(i))?, alreadyVisited.clone())? {
+                            { let __v: bool = true; self.jget_mut().instantiationFound = __v; };
+                            return Ok(true);
+                        }
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        let mut innerModules: J<Vector<J<ModulePointer>>> = (currentModule.clone()).getDirectInnerModules()?;
+        {
+            let mut i: i32 = 0i32;
+            'loop26: loop {
+                if !((i < (innerModules.clone()).size())) { break; }
+                'forbody27: {
+                    if self.findNextUnresolvedInstantiationBody((innerModules.clone()).elementAt(i), alreadyVisited.clone())? {
+                        { let __v: bool = true; self.jget_mut().instantiationFound = __v; };
+                        return Ok(true);
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        { let __v: bool = false; self.jget_mut().instantiationFound = __v; };
+        return Ok(false);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn directlyExtends(&self, mut mod1: J<ModulePointer>, mut mod2: J<ModulePointer>) -> JResult<bool> {
+        let mut mod1Rels: J<ModuleRelatives> = (mod1.clone()).getRelatives()?;
+        let mut extendees: J<Vector<JStr>> = (mod1Rels.clone()).jread(|o| o.directlyExtendedModuleNames.clone());
+        let mut mod1Context: J<ModuleContext> = (mod1Rels.clone()).jread(|o| o.context.clone());
+        {
+            let mut i: i32 = 0i32;
+            'loop28: loop {
+                if !((i < (extendees.clone()).size())) { break; }
+                'forbody29: {
+                    if ((mod1Context.clone()).resolve((extendees.clone()).elementAt(i))?).same(&mod2.clone()) {
+                        return Ok(true);
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        return Ok(false);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getModulesIndirectlyExtending(&self, mut module: J<ModulePointer>) -> JResult<J<Vector<J<ModulePointer>>>> {
+        let mut extenders: J<Vector<J<ModulePointer>>> = Vector::new_0();
+        let _ = (extenders.clone()).addElement(module.clone());
+        let mut additions: bool = true;
+        let mut lastAdditionsStart: i32 = 0i32;
+        let mut lastAdditionsEnd: i32 = (extenders.clone()).size();
+        'loop30: while additions {
+            { let __v: bool = false; additions = __v; };
+            {
+                let mut i: i32 = lastAdditionsStart;
+                'loop31: loop {
+                    if !((i < lastAdditionsEnd)) { break; }
+                    'forbody32: {
+                        let mut enumModules: J<Enumeration<J<ModulePointer>>> = self.getModules()?;
+                        'loop33: while (enumModules.clone()).hasMoreElements() {
+                            let mut modPointer: J<ModulePointer> = (enumModules.clone()).nextElement();
+                            if self.directlyExtends(modPointer.clone(), (extenders.clone()).elementAt(i))? {
+                                if !(additions) {
+                                    { let __v: i32 = lastAdditionsEnd; lastAdditionsStart = __v; };
+                                }
+                                let _ = (extenders.clone()).addElement(modPointer.clone());
+                                { let __v: bool = true; additions = __v; };
+                            }
+                        }
+                        { let __v: i32 = lastAdditionsEnd; lastAdditionsStart = __v; };
+                        { let __v: i32 = (extenders.clone()).size(); lastAdditionsEnd = __v; };
+                    }
+                    { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+                }
+            }
+        }
+        return Ok(extenders.clone());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn resolveNamesBetweenSpecAndInstantiation(&self, mut instancer: J<ModulePointer>, mut instancee: J<ParseUnit>) -> JResult<()> {
+        let mut instancerContext: J<ModuleContext> = ((instancer.clone()).getRelatives()?).jread(|o| o.context.clone());
+        let _ = (instancerContext.clone()).bindIfNotBound((instancee.clone()).getName()?, (instancee.clone()).getRootModule()?)?;
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn resolveNamesBetweenSpecAndExtention(&self, mut extender: J<ModulePointer>, mut extendee: J<ParseUnit>) -> JResult<()> {
+        let mut extenderContext: J<ModuleContext> = ((extender.clone()).getRelatives()?).jread(|o| o.context.clone());
+        let _ = (extenderContext.clone()).bindIfNotBound((extendee.clone()).getName()?, (extendee.clone()).getRootModule()?)?;
+        let mut modulesIndirectlyExtending: J<Vector<J<ModulePointer>>> = self.getModulesIndirectlyExtending(extender.clone())?;
+        {
+            let mut i: i32 = 0i32;
+            'loop34: loop {
+                if !((i < (modulesIndirectlyExtending.clone()).size())) { break; }
+                'forbody35: {
+                    let _ = self.resolveNamesBetweenModuleAndExtention((modulesIndirectlyExtending.clone()).elementAt(i), extendee.clone())?;
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn resolveNamesBetweenModuleAndExtention(&self, mut extenderModule: J<ModulePointer>, mut extendeeParseUnit: J<ParseUnit>) -> JResult<()> {
+        let mut extenderRelatives: J<ModuleRelatives> = (extenderModule.clone()).getRelatives()?;
+        let mut extenderContext: J<ModuleContext> = (extenderRelatives.clone()).jread(|o| o.context.clone());
+        let mut instantiatedNames: J<Vector<JStr>> = (extenderRelatives.clone()).jread(|o| o.directlyInstantiatedModuleNames.clone());
+        let mut extendedNames: J<Vector<JStr>> = (extenderRelatives.clone()).jread(|o| o.directlyExtendedModuleNames.clone());
+        {
+            let mut i: i32 = 0i32;
+            'loop36: loop {
+                if !((i < (extendedNames.clone()).size())) { break; }
+                'forbody37: {
+                    let mut extendedName: JStr = (extendedNames.clone()).elementAt(i);
+                    let mut extendeeInnerModules: J<Vector<J<ModulePointer>>> = ((extendeeParseUnit.clone()).getRootModule()?).getDirectInnerModules()?;
+                    {
+                        let mut j: i32 = 0i32;
+                        'loop38: loop {
+                            if !((j < (extendeeInnerModules.clone()).size())) { break; }
+                            'forbody39: {
+                                let mut extendeeInnerModule: J<ModulePointer> = (extendeeInnerModules.clone()).elementAt(j);
+                                let mut extendeeInnerName: JStr = (extendeeInnerModule.clone()).getName()?;
+                                if extendedName.clone().equals(&extendeeInnerName.clone()) {
+                                    let _ = (extenderContext.clone()).bindIfNotBound(extendedName.clone(), extendeeInnerModule.clone())?;
+                                    break 'loop38;
+                                }
+                            }
+                            { let __v: i32 = (j).wrapping_add(1i32); j = __v; };
+                        }
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        {
+            let mut i: i32 = 0i32;
+            'loop40: loop {
+                if !((i < (instantiatedNames.clone()).size())) { break; }
+                'forbody41: {
+                    let mut instanceName: JStr = (instantiatedNames.clone()).elementAt(i);
+                    let mut extendeeInnerModules: J<Vector<J<ModulePointer>>> = ((extendeeParseUnit.clone()).getRootModule()?).getDirectInnerModules()?;
+                    {
+                        let mut j: i32 = 0i32;
+                        'loop42: loop {
+                            if !((j < (extendeeInnerModules.clone()).size())) { break; }
+                            'forbody43: {
+                                let mut extendeeInnerModule: J<ModulePointer> = (extendeeInnerModules.clone()).elementAt(j);
+                                let mut extendeeInnerName: JStr = (extendeeInnerModule.clone()).getName()?;
+                                if instanceName.clone().equals(&extendeeInnerName.clone()) {
+                                    let _ = (extenderContext.clone()).bindIfNotBound(instanceName.clone(), extendeeInnerModule.clone())?;
+                                    break 'loop42;
+                                }
+                            }
+                            { let __v: i32 = (j).wrapping_add(1i32); j = __v; };
+                        }
+                    }
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        let mut extenderInnerModules: J<Vector<J<ModulePointer>>> = (extenderRelatives.clone()).jread(|o| o.directInnerModules.clone());
+        {
+            let mut i: i32 = 0i32;
+            'loop44: loop {
+                if !((i < (extenderInnerModules.clone()).size())) { break; }
+                'forbody45: {
+                    let mut nextInner: J<ModulePointer> = (extenderInnerModules.clone()).elementAt(i);
+                    let _ = self.resolveNamesBetweenModuleAndExtention(nextInner.clone(), extendeeParseUnit.clone())?;
+                }
+                { let __v: i32 = (i).wrapping_add(1i32); i = __v; };
+            }
+        }
+        #[allow(unreachable_code)]
+        Ok(())
+    }
+    pub(crate) fn loadSpec_3(&self, mut rootExternalModuleName: JStr, mut errors: J<Errors>, mut out: J<SanyOutput>) -> JResult<bool> {
+        return Ok(self.loadSpec_4(rootExternalModuleName.clone(), errors.clone(), false, out.clone())?);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn loadSpec_4(&self, mut rootExternalModuleName: JStr, mut errors: J<Errors>, mut validateParseUnits: bool, mut out: J<SanyOutput>) -> JResult<bool> {
+        { let __v: J<ParseUnit> = self.findOrCreateParsedUnit(rootExternalModuleName.clone(), errors.clone(), true, out.clone())?; self.jget_mut().rootParseUnit = __v; };
+        { let __v: J<ModulePointer> = (self.jread(|o| o.rootParseUnit.clone())).getRootModule()?; self.jget_mut().rootModule = __v; };
+        if validateParseUnits {
+            let _ = self.validateParseUnit(self.jread(|o| o.rootParseUnit.clone()), errors.clone())?;
+        }
+        let mut nextExtentionOrInstantiationParseUnit: J<ParseUnit> = JNull::null();
+        'loop46: while (self.findNextUnresolvedExtention(self.jread(|o| o.rootModule.clone()))? || self.findNextUnresolvedInstantiation(self.jread(|o| o.rootModule.clone()))?) {
+            if ((self.jread(|o| o.parseUnitContext.clone())).get(self.jread(|o| o.nextParseUnitName.clone()))).is_null() {
+                { let __v: J<ParseUnit> = self.findOrCreateParsedUnit(self.jread(|o| o.nextParseUnitName.clone()), errors.clone(), false, out.clone())?; nextExtentionOrInstantiationParseUnit = __v; };
+            } else {
+                { let __v: J<ParseUnit> = (self.jread(|o| o.parseUnitContext.clone())).get(self.jread(|o| o.nextParseUnitName.clone())); nextExtentionOrInstantiationParseUnit = __v; };
+            }
+            let mut extenderOrInstancerParseUnit: J<ParseUnit> = (self.jread(|o| o.nextExtenderOrInstancerModule.clone())).getParseUnit()?;
+            if self.jread(|o| o.extentionFound) {
+                if validateParseUnits {
+                    let _ = self.validateParseUnit(nextExtentionOrInstantiationParseUnit.clone(), errors.clone())?;
+                }
+                let _ = (extenderOrInstancerParseUnit.clone()).addExtendee(nextExtentionOrInstantiationParseUnit.clone())?;
+                let _ = (nextExtentionOrInstantiationParseUnit.clone()).addExtendedBy(extenderOrInstancerParseUnit.clone())?;
+            }
+            if self.jread(|o| o.instantiationFound) {
+                let _ = (extenderOrInstancerParseUnit.clone()).addInstancee(nextExtentionOrInstantiationParseUnit.clone())?;
+                let _ = (nextExtentionOrInstantiationParseUnit.clone()).addInstancedBy(extenderOrInstancerParseUnit.clone())?;
+            }
+            let _ = self.nonCircularityTest(nextExtentionOrInstantiationParseUnit.clone(), errors.clone())?;
+            if self.jread(|o| o.extentionFound) {
+                let _ = self.resolveNamesBetweenSpecAndExtention(self.jread(|o| o.nextExtenderOrInstancerModule.clone()), nextExtentionOrInstantiationParseUnit.clone())?;
+            }
+            if self.jread(|o| o.instantiationFound) {
+                let _ = self.resolveNamesBetweenSpecAndInstantiation(self.jread(|o| o.nextExtenderOrInstancerModule.clone()), nextExtentionOrInstantiationParseUnit.clone())?;
+            }
+        }
+        let _ = self.calculateDependencies(self.jread(|o| o.rootParseUnit.clone()))?;
+        return Ok(true);
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getResolver(&self) -> JResult<J<FilenameToStream>> {
+        return Ok(self.jread(|o| o.resolver.clone()));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getRootParseUnit(&self) -> JResult<J<ParseUnit>> {
+        return Ok(((self.clone()).jread(|o| o.parseUnitContext.clone())).get((self.clone()).getName()?));
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getConstraints(&self) -> JResult<J<ArrayList<J<SemanticNodeObj>>>> {
+        return Ok(ArrayList::new_0());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getActionConstraints(&self) -> JResult<J<ArrayList<J<SemanticNodeObj>>>> {
+        return Ok(ArrayList::new_0());
+        #[allow(unreachable_code)]
+        unreachable!("javac: missing return")
+    }
+    pub(crate) fn getView(&self) -> JResult<J<SemanticNodeObj>> {
+        return Ok(JNull::null());
         #[allow(unreachable_code)]
         unreachable!("javac: missing return")
     }
@@ -52733,6 +54201,174 @@ impl JToString for J<ModuleName> {
     }
 }
 
+impl JValue for J<ModuleContext> {
+    fn java_instance_of(&self, class: &str) -> bool {
+        !self.is_null() && (class == "ModuleContext" || class == "Object")
+    }
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() { 0 } else { self.identity_hash() }
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.same(other)
+    }
+}
+
+impl JToString for J<ModuleContext> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { self.toString().expect("toString").java_string() }
+    }
+}
+
+impl JValue for J<ModulePointer> {
+    fn java_instance_of(&self, class: &str) -> bool {
+        !self.is_null() && (class == "ModulePointer" || class == "Object")
+    }
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() { 0 } else { self.identity_hash() }
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.same(other)
+    }
+}
+
+impl JToString for J<ModulePointer> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { self.toString().expect("toString").java_string() }
+    }
+}
+
+impl JValue for J<ModuleRelationships> {
+    fn java_instance_of(&self, class: &str) -> bool {
+        !self.is_null() && (class == "ModuleRelationships" || class == "Object")
+    }
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() { 0 } else { self.identity_hash() }
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.same(other)
+    }
+}
+
+impl JToString for J<ModuleRelationships> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { self.toString().expect("toString").java_string() }
+    }
+}
+
+impl JValue for J<ModuleRelatives> {
+    fn java_instance_of(&self, class: &str) -> bool {
+        !self.is_null() && (class == "ModuleRelatives" || class == "Object")
+    }
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() { 0 } else { self.identity_hash() }
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.same(other)
+    }
+}
+
+impl JToString for J<ModuleRelatives> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { self.toString().expect("toString").java_string() }
+    }
+}
+
+impl JValue for J<ParseUnit> {
+    fn java_instance_of(&self, class: &str) -> bool {
+        !self.is_null() && (class == "ParseUnit" || class == "Object")
+    }
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() { 0 } else { self.identity_hash() }
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.same(other)
+    }
+}
+
+impl JToString for J<ParseUnit> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { self.toString().expect("toString").java_string() }
+    }
+}
+
+impl JValue for J<ParseUnitRelatives> {
+    fn java_instance_of(&self, class: &str) -> bool {
+        !self.is_null() && (class == "ParseUnitRelatives" || class == "Object")
+    }
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() { 0 } else { self.identity_hash() }
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.same(other)
+    }
+}
+
+impl JToString for J<ParseUnitRelatives> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { self.toString().expect("toString").java_string() }
+    }
+}
+
+impl JValue for J<SpecObj> {
+    fn java_instance_of(&self, class: &str) -> bool {
+        !self.is_null() && (class == "SpecObj" || class == "Object")
+    }
+    fn is_java_null(&self) -> bool {
+        self.is_null()
+    }
+    fn object_string(&self) -> String {
+        self.java_string()
+    }
+    fn java_hash(&self) -> i32 {
+        if self.is_null() { 0 } else { self.identity_hash() }
+    }
+    fn java_equals(&self, other: &Self) -> bool {
+        self.same(other)
+    }
+}
+
+impl JToString for J<SpecObj> {
+    fn java_string(&self) -> String {
+        if self.is_null() { "null".into() } else { object_to_string("SpecObj", self.identity_hash()) }
+    }
+}
+
 /// `Class.getName()` of a translated class, from its simple name.
 pub(crate) fn java_class_name(simple: &str) -> &'static str {
     match simple {
@@ -52802,6 +54438,13 @@ pub(crate) fn java_class_name(simple: &str) -> &'static str {
         "TheoremNode" => "tla2sany.semantic.TheoremNode",
         "ThmOrAssumpDefNode" => "tla2sany.semantic.ThmOrAssumpDefNode",
         "UseOrHideNode" => "tla2sany.semantic.UseOrHideNode",
+        "ModuleContext" => "tla2sany.modanalyzer.ModuleContext",
+        "ModulePointer" => "tla2sany.modanalyzer.ModulePointer",
+        "ModuleRelationships" => "tla2sany.modanalyzer.ModuleRelationships",
+        "ModuleRelatives" => "tla2sany.modanalyzer.ModuleRelatives",
+        "ParseUnit" => "tla2sany.modanalyzer.ParseUnit",
+        "ParseUnitRelatives" => "tla2sany.modanalyzer.ParseUnitRelatives",
+        "SpecObj" => "tla2sany.modanalyzer.SpecObj",
         "LookaheadSuccess" => "tla2sany.parser.TLAplusParser$LookaheadSuccess",
         "JJCalls" => "tla2sany.parser.TLAplusParser$JJCalls",
         "BuiltInOperator" => "tla2sany.semantic.BuiltInOperators$BuiltInOperator",
