@@ -134,6 +134,14 @@ const TRANSLATED: &[(&str, &str)] = &[
     ("TheoremNode", "tla2sany/semantic/TheoremNode.java"),
     ("ThmOrAssumpDefNode", "tla2sany/semantic/ThmOrAssumpDefNode.java"),
     ("UseOrHideNode", "tla2sany/semantic/UseOrHideNode.java"),
+    // Finding, parsing and ordering a spec's modules.
+    ("ModuleContext", "tla2sany/modanalyzer/ModuleContext.java"),
+    ("ModulePointer", "tla2sany/modanalyzer/ModulePointer.java"),
+    ("ModuleRelationships", "tla2sany/modanalyzer/ModuleRelationships.java"),
+    ("ModuleRelatives", "tla2sany/modanalyzer/ModuleRelatives.java"),
+    ("ParseUnit", "tla2sany/modanalyzer/ParseUnit.java"),
+    ("ParseUnitRelatives", "tla2sany/modanalyzer/ParseUnitRelatives.java"),
+    ("SpecObj", "tla2sany/modanalyzer/SpecObj.java"),
 ];
 
 /// Members implemented by hand in `tlars-sany/src/parser/support.rs`, by signature key.
@@ -148,11 +156,17 @@ const HAND_WRITTEN: &[(&str, &str)] = &[
     ("SemanticNode", "walkChildren(ChildrenVisitor)"),
     ("SemanticNode", "isDefinedWith(SemanticNode)"),
     ("SemanticNode", "substituteFor(OpDefNode,OpDefNode)"),
+    // Debug output of the syntax tree (`-DTLA-Print`); its only callers are patched out.
+    ("ParseUnit", "writeParseTreeToFile(boolean,Errors,SanyOutput)"),
+    // Runs the PlusCal translator's validator, which is not translated yet.
+    ("SpecObj", "validateParseUnit(ParseUnit,Errors)"),
 ];
 
 /// Edits to the Java sources before translation, each an exact text that must occur once in
-/// its file: stream pipelines and lambdas rewritten as the loops they mean, and a parameter
-/// typed by an interface the translation does not model. `(file, before, after, why)`.
+/// its file: stream pipelines and lambdas rewritten as the loops they mean, parameters typed
+/// by interfaces the translation does not model, and file handling reduced to the shims'.
+/// A `before` of the form `start⋯end` stands for the text from `start` through the first
+/// `end` after it. `(file, before, after, why)`.
 const PATCHES: &[(&str, &str, &str, &str)] = &[
     (
         "tla2sany/semantic/ModuleNode.java",
@@ -256,6 +270,48 @@ const PATCHES: &[(&str, &str, &str, &str)] = &[
         "for (int i = 1; i < result.size(); i++) { final SymbolNode x = result.get(i); int j = i - 1; while (j >= 0 && result.get(j).compareTo(x) > 0) { result.set(j + 1, result.get(j)); j--; } result.set(j + 1, x); }",
         "Collections.sort is stable; so is this insertion sort",
     ),
+    (
+        "tla2sany/modanalyzer/ParseUnit.java",
+        "nis.sourceFile().exists() &&\n\t    parseStamp > nis.sourceFile().lastModified());",
+        "nis.exists() && parseStamp != 0);",
+        "files are not modified while SANY runs, so a unit parsed once is up to date",
+    ),
+    (
+        "tla2sany/modanalyzer/ParseUnit.java",
+        "if (nis == null || !(nis.sourceFile() instanceof TLAFile)) {\n\t\t  return false;\n\t  }\n\t  return ((TLAFile) nis.sourceFile()).isLibraryModule();",
+        "return nis != null && nis.isLibraryModule();",
+        "the resolver's TLAFile is part of the NamedInputStream shim",
+    ),
+    (
+        "tla2sany/modanalyzer/ParseUnit.java",
+        "if (parseStamp > nis.sourceFile().lastModified())\n            return;",
+        "if (parseStamp != 0)\n            return;",
+        "files are not modified while SANY runs, so a unit parsed once is up to date",
+    ),
+    (
+        "tla2sany/modanalyzer/ParseUnit.java",
+        "if (!nis.sourceFile().exists())",
+        "if (!nis.exists())",
+        "the resolver's TLAFile is part of the NamedInputStream shim",
+    ),
+    (
+        "tla2sany/modanalyzer/ParseUnit.java",
+        "        Path absoluteResolvedPath;⋯\"Parsing module %s in file %s\", nis.getModuleName(), absoluteResolvedPath);\n        }",
+        "        out.log(LogLevel.INFO, \"Parsing file %s%s\", nis.absoluteResolvedPath(), nis.originalFilePathSuffix());",
+        "ToolIO's mode is SYSTEM in SANY and TLC; the shim knows where the resolver found the file",
+    ),
+    (
+        "tla2sany/modanalyzer/ParseUnit.java",
+        "        boolean parseSuccess; ⋯// not released \n            }\n        }",
+        "        boolean parseSuccess;\n        parseTree = FileUtil.newParser(out, nis);\n        parseSuccess = parseTree.parse();\n        parseStamp = System.currentTimeMillis();",
+        "the shim reads the whole file up front, so there is no stream to close",
+    ),
+    (
+        "tla2sany/modanalyzer/ParseUnit.java",
+        "        // Use system property to decide whether to \"print\" the parse tree to a file⋯writeParseTreeToFile(false, errors, out);\n        }",
+        "",
+        "-DTLA-Print debug output is not modelled",
+    ),
 ];
 
 /// The source of `file` with its [`PATCHES`] applied.
@@ -263,9 +319,17 @@ fn patched_source(tlc_src: &Path, file: &str) -> Result<String, String> {
     let path = tlc_src.join(file);
     let mut src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     for (f, before, after, why) in PATCHES.iter().filter(|p| p.0 == file) {
-        match src.matches(before).count() {
-            1 => src = src.replacen(before, after, 1),
-            n => return Err(format!("{f}: patch ({why}) matches {n} times: {before:?}")),
+        let (start, end) = before.split_once('\u{22ef}').unwrap_or((before, ""));
+        match src.matches(start).count() {
+            1 => {
+                let from = src.find(start).expect("one match");
+                let to = match src[from + start.len()..].find(end) {
+                    Some(i) => from + start.len() + i + end.len(),
+                    None => return Err(format!("{f}: patch ({why}) has no end {end:?} after {start:?}")),
+                };
+                src.replace_range(from..to, after);
+            }
+            n => return Err(format!("{f}: patch ({why}) matches {n} times: {start:?}")),
         }
     }
     Ok(src)
@@ -275,6 +339,8 @@ fn patched_source(tlc_src: &Path, file: &str) -> Result<String, String> {
 const RAW_OVERRIDES: &[(&str, &str, &str)] = &[
     ("ParseErrors", "loe", "Vector<ParseError>"),
     ("TLAplusParser", "jj_expentries", "Vector<int[]>"),
+    ("ModuleContext", "context", "Hashtable<String, ModulePointer>"),
+    ("ModuleRelationships", "modRelHashtable", "Hashtable<ModulePointer, ModuleRelatives>"),
 ];
 
 fn parse_class(tlc_src: &Path, file: &str, class: &str) -> Result<(ast::ClassHeader, Vec<parse::Member>), String> {

@@ -872,10 +872,10 @@ impl<'t> Parser<'t> {
                     let ty = self.ty_no_dims()?;
                     if self.is_punct("[") {
                         let mut dims = 0;
-                        let mut len = None;
+                        let mut lens = Vec::new();
                         while self.eat_punct("[") {
                             if !self.is_punct("]") {
-                                len = Some(Box::new(self.expr()?));
+                                lens.push(self.expr()?);
                             }
                             self.expect_punct("]")?;
                             dims += 1;
@@ -888,7 +888,7 @@ impl<'t> Parser<'t> {
                         } else {
                             None
                         };
-                        return Ok(Expr::NewArray { ty: Type { dims, ..ty }, len, init });
+                        return Ok(Expr::NewArray { ty: Type { dims, ..ty }, lens, init });
                     }
                     let args = self.args()?;
                     if self.is_punct("{") {

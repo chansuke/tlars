@@ -96,7 +96,8 @@ pub(crate) enum Expr {
     Index(Box<Expr>, Box<Expr>),
     Call { target: Option<Box<Expr>>, name: String, args: Vec<Expr> },
     New { ty: Type, args: Vec<Expr> },
-    NewArray { ty: Type, len: Option<Box<Expr>>, init: Option<Vec<Expr>> },
+    /// `new T[a][b][]...`: the given lengths, outermost first, or an initializer.
+    NewArray { ty: Type, lens: Vec<Expr>, init: Option<Vec<Expr>> },
     ArrayLit(Vec<Expr>),
     Cast(Type, Box<Expr>),
     Unary(&'static str, Box<Expr>),

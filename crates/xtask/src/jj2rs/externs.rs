@@ -26,6 +26,8 @@ class Vector<E>
     size() -> int
     isEmpty() -> boolean
     elements() -> Enumeration<E>
+    contains(E) -> boolean
+    appendNoRepeats(Vector<E>)
 
 class Enumeration<E>
     hasMoreElements() -> boolean
@@ -199,6 +201,27 @@ class SanyOutput
     <init>()
     log(LogLevel, String)
     log(LogLevel, String, Any)
+    log(LogLevel, String, Any, Any)
+
+class NamedInputStream
+    getName() -> String
+    getFileName() -> String
+    getModuleName() -> String
+    exists() -> boolean
+    isLibraryModule() -> boolean
+    absoluteResolvedPath() -> String
+    originalFilePathSuffix() -> String
+
+class FilenameToStream
+    isStandardModule(String) -> boolean
+
+class FileUtil
+    static createNamedInputStream(String, FilenameToStream) -> NamedInputStream
+    static createNamedInputStream(String, FilenameToStream, NamedInputStream) -> NamedInputStream
+    static newParser(SanyOutput, NamedInputStream) -> TLAplusParser throws
+
+class ToolIO
+    static getDefaultResolver() -> FilenameToStream
 
 class LogLevel
     static ERROR: LogLevel

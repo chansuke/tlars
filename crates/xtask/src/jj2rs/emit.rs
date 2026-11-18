@@ -44,6 +44,8 @@ pub(crate) fn class_name(name: &str) -> String {
         "ArrayDeque" => "Deque".into(),
         "StringBuilder" => "StringBuffer".into(),
         "SilentSanyOutput" => "SanyOutput".into(),
+        // `ParseUnit` holds its parser as the `ParseTree` interface, which only it implements.
+        "ParseTree" => "TLAplusParser".into(),
         "Set" => "HashSet".into(),
         "List" | "Collection" => "ArrayList".into(),
         "Map" => "HashMap".into(),
@@ -1064,17 +1066,39 @@ impl<'c> Emitter<'c> {
                 let targs: Vec<T> = ty.args.iter().map(T::of).collect();
                 self.new_object(ty, args, targs)
             }
-            Expr::NewArray { ty, len, init } => {
+            Expr::NewArray { ty, lens, init } => {
                 let t = T::of(ty);
-                match (len, init) {
-                    (_, Some(items)) => (self.array_lit(&t, items), t),
-                    (Some(len), None) => {
-                        let T::Arr(elem) = &t else { unreachable!() };
-                        let n = self.expr_as(len, &T::Int);
-                        (format!("JArr::new_array({n}, {})", elem.default_value()), t)
-                    }
-                    (None, None) => (self.err("array without length".into()), t),
+                if let Some(items) = init {
+                    return (self.array_lit(&t, items), t);
                 }
+                if lens.is_empty() {
+                    return (self.err("array without length".into()), t);
+                }
+                // Java evaluates every length before allocating; each given dimension gets
+                // its own arrays, the rest are null.
+                let mut code = String::from("{ ");
+                for (i, len) in lens.iter().enumerate() {
+                    let n = self.expr_as(len, &T::Int);
+                    code.push_str(&format!("let __d{i}: i32 = {n}; "));
+                }
+                let mut alloc = String::new();
+                let mut levels = Vec::new();
+                let mut cur = &t;
+                for _ in 0..lens.len() {
+                    let T::Arr(elem) = cur else { unreachable!() };
+                    levels.push(elem.as_ref());
+                    cur = elem;
+                }
+                for (i, elem) in levels.iter().enumerate().rev() {
+                    alloc = if i == lens.len() - 1 {
+                        format!("JArr::new_array(__d{i}, {})", elem.default_value())
+                    } else {
+                        format!("JArr::new_array_with(__d{i}, || {alloc})")
+                    };
+                }
+                code.push_str(&alloc);
+                code.push_str(" }");
+                (code, t)
             }
             Expr::ArrayLit(_) => (self.err("bare array literal".into()), T::Null),
             Expr::Cast(ty, x) => {
