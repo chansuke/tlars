@@ -234,8 +234,24 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
   - 解決順は `SimpleFilenameToStream` と同じで、ユーザーディレクトリ、ライブラリパス、標準モジュールの順に探す。標準モジュールは `xtask gen-fidelity` が固定版ソースから `crates/tlars-sany/StandardModules/` に写し、バイナリに埋め込む。TLC と同じく、読む前に `tlc-*` の一時ディレクトリへ書き出す。
   - TLC は jar から読んだ標準モジュールについて `Parsing file <path> (jar:file:...)` と jar の URL を添える。tlars には jar がないので、パスだけを出す (TLC の標準モジュールがファイルシステム上にあるときと同じ形)。
   - 1 ファイルに複数のモジュールを書いた仕様 (`MonolithSpecExtractor`) は Rust で書き直した。
-  - PlusCal の検証 (`SpecObj.validateParseUnit`、`pcal.Validator`) は、PlusCal を含まないモジュール (Validator の `NO_PLUSCAL_EXISTS`) だけを扱い、含むものは `todo!()` にしてある。
-- SANY のドライバ (`SANY.parse`、`frontEndParse`、`frontEndSemanticAnalysis`) は、転写したクラスをつなぐだけなので `parser/driver.rs` に手で書く。リンター (`tla2sany.linter`) はまだ転写しておらず、`doLinting` は `todo!()` になる。意味解析中の `AbortException` について TLC が出す JVM のスタックトレースは、先頭行 (例外の文字列) だけを出す。
+- PlusCal の翻訳検証 (`SpecObj.validateParseUnit`) のために、PlusCal のパーサーと翻訳器 (`pcal` パッケージ) と、それが使う `tla2tex` の `Symbol`、`Misc`、`Debug` も転写する。`pcal.Validator` は内部 enum、正規表現、CRC32 を使う短いつなぎなので `parser/pcal_validator.rs` に手で書く。検査和の正規表現は固定の形なので、Java の `\s` と ASCII の `(?i)` に合わせた一致判定を手で書いた。そのために変換器に足した規則は次のとおり。
+  - ファイル単位の識別子の言い換え (`jj2rs/mod.rs` の `RENAMES`)。PlusCal の `Vector` は `java.util.Vector` で、`contains` と `indexOf` が `equals` で比べる。SANY の `tla2sany.utilities.Vector` (`==` で比べる) と区別するため `JavaVector` と読み替える。`Tokenize` の `Token` は `tla2tex.Token` なので `TexToken` と読み替える。
+  - 型消去する外部クラス (`ERASED_LIBRARY_GENERICS`)。PlusCal は raw な `Vector` と `Vector<T>` を自由に混ぜるので、`JavaVector` は Java と同じく要素を `Object` で持つ 1 つの型にする。要素を返すメソッドは、呼び出し側が期待する型を turbofish で受け取ってキャストする。
+  - 外部クラスと同名の内部クラス (`AST.Assert` と `util.Assert`) は `AST_Assert` と改名し、修飾名から引く。
+  - `Object` は保持する値のクラス名を持ち、`getClass()` を動的に返す。PlusCal は AST の種類を `getClass().equals(...)` で判定するためである。
+  - ファミリーの根が `toString` を持たず、下位クラスだけが持つ場合 (`AST.If` など) は、`toString` を下位クラスごとに振り分ける。
+  - 複数例外の `catch (A | B e)`、`catch (final E e)`、多次元配列、`split` のリテラルの選択肢だけの正規表現。
+  - TLC と一致させられない点: `Character.isLetter`/`isDigit` は、ASCII の外では Rust の `Alphabetic`/`Numeric` で代用している (Java は一般カテゴリ Lu/Ll/Lt/Lm/Lo と Nd)。
+  - PlusCal 翻訳器をプログラムとして使う部分 (`trans.main`、ファイルの読み書き、`-help`) は、検証からは呼ばれないので `todo!()` のままにしてある。
+- リンター (`tla2sany.linter.Linter`) も転写する。ストリームはループに、無名の `ChildrenVisitor` は名前付きのクラスにするパッチを当てる (同じ順序、同じ短絡評価)。
+- SANY のドライバ (`SANY.parse`、`frontEndParse`、`frontEndSemanticAnalysis`、`frontEndLinting`) は、転写したクラスをつなぐだけなので `parser/driver.rs` に手で書く。意味解析中の `AbortException` について TLC が出す JVM のスタックトレースは、先頭行 (例外の文字列) だけを出す。引数のないメッセージは、TLC の `SimpleSanyOutput` と同じく `String.format` を通さずにそのまま出す。
+- 公開 API `tlars_sany::load` は `SpecProcessor.processSpec` の呼び方 (`SanySettings.forExternalCaller`: 厳格な終了コード、全段階あり) で SANY を動かし、成功すれば `graph::SemanticGraph` を返す。
+  - 大きいスタックを持つ専用スレッドで動かす。翻訳したコードの static はスレッドごとなので、1 回の読み込みが新しい JVM と同じ状態から始まる。SANY の出力と `ToolIO` の出力は、TLC と同じ順でチャネル経由で `SanyOut` へ流す。
+  - ルートの名前とユーザーディレクトリは TLC と同じく呼び出し側が決める (TLC は絶対パスのときだけユーザーディレクトリを仕様のディレクトリにする)。
+  - 失敗は `SanyFailed` で返す。`FrontEnd` は `TLC_PARSING_FAILED2`、`Parse`/`Semantic` は記録されたエラー文字列付きの `TLC_PARSING_FAILED`、`Exit` はエラーに昇格した警告の場合にあたる。
+  - 翻訳したオブジェクトのグラフは `parser/freeze.rs` が識別子ごとに 1 つの id を振って arena に写す。`@` (`AtNode`) は自分を含む EXCEPT を指すので、式の id は子をたどる前に予約する。
+  - M0 の設計から次を変えた。組み込み演算子の `OpDefKind::BuiltIn` は値を持たない (演算子は名前で分かり、TLC の演算子コード `BuiltinOp` への対応は評価器が受け持つ)。定理と証明は TLC が評価しないのでグラフに含めない。`Loc` のモジュール名は null を取りうる。
+  - 未実装: `ParameterizedSpecObj` (`-inv` などが根の EXTENDS に加えるモジュール) と `resolve_root_name` (M3)。
 - 外部 API のシグネチャは `xtask` の `jj2rs/externs.rs` に表として書く。表にない呼び出しは出力時のエラーになり、推測で補うことはしない。`jj2rs emit --check` で生成物が最新かを確かめる。
 
 ## Risks
@@ -243,7 +259,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 - jj2rs の snippet 表 (約 300) が扱える量か。M1 冒頭で spike。
   - spike 結果 (2026-11-17): JavaCC 4.0 で生成した 6 ファイル (17,562 行) の全 618 メソッドを Java 部分集合パーサーで AST 化できた (`xtask jj2rs survey`)。手書きは `.jj` 冒頭のヘルパー 19 メソッド (847 行) と semantic action が呼ぶ約 45 の API (SyntaxTreeNode、OperatorStack、JunctionListContext、proof level 等) に限られる。snippet 表方式はやめ、semantic action も同じ変換器で Rust に落とす方針に変更。
   - 実装結果 (2026-11-18): 転写したパーサーは tlaplus/Examples の全 433 モジュールで TLC と一致した (構文木、パースの成否、エラーログ、パース中の intern 列)。比較対象は `tools/golden/ParseGolden.java` の出力で、一致した文字列は構文エラーと字句エラーの文言も含む。
-  - 実装結果 (2026-11-18): 転写した SANY の前段 (読み込み、意味解析、レベル検査) は、tlaplus/Examples の全 433 モジュールをそれぞれ根の仕様として動かしたとき TLC と一致した (終了コード、エラーと警告の文言を含むログ、ToolIO の出力、intern 列、`ExternalModuleTable` の dump、全演算子定義のレベル)。433 件のうち 151 件は TLC でもエラーで終わる仕様である。比較対象は `tools/golden/SemanticGolden.java` の出力で、仕様ごとに JVM を起動する。設定はリンターと PlusCal 検証を切ったもの。
+  - 実装結果 (2026-11-18): 転写した SANY の前段 (読み込み、意味解析、レベル検査) は、tlaplus/Examples の全 433 モジュールをそれぞれ根の仕様として動かしたとき TLC と一致した (終了コード、エラーと警告の文言を含むログ、ToolIO の出力、intern 列、`ExternalModuleTable` の dump、全演算子定義のレベル)。433 件のうち 151 件は TLC でもエラーで終わる仕様である。比較対象は `tools/golden/SemanticGolden.java` の出力で、仕様ごとに JVM を起動する。リンターと PlusCal の翻訳検証も有効にして一致した (PlusCal を含む仕様では翻訳器が実際に動き、その出力も一致する)。`tlars_sany::load` が返すグラフの全モジュールの演算子定義と名前、レベル、コンソール出力も、同じ golden と一致する。
 - 転写したコードは Java のオブジェクトモデル (`Rc<RefCell<_>>` と `JResult`) のまま動くので遅い可能性がある。パースは全 433 モジュールで約 2 秒 (release、TLC は JVM 起動込みで約 2 秒) なので、今は問題にしていない。`SyntaxTreeNode.parent` は `Rc` の循環参照になり、`setParent` を呼ぶと木がリークする。Generator に渡すときに読み替えるか、`Weak` にする。
 - `Arc` トラフィックが JIT 済み TLC に対し許容できるか。M3.5 で計測。
 - stack overflow の深さは `-Xss2m` の frame サイズ依存で一致させられない見込み。
@@ -253,7 +269,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 | マイルストーン | 内容 | 合格条件 |
 |---|---|---|
 | M0 | `tlars-java` (`String.hashCode`、Hashtable、HashSet 順、Random、Double.toString、BigDecimal、DecimalFormat、SimpleDateFormat、数値パース)、FP64、`tlars-msg` (全 251 コード)、CLI、`Env` (cfg と pprint はそれぞれ M1 後と M2 へ移動) | JDK 21 と bc1b506 の TLC から生成した golden (完了) |
-| M1 | jj2rs (parser + TokenManager)、Generator、level、SANY の出力文 | syntax/modules/errors 約 1.8k 件。Hashtable 順と intern 順をここで検証する。パーサー、読み込み、意味解析、レベル検査は完了 (Examples 全 433 モジュールで TLC と一致)。残りはリンターと PlusCal 検証 |
+| M1 | jj2rs (parser + TokenManager)、Generator、level、SANY の出力文 | syntax/modules/errors 約 1.8k 件。Hashtable 順と intern 順をここで検証する。パーサー、読み込み、意味解析、レベル検査、リンター、PlusCal の翻訳検証、`load` は完了 (Examples 全 433 モジュールで TLC と一致) |
 | M2 | 全値クラス (order/fp/print/enumerate)、定数評価 | expressions 984 件 × 5 context |
 | M3 | 1 worker の BFS、SpecProcessor、action 分割、trace 再生、ALIAS/VIEW/SYMMETRY | checker と standard |
 | M3.5 | **性能ゲート** (新設、judge の指摘による) | 大きめの spec (Paxos 等) で TLC との速度比を計測。許容できなければ表現を見直す |
