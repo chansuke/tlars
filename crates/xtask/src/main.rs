@@ -6,16 +6,14 @@
 //!                                  synonyms, SyntaxTreeConstants names, StandardModules/*.tla,
 //!                                  FP64.Polys, EC/MP catalogue cross-check
 //!   xtask bench run|compare      end-to-end benchmarks over tlaplus/Examples (see bench.rs)
+//!   xtask jj2rs emit [--check]     TLC's JavaCC parser, its token manager and SANY's parser
+//!                                  support classes -> tlars-sany/src/parser/generated.rs, so
+//!                                  parse/lexical error text and parser quirks are TLC's by
+//!                                  construction (see jj2rs/mod.rs)
+//!   xtask jj2rs survey <File.java> report what the jj2rs Java reader cannot parse
 //!
-//! Implemented so far: `gen-fidelity` (FP64.Polys, EC/MP message catalog, SANY ErrorCode)
-//! and `bench`. Planned:
-//!   xtask jj2rs [--check]          TLAplusParser.java -> tlars-sany/src/parser/generated.rs
-//!                                  (+ jj_la1 expected-token tables); unknown semantic-action
-//!                                  snippets fail generation.
-//!                                  TLAplusParserTokenManager.java -> tlars-sany/src/lexer/dfa.rs
-//!                                  (jjnewStateCnt/jjMoveNfa tables, jjstrLiteralImages, lexical
-//!                                  state transitions), so lexical-error text and DFA quirks are
-//!                                  by construction too, not only parse errors
+//! Implemented so far: `gen-fidelity` (FP64.Polys, EC/MP message catalog, SANY ErrorCode),
+//! `bench` and `jj2rs`. Planned:
 //!   xtask intern-dump-diff <dump>  compare tlars's intern sequence with an instrumented TLC
 //!                                  InternTable dump for a spec
 
@@ -31,10 +29,10 @@ enum Task {
     BenchRun(bench::RunArgs),
     BenchCompare { baseline: PathBuf, candidate: PathBuf },
     Jj2rsSurvey(PathBuf),
-    Jj2rsEmit(PathBuf),
+    Jj2rsEmit { check: bool },
 }
 
-const USAGE: &str = "usage: xtask gen-fidelity [--check]\n       xtask bench run [--engine tlc|tlars] [--workers N] [--repeat N] [--filter TEXT] [--timeout SECS]\n       xtask bench compare <baseline.jsonl> <candidate.jsonl>";
+const USAGE: &str = "usage: xtask gen-fidelity [--check]\n       xtask bench run [--engine tlc|tlars] [--workers N] [--repeat N] [--filter TEXT] [--timeout SECS]\n       xtask bench compare <baseline.jsonl> <candidate.jsonl>\n       xtask jj2rs emit [--check]\n       xtask jj2rs survey <File.java>";
 
 fn parse_args(args: &[String]) -> Result<Task, String> {
     let strs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -43,7 +41,8 @@ fn parse_args(args: &[String]) -> Result<Task, String> {
         ["gen-fidelity", "--check"] => Ok(Task::GenFidelity { check: true }),
         ["bench", "compare", a, b] => Ok(Task::BenchCompare { baseline: a.into(), candidate: b.into() }),
         ["jj2rs", "survey", file] => Ok(Task::Jj2rsSurvey(file.into())),
-        ["jj2rs", "emit", dir] => Ok(Task::Jj2rsEmit(dir.into())),
+        ["jj2rs", "emit"] => Ok(Task::Jj2rsEmit { check: false }),
+        ["jj2rs", "emit", "--check"] => Ok(Task::Jj2rsEmit { check: true }),
         ["bench", "run", rest @ ..] => parse_bench_run(rest).map(Task::BenchRun),
         _ => Err(USAGE.into()),
     }
@@ -160,7 +159,9 @@ fn main() {
         Task::BenchRun(args) => bench::run(&workspace_root(), &args),
         Task::BenchCompare { baseline, candidate } => bench::compare(&baseline, &candidate),
         Task::Jj2rsSurvey(file) => jj2rs::survey(&file),
-        Task::Jj2rsEmit(dir) => jj2rs::emit(&dir, &tlaplus_src()?, &workspace_root().join("crates/tlars-sany/src/parser/generated.rs")),
+        Task::Jj2rsEmit { check } => {
+            jj2rs::emit(&tlaplus_src()?, &workspace_root().join("crates/tlars-sany/src/parser/generated.rs"), check)
+        }
     });
     if let Err(e) = result {
         eprintln!("{e}");

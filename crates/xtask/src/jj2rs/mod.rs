@@ -2,8 +2,9 @@
 //! `TLAplusParserTokenManager.java`) to Rust.
 //!
 //! `jj2rs survey <File.java>` parses every class member and reports what it could not read.
-//! `jj2rs emit <generated dir>` translates the parser into
-//! `crates/tlars-sany/src/parser/generated.rs` and lists the constructs it could not emit.
+//! `jj2rs emit` translates the parser, its lexer and SANY's parser support classes into
+//! `crates/tlars-sany/src/parser/generated.rs` and lists the constructs it could not emit;
+//! `jj2rs emit --check` fails if that file is not what emission would write.
 
 mod ast;
 mod emit;
@@ -12,6 +13,7 @@ mod lex;
 mod parse;
 
 use parse::MemberKind;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 /// Finds `class <name>` and returns the token index of its body's `{`.
@@ -54,15 +56,18 @@ pub(crate) fn survey(file: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Classes translated from the generated parser directory, plus SANY's constants interface.
-/// `(class, file, is_interface, implements)`.
-/// `dir` is `gen` for the JavaCC output, otherwise a path under TLC's `src`.
+/// Translated classes: `(class, file under TLC's src, is_interface, implements)`. The
+/// JavaCC-generated files are checked into TLC's tree (identical to `javacc` output), so
+/// everything is read from the pinned source.
 const TRANSLATED: &[(&str, &str, bool, &[&str])] = &[
-    ("TLAplusParserConstants", "gen/TLAplusParserConstants.java", true, &[]),
+    ("TLAplusParserConstants", "tla2sany/parser/TLAplusParserConstants.java", true, &[]),
     ("SyntaxTreeConstants", "tla2sany/st/SyntaxTreeConstants.java", true, &[]),
-    ("Token", "gen/Token.java", false, &[]),
-    ("ParseException", "gen/ParseException.java", false, &["TLAplusParserConstants"]),
-    ("TokenMgrError", "gen/TokenMgrError.java", false, &[]),
+    ("Token", "tla2sany/parser/Token.java", false, &[]),
+    ("ParseException", "tla2sany/parser/ParseException.java", false, &["TLAplusParserConstants"]),
+    ("ParseExceptionExtended", "tla2sany/parser/ParseExceptionExtended.java", false, &[]),
+    ("TokenMgrError", "tla2sany/parser/TokenMgrError.java", false, &[]),
+    ("SimpleCharStream", "tla2sany/parser/SimpleCharStream.java", false, &[]),
+    ("TLAplusParserTokenManager", "tla2sany/parser/TLAplusParserTokenManager.java", false, &["TLAplusParserConstants"]),
     ("SyntaxTreeNode", "tla2sany/parser/SyntaxTreeNode.java", false, &["SyntaxTreeConstants", "TLAplusParserConstants"]),
     ("Operator", "tla2sany/parser/Operator.java", false, &["TLAplusParserConstants"]),
     ("Operators", "tla2sany/parser/Operators.java", false, &["TLAplusParserConstants"]),
@@ -70,11 +75,25 @@ const TRANSLATED: &[(&str, &str, bool, &[&str])] = &[
     ("OperatorStack", "tla2sany/parser/OperatorStack.java", false, &["SyntaxTreeConstants", "TLAplusParserConstants"]),
     ("ParseError", "tla2sany/parser/ParseError.java", false, &[]),
     ("ParseErrors", "tla2sany/parser/ParseErrors.java", false, &[]),
-    ("TLAplusParser", "gen/TLAplusParser.java", false, &["SyntaxTreeConstants", "TLAplusParserConstants"]),
+    ("Strings", "tla2sany/utilities/Strings.java", false, &[]),
+    ("TLAplusParser", "tla2sany/parser/TLAplusParser.java", false, &["SyntaxTreeConstants", "TLAplusParserConstants"]),
 ];
 
-/// Members written by hand in `tlars-sany` instead of translated.
-const HAND_WRITTEN: &[&str] = &["<init>", "ReInit", "parse", "enable_tracing", "disable_tracing"];
+/// Members implemented by hand in `tlars-sany/src/parser/support.rs`, by signature key.
+/// They stay callable from translated code; only their emission is skipped.
+const HAND_WRITTEN: &[(&str, &str)] = &[
+    // Reads through a `java.io.InputStream`; the hand-written entry point decodes the
+    // source and uses the `Reader` constructor.
+    ("TLAplusParser", "<init>(SanyOutput,byte[])"),
+    // `catch (Throwable t)` around `System.arraycopy`.
+    ("SimpleCharStream", "ExpandBuff(boolean)"),
+];
+
+/// Raw generic fields and the element type their uses imply (every read casts to it).
+const RAW_OVERRIDES: &[(&str, &str, &str)] = &[
+    ("ParseErrors", "loe", "Vector<ParseError>"),
+    ("TLAplusParser", "jj_expentries", "Vector<int[]>"),
+];
 
 fn parse_class(path: &Path, class: &str) -> Result<Vec<parse::Member>, String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -89,18 +108,14 @@ fn parse_class(path: &Path, class: &str) -> Result<Vec<parse::Member>, String> {
     Ok(members)
 }
 
-pub(crate) fn emit(generated_dir: &Path, tlaplus_src: &Path, out: &Path) -> Result<(), String> {
+pub(crate) fn emit(tlaplus_src: &Path, out: &Path, check: bool) -> Result<(), String> {
     let tlc_src = tlaplus_src.join("tlatools/org.lamport.tlatools/src");
     let mut parsed = Vec::new();
     for (class, file, is_interface, implements) in TRANSLATED {
-        let path = match file.strip_prefix("gen/") {
-            Some(f) => generated_dir.join(f),
-            None => tlc_src.join(file),
-        };
         // Nested classes (`JJCalls`, `LookaheadSuccess`) become top-level classes.
         let mut members = Vec::new();
         let mut nested = Vec::new();
-        for m in parse_class(&path, class)? {
+        for m in parse_class(&tlc_src.join(file), class)? {
             match m.kind {
                 MemberKind::Class { members: inner, .. } => nested.push((m.name, inner)),
                 _ => members.push(m),
@@ -111,23 +126,50 @@ pub(crate) fn emit(generated_dir: &Path, tlaplus_src: &Path, out: &Path) -> Resu
             parsed.push((n, ms, false, Vec::new()));
         }
     }
-    let mut classes = externs::classes();
-    for (class, members, is_interface, implements) in &parsed {
+    let (mut classes, extern_consts) = externs::classes();
+    for c in extern_consts {
+        emit::CONSTS.with(|s| s.borrow_mut().insert(c));
+    }
+    let overrides: BTreeMap<(String, String), ast::Type> =
+        RAW_OVERRIDES.iter().map(|(c, f, t)| ((c.to_string(), f.to_string()), externs::parse_type(t))).collect();
+    let known: BTreeSet<String> = classes.keys().cloned().chain(parsed.iter().map(|p| p.0.clone())).collect();
+    let mut skipped = Vec::new();
+    for (class, members, is_interface, _) in &parsed {
         emit::collect_consts(class, members, *is_interface);
-        classes.insert(class.clone(), emit::class_info(members, implements.clone(), *is_interface));
+    }
+    for (class, members, is_interface, implements) in &parsed {
+        let info = emit::class_info(class, members, implements.clone(), *is_interface, &known, &overrides, &mut skipped);
+        classes.insert(class.clone(), info);
     }
     let mut code = String::from(
-        "// @generated by `xtask jj2rs emit` from the JavaCC-generated SANY parser. Do not edit.\n\n\
-         #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, unused_mut, unused_variables, unused_assignments, unused_parens, unused_braces, unreachable_code, dead_code, clippy::all)]\n\n\
+        "// @generated by `xtask jj2rs emit` from TLC's SANY parser sources. Do not edit.\n\n\
+         #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, unused_mut, unused_variables, unused_assignments, unused_parens, unused_braces, unreachable_code, unused_labels, unused_attributes, dead_code, clippy::all)]\n\n\
          use super::java::*;\n\
          use super::support::*;\n\n",
     );
     let mut errors = Vec::new();
     for (class, members, ..) in &parsed {
-        emit::emit_class(&classes, class, members, HAND_WRITTEN, &mut code, &mut errors);
+        let hand: BTreeSet<String> = HAND_WRITTEN.iter().filter(|(c, _)| c == class).map(|(_, k)| k.to_string()).collect();
+        emit::emit_class(&classes, class, members, &hand, &overrides, &mut code, &mut errors);
+    }
+    let resets: String = parsed
+        .iter()
+        .filter(|(c, ..)| classes[c].has_statics)
+        .map(|(c, ..)| format!("    {c}::reset_statics();\n"))
+        .collect();
+    code.push_str(&format!(
+        "/// Forgets every translated class's statics, as a fresh JVM would (a new session).\npub(crate) fn reset_all_statics() {{\n{resets}}}\n"
+    ));
+    if check {
+        let current = std::fs::read_to_string(out).map_err(|e| format!("{}: {e}", out.display()))?;
+        return if current == code { Ok(()) } else { Err(format!("{} is stale; run `xtask jj2rs emit`", out.display())) };
     }
     std::fs::write(out, code).map_err(|e| format!("{}: {e}", out.display()))?;
-    let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    println!("skipped (signature mentions an untranslated class):");
+    for s in &skipped {
+        println!("  {s}");
+    }
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     for e in &errors {
         let key = e.split(": ").nth(1).unwrap_or(e).to_string();
         *counts.entry(key).or_default() += 1;

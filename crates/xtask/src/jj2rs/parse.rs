@@ -13,7 +13,7 @@ pub(crate) struct Member {
 pub(crate) enum MemberKind {
     Method(Method),
     Constructor(Method),
-    Field { decl: Stmt, is_static: bool },
+    Field { decl: Stmt, is_static: bool, is_final: bool },
     Class { members: Vec<Member> },
     StaticInit(Vec<Stmt>),
     /// Fields, nested classes, initializers: kept as source line ranges for hand porting.
@@ -25,6 +25,8 @@ pub(crate) enum MemberKind {
 pub(crate) struct Parser<'t> {
     toks: &'t [Token],
     i: usize,
+    /// `>` still owed by a `>>`/`>>>` token that closed only part of nested type arguments.
+    owed_gt: usize,
 }
 
 type R<T> = Result<T, String>;
@@ -35,7 +37,7 @@ const PRIMITIVES: &[&str] = &["int", "long", "short", "byte", "char", "boolean",
 
 impl<'t> Parser<'t> {
     pub(crate) fn new(toks: &'t [Token]) -> Self {
-        Parser { toks, i: 0 }
+        Parser { toks, i: 0, owed_gt: 0 }
     }
 
     fn peek(&self) -> &Tok {
@@ -143,12 +145,13 @@ impl<'t> Parser<'t> {
                 self.args()?;
             }
         }
-        let mut is_static = false;
+        let (mut is_static, mut is_final) = (false, false);
         while let Tok::Ident(m) = self.peek() {
             if !MODIFIERS.contains(&m.as_str()) {
                 break;
             }
             is_static |= m == "static";
+            is_final |= m == "final";
             self.bump();
         }
         if self.is_punct("{") {
@@ -174,7 +177,7 @@ impl<'t> Parser<'t> {
             return Ok(Member {
                 name: name.clone(),
                 line,
-                kind: MemberKind::Constructor(Method { name, ret: Type { name: "void".into(), dims: 0 }, params, body, is_static: false }),
+                kind: MemberKind::Constructor(Method { name, ret: Type::named("void"), params, body, is_static: false }),
             });
         }
         let field_start = self.i;
@@ -194,7 +197,7 @@ impl<'t> Parser<'t> {
         self.i = field_start;
         let decl = self.local()?;
         self.expect_punct(";")?;
-        Ok(Member { name, line, kind: MemberKind::Field { decl, is_static } })
+        Ok(Member { name, line, kind: MemberKind::Field { decl, is_static, is_final } })
     }
 
     fn params(&mut self) -> R<Vec<(Type, String)>> {
@@ -227,42 +230,68 @@ impl<'t> Parser<'t> {
         Ok(())
     }
 
+    /// A whole token stream that is one type.
+    pub(crate) fn type_only(&mut self) -> R<Type> {
+        let t = self.ty()?;
+        if *self.peek() != Tok::Eof {
+            return Err(format!("trailing tokens after type: {:?}", self.peek()));
+        }
+        Ok(t)
+    }
+
     /// `A.B.C<...>[][]`.
     fn ty(&mut self) -> R<Type> {
+        let mut ty = self.ty_no_dims()?;
+        while self.is_punct("[") && matches!(self.peek_at(1), Tok::Punct("]")) {
+            self.bump();
+            self.bump();
+            ty.dims += 1;
+        }
+        Ok(ty)
+    }
+
+    /// `A.B.C<...>`.
+    fn ty_no_dims(&mut self) -> R<Type> {
         let mut name = self.ident()?;
         while self.is_punct(".") && matches!(self.peek_at(1), Tok::Ident(_)) {
             self.bump();
             name = format!("{name}.{}", self.ident()?);
         }
-        if self.is_punct("<") {
-            let mut depth = 0;
-            loop {
-                match self.bump() {
-                    Tok::Punct("<") => depth += 1,
-                    Tok::Punct(">") => {
-                        depth -= 1;
-                        if depth == 0 {
-                            break;
-                        }
+        let mut args = Vec::new();
+        if self.eat_punct("<") {
+            while !self.close_angle()? {
+                if self.eat_punct("?") {
+                    // `? extends T` is read as `T`.
+                    if self.is_ident("extends") || self.is_ident("super") {
+                        self.bump();
+                        args.push(self.ty()?);
+                    } else {
+                        args.push(Type::named("Object"));
                     }
-                    Tok::Punct(">>") => {
-                        depth -= 2;
-                        if depth <= 0 {
-                            break;
-                        }
-                    }
-                    Tok::Eof => return Err("unterminated type arguments".into()),
-                    _ => {}
+                } else {
+                    args.push(self.ty()?);
                 }
+                self.eat_punct(",");
             }
         }
-        let mut dims = 0;
-        while self.is_punct("[") && matches!(self.peek_at(1), Tok::Punct("]")) {
-            self.bump();
-            self.bump();
-            dims += 1;
+        Ok(Type { name, args, dims: 0 })
+    }
+
+    /// Consumes one `>` closing type arguments, splitting `>>` and `>>>`.
+    fn close_angle(&mut self) -> R<bool> {
+        if self.owed_gt > 0 {
+            self.owed_gt -= 1;
+            return Ok(true);
         }
-        Ok(Type { name, dims })
+        match self.peek() {
+            Tok::Punct(">") => self.owed_gt = 0,
+            Tok::Punct(">>") => self.owed_gt = 1,
+            Tok::Punct(">>>") => self.owed_gt = 2,
+            Tok::Eof => return Err("unterminated type arguments".into()),
+            _ => return Ok(false),
+        }
+        self.bump();
+        Ok(true)
     }
 
     /// Whether a local variable declaration starts here: `Type Ident (= | ; | , | [)`.
@@ -276,9 +305,11 @@ impl<'t> Parser<'t> {
             self.bump();
         }
         let ok = self.ty().is_ok()
+            && self.owed_gt == 0
             && matches!(self.peek(), Tok::Ident(_))
             && matches!(self.peek_at(1), Tok::Punct("=" | ";" | "," | "["));
         self.i = save;
+        self.owed_gt = 0;
         ok
     }
 
@@ -399,6 +430,7 @@ impl<'t> Parser<'t> {
                         return Ok(Stmt::ForEach { ty, name, iter, body: Box::new(self.stmt()?) });
                     }
                     self.i = save;
+                    self.owed_gt = 0;
                     let mut init = Vec::new();
                     if !self.is_punct(";") {
                         if self.at_local_decl() {
@@ -668,7 +700,7 @@ impl<'t> Parser<'t> {
                         } else {
                             None
                         };
-                        return Ok(Expr::NewArray { ty: Type { name: ty, dims }, len, init });
+                        return Ok(Expr::NewArray { ty: Type { dims, ..ty }, len, init });
                     }
                     let args = self.args()?;
                     if self.is_punct("{") {
@@ -683,24 +715,4 @@ impl<'t> Parser<'t> {
         }
     }
 
-    /// A class name after `new`, with type arguments (`Vector<UniqueString>`) dropped.
-    fn ty_no_dims(&mut self) -> R<String> {
-        let mut name = self.ident()?;
-        while self.is_punct(".") && matches!(self.peek_at(1), Tok::Ident(_)) {
-            self.bump();
-            name = format!("{name}.{}", self.ident()?);
-        }
-        if self.eat_punct("<") {
-            let mut depth = 1;
-            while depth > 0 {
-                match self.bump() {
-                    Tok::Punct("<") => depth += 1,
-                    Tok::Punct(">") => depth -= 1,
-                    Tok::Eof => return Err("unterminated type arguments".into()),
-                    _ => {}
-                }
-            }
-        }
-        Ok(name)
-    }
 }

@@ -3,7 +3,15 @@
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Type {
     pub(crate) name: String,
+    /// Type arguments; empty for raw types and the diamond `<>`.
+    pub(crate) args: Vec<Type>,
     pub(crate) dims: usize,
+}
+
+impl Type {
+    pub(crate) fn named(name: &str) -> Type {
+        Type { name: name.into(), args: Vec::new(), dims: 0 }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -64,7 +72,7 @@ pub(crate) enum Expr {
     Field(Box<Expr>, String),
     Index(Box<Expr>, Box<Expr>),
     Call { target: Option<Box<Expr>>, name: String, args: Vec<Expr> },
-    New { ty: String, args: Vec<Expr> },
+    New { ty: Type, args: Vec<Expr> },
     NewArray { ty: Type, len: Option<Box<Expr>>, init: Option<Vec<Expr>> },
     ArrayLit(Vec<Expr>),
     Cast(Type, Box<Expr>),
