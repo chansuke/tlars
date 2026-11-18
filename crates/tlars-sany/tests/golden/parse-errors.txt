@@ -1,0 +1,840 @@
+== dollar_operator.tla
+parse true
+intern 1 [
+intern 2 .
+intern 3 '
+intern 4 ^
+intern 5 /
+intern 6 *
+intern 7 -
+intern 8 -.
+intern 9 +
+intern 10 =
+intern 11 \\lnot
+intern 12 \\land
+intern 13 \\lor
+intern 14 ~>
+intern 15 =>
+intern 16 []
+intern 17 <>
+intern 18 ENABLED
+intern 19 UNCHANGED
+intern 20 SUBSET
+intern 21 UNION
+intern 22 DOMAIN
+intern 23 ^+
+intern 24 ^*
+intern 25 ^#
+intern 26 \\cdot
+intern 27 \\equiv
+intern 28 -+->
+intern 29 /=
+intern 30 \\subseteq
+intern 31 \\in
+intern 32 \\notin
+intern 33 <
+intern 34 \\leq
+intern 35 >
+intern 36 \\geq
+intern 37 \\times
+intern 38 \\
+intern 39 \\intersect
+intern 40 \\union
+intern 41 ...
+intern 42 ..
+intern 43 |
+intern 44 ||
+intern 45 &&
+intern 46 &
+intern 47 $$
+intern 48 $
+intern 49 ??
+intern 50 %%
+intern 51 %
+intern 52 ##
+intern 53 ++
+intern 54 --
+intern 55 **
+intern 56 //
+intern 57 ^^
+intern 58 @@
+intern 59 !!
+intern 60 |-
+intern 61 |=
+intern 62 -|
+intern 63 =|
+intern 64 <:
+intern 65 :>
+intern 66 :=
+intern 67 ::=
+intern 68 \\oplus
+intern 69 \\ominus
+intern 70 \\odot
+intern 71 \\oslash
+intern 72 \\otimes
+intern 73 \\uplus
+intern 74 \\sqcap
+intern 75 \\sqcup
+intern 76 \\div
+intern 77 \\wr
+intern 78 \\star
+intern 79 \\o
+intern 80 \\bigcirc
+intern 81 \\bullet
+intern 82 \\prec
+intern 83 \\succ
+intern 84 \\preceq
+intern 85 \\succeq
+intern 86 \\sim
+intern 87 \\simeq
+intern 88 \\ll
+intern 89 \\gg
+intern 90 \\asymp
+intern 91 \\subset
+intern 92 \\supset
+intern 93 \\supseteq
+intern 94 \\approx
+intern 95 \\cong
+intern 96 \\sqsubset
+intern 97 \\sqsubseteq
+intern 98 \\sqsupset
+intern 99 \\sqsupseteq
+intern 100 \\doteq
+intern 101 \\propto
+intern 102 ~
+intern 103 \\neg
+intern 104 ¬
+intern 105 □
+intern 106 ◇
+intern 107 /\\
+intern 108 ∧
+intern 109 \\/
+intern 110 ∨
+intern 111 <=>
+intern 112 ≡
+intern 113 ⇔
+intern 114 #
+intern 115 ≠
+intern 116 <=
+intern 117 =<
+intern 118 ≤
+intern 119 >=
+intern 120 ≥
+intern 121 \\X
+intern 122 ×
+intern 123 \\cap
+intern 124 ∩
+intern 125 \\cup
+intern 126 ∪
+intern 127 \\circ
+intern 128 ∘
+intern 129 (+)
+intern 130 ⊕
+intern 131 (-)
+intern 132 ⊖
+intern 133 (.)
+intern 134 ⊙
+intern 135 (/)
+intern 136 ⊘
+intern 137 (\\X)
+intern 138 ⊗
+intern 139 ≈
+intern 140 ≔
+intern 141 ≍
+intern 142 ◯
+intern 143 ⩴
+intern 144 ●
+intern 145 ⋅
+intern 146 ≅
+intern 147 ÷
+intern 148 ≐
+intern 149 ‥
+intern 150 …
+intern 151 ‼
+intern 152 ≫
+intern 153 ⇒
+intern 154 ∈
+intern 155 ⫤
+intern 156 ↝
+intern 157 ≪
+intern 158 ⊣
+intern 159 ∉
+intern 160 ⇸
+intern 161 ≺
+intern 162 ⪯
+intern 163 ∝
+intern 164 ⁇
+intern 165 ⊨
+intern 166 ⊢
+intern 167 ∼
+intern 168 ≃
+intern 169 ⊓
+intern 170 ⊔
+intern 171 ⊏
+intern 172 ⊑
+intern 173 ⊐
+intern 174 ⊒
+intern 175 ⋆
+intern 176 ⊂
+intern 177 ⊆
+intern 178 ≻
+intern 179 ⪰
+intern 180 ⊃
+intern 181 ⊇
+intern 182 ⊎
+intern 183 ‖
+intern 184 ≀
+intern 185 ⁺
+intern 186 @
+intern 187 ***I do not exist***
+intern 188 --TLA+ BUILTINS--
+intern 189 ---- MODULE
+intern 190 Dollar
+intern 191 ----
+intern 192 Not a node
+intern 193 N_ActDecl
+intern 194 N_ActionExpr
+intern 195 N_AssumeDecl
+intern 196 N_AssumeProve
+intern 197 N_Assumption
+intern 198 N_BeginModule
+intern 199 N_Body
+intern 200 N_BoundedQuant
+intern 201 N_Case
+intern 202 N_CaseArm
+intern 203 N_CaseStatement
+intern 204 N_ChooseStatement
+intern 205 N_ConjItem
+intern 206 N_ConjList
+intern 207 N_ConsDecl
+intern 208 N_DisjItem
+intern 209 N_DisjList
+intern 210 N_EndModule
+intern 211 N_Except
+intern 212 N_ExceptComponent
+intern 213 N_ExceptSpec
+intern 214 N_Times
+intern 215 N_Extends
+intern 216 N_FairnessExpr
+intern 217 N_FcnAppl
+intern 218 N_FcnConst
+intern 219 N_FieldSet
+intern 220 N_FieldVal
+intern 221 N_FunctionDefinition
+intern 222 N_FunctionParam
+intern 223 N_GeneralId
+intern 224 N_GenInfixOp
+intern 225 N_GenNonExpPrefixOp
+intern 226 N_GenPostfixOp
+intern 227 N_GenPrefixOp
+intern 228 N_IdentDecl
+intern 229 N_Real
+intern 230 N_IdentifierTuple
+intern 231 N_IdentLHS
+intern 232 N_IdPrefix
+intern 233 N_IdPrefixElement
+intern 234 N_IfThenElse
+intern 235 N_InfixDecl
+intern 236 N_InfixExpr
+intern 237 N_InfixLHS
+intern 238 N_InfixOp
+intern 239 N_InnerProof
+intern 240 N_Instance
+intern 241 N_NonLocalInstance
+intern 242 N_Integer
+intern 243 N_LeafProof
+intern 244 N_LetDefinitions
+intern 245 N_LetIn
+intern 246 N_MaybeBound
+intern 247 N_Module
+intern 248 N_ModuleDefinition
+intern 249 N_NonExpPrefixOp
+intern 250 N_Number
+intern 251 N_NumberedAssumeProve
+intern 252 N_OpApplication
+intern 253 N_OpArgs
+intern 254 N_OperatorDefinition
+intern 255 N_OtherArm
+intern 256 N_ParamDecl
+intern 257 N_ParamDeclaration
+intern 258 N_ParenExpr
+intern 259 N_PostfixDecl
+intern 260 N_PostfixExpr
+intern 261 N_PostfixLHS
+intern 262 N_PostfixOp
+intern 263 N_PrefixDecl
+intern 264 N_PrefixExpr
+intern 265 N_PrefixLHS
+intern 266 N_PrefixOp
+intern 267 N_Proof
+intern 268 N_ProofLet
+intern 269 N_ProofName
+intern 270 N_ProofStatement
+intern 271 N_ProofStep
+intern 272 N_QEDStep
+intern 273 N_QuantBound
+intern 274 N_RcdConstructor
+intern 275 N_RecordComponent
+intern 276 N_SetEnumerate
+intern 277 N_SetOfAll
+intern 278 N_SetOfFcns
+intern 279 N_SetOfRcds
+intern 280 N_String
+intern 281 N_SubsetOf
+intern 282 N_Substitution
+intern 283 N_TempDecl
+intern 284 N_Theorem
+intern 285 N_Tuple
+intern 286 N_UnBoundedOrBoundedChoose
+intern 287 N_UnboundedQuant
+intern 288 N_VariableDeclaration
+intern 289 Token =
+intern 290 Token \\in
+intern 291 N_NewSymb
+intern 292 N_Lambda
+intern 293 N_Recursive
+intern 294 N_Label
+intern 295 N_StructOp
+intern 296 N_NumerableStep
+intern 297 N_TerminalProof
+intern 298 N_UseOrHide
+intern 299 N_NonExprBody
+intern 300 N_DefStep
+intern 301 N_HaveStep
+intern 302 N_TakeStep
+intern 303 N_WitnessStep
+intern 304 N_PickStep
+intern 305 N_CaseStep
+intern 306 N_AssertStep
+intern 307 x
+intern 308 ==
+intern 309 1
+intern 310 2
+intern 311 $$_void
+intern 312 $.
+intern 313 ====
+0 382 N_Module 1,1,3,4 4 -
+1 333 N_BeginModule 1,1,1,23 3 -
+2 3 ---- MODULE 1,1,1,11 0 0
+2 289 Dollar 1,13,1,18 0 0
+2 36 ---- 1,20,1,23 0 0
+1 350 N_Extends 2147483647,2147483647,-2147483648,-2147483648 - -
+1 334 N_Body 2,1,2,10 1 -
+2 389 N_OperatorDefinition 2,1,2,10 - 3
+3 366 N_IdentLHS 2,1,2,1 1 -
+4 289 x 2,1,2,1 0 0
+3 93 == 2,3,2,4 0 0
+3 371 N_InfixExpr 2,6,2,10 3 -
+4 385 N_Number 2,6,2,6 1 -
+5 109 1 2,6,2,6 0 0
+4 359 N_GenInfixOp 2,8,2,8 2 -
+5 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+5 373 $ 2,8,2,8 0 0
+4 385 N_Number 2,10,2,10 1 -
+5 109 2 2,10,2,10 0 0
+1 345 N_EndModule 3,1,3,4 1 -
+2 37 ==== 3,1,3,4 0 0
+== except_at.tla
+parse false
+log ERROR @ used in !.@
+intern 314 Except
+intern 315 VARIABLE
+intern 316 f
+intern 317 EXCEPT
+intern 318 !
+intern 319 ]
+== expressions.tla
+parse true
+intern 320 Deep
+intern 321 LET
+intern 322 a
+intern 323 IN
+intern 324 CASE
+intern 325 =.
+intern 326 ->
+intern 327 {
+intern 328 y
+intern 329 :
+intern 330 >.
+intern 331 }
+intern 332 OTHER
+intern 333 i
+intern 334 3
+intern 335 |->
+intern 336 +.
+intern 337 ,
+intern 338 b
+intern 339 z
+intern 340 WF_
+intern 341 <<
+intern 342 >>
+intern 343 (
+intern 344 )
+intern 345 \\A
+intern 346 q
+intern 347 \\land.
+0 382 N_Module 1,1,5,4 4 -
+1 333 N_BeginModule 1,1,1,21 3 -
+2 3 ---- MODULE 1,1,1,11 0 0
+2 289 Deep 1,13,1,16 0 0
+2 36 ---- 1,18,1,21 0 0
+1 350 N_Extends 2147483647,2147483647,-2147483648,-2147483648 - -
+1 334 N_Body 2,1,4,47 3 -
+2 389 N_OperatorDefinition 2,1,2,84 - 3
+3 366 N_IdentLHS 2,1,2,1 1 -
+4 289 x 2,1,2,1 0 0
+3 93 == 2,3,2,4 0 0
+3 380 N_LetIn 2,6,2,84 4 -
+4 52 LET 2,6,2,8 0 0
+4 379 N_LetDefinitions 2,10,2,15 1 -
+5 389 N_OperatorDefinition 2,10,2,15 - 3
+6 366 N_IdentLHS 2,10,2,10 1 -
+7 289 a 2,10,2,10 0 0
+6 93 == 2,12,2,13 0 0
+6 385 N_Number 2,15,2,15 1 -
+7 109 1 2,15,2,15 0 0
+4 53 IN 2,17,2,18 0 0
+4 336 N_Case 2,20,2,84 4 -
+5 42 CASE 2,20,2,23 0 0
+5 337 N_CaseArm 2,25,2,53 3 -
+6 371 N_InfixExpr 2,25,2,29 3 -
+7 358 N_GeneralId 2,25,2,25 2 -
+8 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+8 289 a 2,25,2,25 0 0
+7 359 N_GenInfixOp 2,27,2,27 2 -
+8 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+8 373 = 2,27,2,27 0 0
+7 385 N_Number 2,29,2,29 1 -
+8 109 1 2,29,2,29 0 0
+6 106 -> 2,31,2,32 0 0
+6 419 N_SubsetOf 2,34,2,53 7 -
+7 100 { 2,34,2,34 0 0
+7 289 y 2,35,2,35 0 0
+7 427 \\in 2,37,2,39 0 0
+7 371 N_InfixExpr 2,41,2,44 3 -
+8 385 N_Number 2,41,2,41 1 -
+9 109 1 2,41,2,41 0 0
+8 359 N_GenInfixOp 2,42,2,43 2 -
+9 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+9 373 .. 2,42,2,43 0 0
+8 385 N_Number 2,44,2,44 1 -
+9 109 2 2,44,2,44 0 0
+7 89 : 2,46,2,46 0 0
+7 371 N_InfixExpr 2,48,2,52 3 -
+8 358 N_GeneralId 2,48,2,48 2 -
+9 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+9 289 y 2,48,2,48 0 0
+8 359 N_GenInfixOp 2,50,2,50 2 -
+9 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+9 373 > 2,50,2,50 0 0
+8 358 N_GeneralId 2,52,2,52 2 -
+9 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+9 289 a 2,52,2,52 0 0
+7 101 } 2,53,2,53 0 0
+5 121 [] 2,55,2,56 0 0
+5 390 N_OtherArm 2,58,2,84 3 -
+6 57 OTHER 2,58,2,62 0 0
+6 106 -> 2,64,2,65 0 0
+6 353 N_FcnConst 2,67,2,84 5 -
+7 97 [ 2,67,2,67 0 0
+7 408 N_QuantBound 2,68,2,77 3 -
+8 289 i 2,68,2,68 0 0
+8 427 \\in 2,70,2,72 0 0
+8 371 N_InfixExpr 2,74,2,77 3 -
+9 385 N_Number 2,74,2,74 1 -
+10 109 1 2,74,2,74 0 0
+9 359 N_GenInfixOp 2,75,2,76 2 -
+10 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+10 373 .. 2,75,2,76 0 0
+9 385 N_Number 2,77,2,77 1 -
+10 109 3 2,77,2,77 0 0
+7 108 |-> 2,79,2,81 0 0
+7 358 N_GeneralId 2,83,2,83 2 -
+8 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+8 289 i 2,83,2,83 0 0
+7 99 ] 2,84,2,84 0 0
+2 389 N_OperatorDefinition 3,1,3,39 - 3
+3 366 N_IdentLHS 3,1,3,1 1 -
+4 289 y 3,1,3,1 0 0
+3 93 == 3,3,3,4 0 0
+3 346 N_Except 3,6,3,39 7 -
+4 97 [ 3,6,3,6 0 0
+4 358 N_GeneralId 3,7,3,7 2 -
+5 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+5 289 x 3,7,3,7 0 0
+4 46 EXCEPT 3,9,3,14 0 0
+4 348 N_ExceptSpec 3,16,3,29 5 -
+5 105 ! 3,16,3,16 0 0
+5 347 N_ExceptComponent 3,17,3,19 3 -
+6 97 [ 3,17,3,17 0 0
+6 385 N_Number 3,18,3,18 1 -
+7 109 1 3,18,3,18 0 0
+6 99 ] 3,19,3,19 0 0
+5 347 N_ExceptComponent 3,20,3,21 2 -
+6 91 . 3,20,3,20 0 0
+6 289 a 3,21,3,21 0 0
+5 428 = 3,23,3,23 0 0
+5 371 N_InfixExpr 3,25,3,29 3 -
+6 358 N_GeneralId 3,25,3,25 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+7 289 @ 3,25,3,25 0 0
+6 359 N_GenInfixOp 3,27,3,27 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+7 373 + 3,27,3,27 0 0
+6 385 N_Number 3,29,3,29 1 -
+7 109 1 3,29,3,29 0 0
+4 88 , 3,30,3,30 0 0
+4 348 N_ExceptSpec 3,32,3,38 4 -
+5 105 ! 3,32,3,32 0 0
+5 347 N_ExceptComponent 3,33,3,34 2 -
+6 91 . 3,33,3,33 0 0
+6 289 b 3,34,3,34 0 0
+5 428 = 3,36,3,36 0 0
+5 385 N_Number 3,38,3,38 1 -
+6 109 2 3,38,3,38 0 0
+4 99 ] 3,39,3,39 0 0
+2 389 N_OperatorDefinition 4,1,4,47 - 3
+3 366 N_IdentLHS 4,1,4,1 1 -
+4 289 z 4,1,4,1 0 0
+3 93 == 4,3,4,4 0 0
+3 371 N_InfixExpr 4,6,4,47 3 -
+4 351 N_FairnessExpr 4,6,4,24 5 -
+5 86 WF_ 4,6,4,8 0 0
+5 423 N_Tuple 4,9,4,16 5 -
+6 102 << 4,9,4,10 0 0
+6 358 N_GeneralId 4,11,4,11 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+7 289 x 4,11,4,11 0 0
+6 88 , 4,12,4,12 0 0
+6 358 N_GeneralId 4,14,4,14 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+7 289 y 4,14,4,14 0 0
+6 104 >> 4,15,4,16 0 0
+5 94 ( 4,17,4,17 0 0
+5 371 N_InfixExpr 4,18,4,23 3 -
+6 395 N_PostfixExpr 4,18,4,19 2 -
+7 358 N_GeneralId 4,18,4,18 2 -
+8 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+8 289 x 4,18,4,18 0 0
+7 361 N_GenPostfixOp 4,19,4,19 2 -
+8 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+8 397 ' 4,19,4,19 0 0
+6 359 N_GenInfixOp 4,21,4,21 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+7 373 = 4,21,4,21 0 0
+6 385 N_Number 4,23,4,23 1 -
+7 109 1 4,23,4,23 0 0
+5 95 ) 4,24,4,24 0 0
+4 359 N_GenInfixOp 4,26,4,27 2 -
+5 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+5 373 /\\ 4,26,4,27 0 0
+4 335 N_BoundedQuant 4,29,4,47 4 -
+5 49 \\A 4,29,4,30 0 0
+5 408 N_QuantBound 4,32,4,39 3 -
+6 289 q 4,32,4,32 0 0
+6 427 \\in 4,34,4,36 0 0
+6 411 N_SetEnumerate 4,38,4,39 2 -
+7 100 { 4,38,4,38 0 0
+7 101 } 4,39,4,39 0 0
+5 89 : 4,41,4,41 0 0
+5 399 N_PrefixExpr 4,43,4,47 2 -
+6 362 N_GenPrefixOp 4,43,4,44 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+7 401 <> 4,43,4,44 0 0
+6 399 N_PrefixExpr 4,45,4,47 2 -
+7 362 N_GenPrefixOp 4,45,4,46 2 -
+8 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+8 401 [] 4,45,4,46 0 0
+7 358 N_GeneralId 4,47,4,47 2 -
+8 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+8 289 q 4,47,4,47 0 0
+1 345 N_EndModule 5,1,5,4 1 -
+2 37 ==== 5,1,5,4 0 0
+== invalid_utf8.tla
+parse true
+intern 348 Bytes
+intern 349 "��"
+0 382 N_Module 1,1,3,4 4 -
+1 333 N_BeginModule 1,1,1,22 3 -
+2 3 ---- MODULE 1,1,1,11 0 0
+2 289 Bytes 1,13,1,17 0 0
+2 36 ---- 1,19,1,22 0 0
+1 350 N_Extends 2147483647,2147483647,-2147483648,-2147483648 - -
+1 334 N_Body 2,1,2,9 1 -
+2 389 N_OperatorDefinition 2,1,2,9 - 3
+3 366 N_IdentLHS 2,1,2,1 1 -
+4 289 x 2,1,2,1 0 0
+3 93 == 2,3,2,4 0 0
+3 418 "��" 2,6,2,9 0 0
+1 345 N_EndModule 3,1,3,4 1 -
+2 37 ==== 3,1,3,4 0 0
+== junction_misaligned.tla
+parse true
+intern 350 Junction
+0 382 N_Module 1,1,5,4 4 -
+1 333 N_BeginModule 1,1,1,25 3 -
+2 3 ---- MODULE 1,1,1,11 0 0
+2 289 Junction 1,13,1,20 0 0
+2 36 ---- 1,22,1,25 0 0
+1 350 N_Extends 2147483647,2147483647,-2147483648,-2147483648 - -
+1 334 N_Body 2,1,4,9 1 -
+2 389 N_OperatorDefinition 2,1,4,9 - 3
+3 366 N_IdentLHS 2,1,2,1 1 -
+4 289 x 2,1,2,1 0 0
+3 93 == 2,3,2,4 0 0
+3 341 N_ConjList 2,6,4,9 2 -
+4 340 N_ConjItem 2,6,3,10 2 -
+5 129 /\\ 2,6,2,7 0 0
+5 371 N_InfixExpr 2,9,3,10 3 -
+6 385 N_Number 2,9,2,9 1 -
+7 109 1 2,9,2,9 0 0
+6 359 N_GenInfixOp 3,7,3,8 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+7 373 /\\ 3,7,3,8 0 0
+6 385 N_Number 3,10,3,10 1 -
+7 109 2 3,10,3,10 0 0
+4 340 N_ConjItem 4,6,4,9 2 -
+5 129 /\\ 4,6,4,7 0 0
+5 385 N_Number 4,9,4,9 1 -
+6 109 3 4,9,4,9 0 0
+1 345 N_EndModule 5,1,5,4 1 -
+2 37 ==== 5,1,5,4 0 0
+== lexical_open_string.tla
+parse false
+log ERROR Lexical error at line 2, column 10.  Encountered: "\\n" (10), after : "\\"abc"
+== lexical_stray_char.tla
+parse false
+log ERROR Lexical error at line 2, column 8.  Encountered: "`" (96), after : ""
+intern 351 Stray
+== missing_expression.tla
+parse false
+log ERROR ***Parse Error***\nWas expecting "==== or more Module body"\nEncountered "x" at line 2, column 1 and token "----" \n\nResidual stack trace follows:\nModule definition starting at line 1, column 1.\n
+intern 352 Missing
+== no_end.tla
+parse false
+log ERROR ***Parse Error***\nWas expecting "==== or more Module body"\nEncountered "<EOF>" at line 2, column 7 and token "1" \n\nResidual stack trace follows:\nModule definition starting at line 1, column 1.\n
+intern 353 NoEnd
+== ok.tla
+parse true
+intern 354 Ok
+intern 355 EXTENDS
+intern 356 Naturals
+intern 357 CONSTANT
+intern 358 N
+intern 359 v
+intern 360 Init
+intern 361 0
+intern 362 Next
+intern 363 <.
+intern 364 Spec
+intern 365 ]_
+intern 366 THEOREM
+intern 367 TRUE
+intern 368 =>.
+0 382 N_Module 2,1,10,4 4 -
+1 333 N_BeginModule 2,1,2,19 3 -
+2 3 ---- MODULE 2,1,2,11 0 0
+2 289 Ok 2,13,2,14 0 0
+2 36 ---- 2,16,2,19 0 0
+1 350 N_Extends 3,1,3,16 2 -
+2 48 EXTENDS 3,1,3,7 0 0
+2 289 Naturals 3,9,3,16 0 0
+1 334 N_Body 4,1,9,22 6 -
+2 392 N_ParamDeclaration 4,1,4,10 2 -
+3 342 N_ConsDecl 4,1,4,8 1 -
+4 44 CONSTANT 4,1,4,8 0 0
+3 363 N_IdentDecl 4,10,4,10 1 -
+4 289 N 4,10,4,10 0 0
+2 426 N_VariableDeclaration 5,1,5,10 1 1
+3 85 VARIABLE 5,1,5,8 0 0
+3 289 v 5,10,5,10 0 0
+2 389 N_OperatorDefinition 6,1,6,13 - 3
+3 366 N_IdentLHS 6,1,6,4 1 -
+4 289 Init 6,1,6,4 0 0
+3 93 == 6,6,6,7 0 0
+3 371 N_InfixExpr 6,9,6,13 3 -
+4 358 N_GeneralId 6,9,6,9 2 -
+5 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+5 289 v 6,9,6,9 0 0
+4 359 N_GenInfixOp 6,11,6,11 2 -
+5 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+5 373 = 6,11,6,11 0 0
+4 385 N_Number 6,13,6,13 1 -
+5 109 0 6,13,6,13 0 0
+2 389 N_OperatorDefinition 7,1,7,27 - 3
+3 366 N_IdentLHS 7,1,7,4 1 -
+4 289 Next 7,1,7,4 0 0
+3 93 == 7,6,7,7 0 0
+3 371 N_InfixExpr 7,9,7,27 3 -
+4 371 N_InfixExpr 7,9,7,18 3 -
+5 395 N_PostfixExpr 7,9,7,10 2 -
+6 358 N_GeneralId 7,9,7,9 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+7 289 v 7,9,7,9 0 0
+6 361 N_GenPostfixOp 7,10,7,10 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+7 397 ' 7,10,7,10 0 0
+5 359 N_GenInfixOp 7,12,7,12 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+6 373 = 7,12,7,12 0 0
+5 371 N_InfixExpr 7,14,7,18 3 -
+6 358 N_GeneralId 7,14,7,14 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+7 289 v 7,14,7,14 0 0
+6 359 N_GenInfixOp 7,16,7,16 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+7 373 + 7,16,7,16 0 0
+6 385 N_Number 7,18,7,18 1 -
+7 109 1 7,18,7,18 0 0
+4 359 N_GenInfixOp 7,20,7,21 2 -
+5 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+5 373 /\\ 7,20,7,21 0 0
+4 371 N_InfixExpr 7,23,7,27 3 -
+5 358 N_GeneralId 7,23,7,23 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+6 289 v 7,23,7,23 0 0
+5 359 N_GenInfixOp 7,25,7,25 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+6 373 < 7,25,7,25 0 0
+5 358 N_GeneralId 7,27,7,27 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+6 289 N 7,27,7,27 0 0
+2 389 N_OperatorDefinition 8,1,8,40 - 3
+3 366 N_IdentLHS 8,1,8,4 1 -
+4 289 Spec 8,1,8,4 0 0
+3 93 == 8,6,8,7 0 0
+3 371 N_InfixExpr 8,9,8,40 3 -
+4 371 N_InfixExpr 8,9,8,26 3 -
+5 358 N_GeneralId 8,9,8,12 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+6 289 Init 8,9,8,12 0 0
+5 359 N_GenInfixOp 8,14,8,15 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+6 373 /\\ 8,14,8,15 0 0
+5 399 N_PrefixExpr 8,17,8,26 2 -
+6 362 N_GenPrefixOp 8,17,8,18 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+7 401 [] 8,17,8,18 0 0
+6 329 N_ActionExpr 8,19,8,26 4 -
+7 97 [ 8,19,8,19 0 0
+7 358 N_GeneralId 8,20,8,23 2 -
+8 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+8 289 Next 8,20,8,23 0 0
+7 98 ]_ 8,24,8,25 0 0
+7 358 N_GeneralId 8,26,8,26 2 -
+8 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+8 289 v 8,26,8,26 0 0
+4 359 N_GenInfixOp 8,28,8,29 2 -
+5 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+5 373 /\\ 8,28,8,29 0 0
+4 351 N_FairnessExpr 8,31,8,40 5 -
+5 86 WF_ 8,31,8,33 0 0
+5 358 N_GeneralId 8,34,8,34 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+6 289 v 8,34,8,34 0 0
+5 94 ( 8,35,8,35 0 0
+5 358 N_GeneralId 8,36,8,39 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+6 289 Next 8,36,8,39 0 0
+5 95 ) 8,40,8,40 0 0
+2 422 N_Theorem 9,1,9,22 2 -
+3 67 THEOREM 9,1,9,7 0 0
+3 371 N_InfixExpr 9,9,9,22 3 -
+4 358 N_GeneralId 9,9,9,12 2 -
+5 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+5 289 Spec 9,9,9,12 0 0
+4 359 N_GenInfixOp 9,14,9,15 2 -
+5 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+5 373 => 9,14,9,15 0 0
+4 399 N_PrefixExpr 9,17,9,22 2 -
+5 362 N_GenPrefixOp 9,17,9,18 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+6 401 [] 9,17,9,18 0 0
+5 358 N_GeneralId 9,19,9,22 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+6 289 TRUE 9,19,9,22 0 0
+1 345 N_EndModule 10,1,10,4 1 -
+2 37 ==== 10,1,10,4 0 0
+== open_comment.tla
+parse false
+log ERROR Lexical {error: EOF reached, possibly open comment starting around line 3
+intern 369 Comment
+== precedence_conflict.tla
+parse false
+log ERROR ***Parse Error***\n\n  Precedence conflict between ops \\land in block line 2, col 20 to line 2, col 21 of module Prec and \\lor.\n\nResidual stack trace follows:\nExtendableExpr starting at line 2, column 23.\nExtendableExpr starting at line 2, column 18.\nExtendableExpr starting at line 2, column 14.\nExtendableExpr starting at line 2, column 10.\nExtendableExpr starting at line 2, column 6.\n
+intern 370 Prec
+intern 371 *.
+intern 372 4
+intern 373 5
+intern 374 --unknown--
+== tabs.tla
+parse true
+intern 375 Tabs
+0 382 N_Module 1,1,4,4 4 -
+1 333 N_BeginModule 1,1,1,21 3 -
+2 3 ---- MODULE 1,1,1,11 0 0
+2 289 Tabs 1,13,1,16 0 0
+2 36 ---- 1,18,1,21 0 0
+1 350 N_Extends 2147483647,2147483647,-2147483648,-2147483648 - -
+1 334 N_Body 2,1,3,12 1 -
+2 389 N_OperatorDefinition 2,1,3,12 - 3
+3 366 N_IdentLHS 2,1,2,1 1 -
+4 289 x 2,1,2,1 0 0
+3 93 == 2,3,2,4 0 0
+3 341 N_ConjList 2,9,3,12 2 -
+4 340 N_ConjItem 2,9,2,12 2 -
+5 129 /\\ 2,9,2,10 0 0
+5 385 N_Number 2,12,2,12 1 -
+6 109 1 2,12,2,12 0 0
+4 340 N_ConjItem 3,9,3,12 2 -
+5 129 /\\ 3,9,3,10 0 0
+5 385 N_Number 3,12,3,12 1 -
+6 109 2 3,12,3,12 0 0
+1 345 N_EndModule 4,1,4,4 1 -
+2 37 ==== 4,1,4,4 0 0
+== unicode.tla
+parse true
+intern 376 Unicode
+intern 377 ≜
+intern 378 ∀
+intern 379 \\geq.
+0 382 N_Module 1,1,3,4 4 -
+1 333 N_BeginModule 1,1,1,24 3 -
+2 3 ---- MODULE 1,1,1,11 0 0
+2 289 Unicode 1,13,1,19 0 0
+2 36 ---- 1,21,1,24 0 0
+1 350 N_Extends 2147483647,2147483647,-2147483648,-2147483648 - -
+1 334 N_Body 2,1,2,28 1 -
+2 389 N_OperatorDefinition 2,1,2,28 - 3
+3 366 N_IdentLHS 2,1,2,1 1 -
+4 289 x 2,1,2,1 0 0
+3 93 ≜ 2,3,2,3 0 0
+3 335 N_BoundedQuant 2,5,2,28 4 -
+4 49 ∀ 2,5,2,5 0 0
+4 408 N_QuantBound 2,7,2,13 3 -
+5 289 a 2,7,2,7 0 0
+5 427 ∈ 2,9,2,9 0 0
+5 411 N_SetEnumerate 2,11,2,13 3 -
+6 100 { 2,11,2,11 0 0
+6 385 N_Number 2,12,2,12 1 -
+7 109 1 2,12,2,12 0 0
+6 101 } 2,13,2,13 0 0
+4 89 : 2,15,2,15 0 0
+4 371 N_InfixExpr 2,17,2,28 3 -
+5 371 N_InfixExpr 2,17,2,21 3 -
+6 358 N_GeneralId 2,17,2,17 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+7 289 a 2,17,2,17 0 0
+6 359 N_GenInfixOp 2,19,2,19 2 -
+7 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+7 373 ≥ 2,19,2,19 0 0
+6 385 N_Number 2,21,2,21 1 -
+7 109 1 2,21,2,21 0 0
+5 359 N_GenInfixOp 2,23,2,23 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 - -
+6 373 ∧ 2,23,2,23 0 0
+5 358 N_GeneralId 2,25,2,28 2 -
+6 367 N_IdPrefix 2147483647,2147483647,-2147483648,-2147483648 0 -
+6 289 TRUE 2,25,2,28 0 0
+1 345 N_EndModule 3,1,3,4 1 -
+2 37 ==== 3,1,3,4 0 0

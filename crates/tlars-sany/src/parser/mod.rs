@@ -9,3 +9,6 @@ mod generated;
 mod java;
 mod support;
 
+
+#[cfg(test)]
+mod tests;

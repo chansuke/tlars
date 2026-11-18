@@ -42,6 +42,8 @@
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
           TLAPLUS_SRC = "${tlaplus}";
           TLAPLUS_EXAMPLES = "${tlaplus-examples}";
+          # For compiling golden-file generators against TLC (tools/golden).
+          TLA2TOOLS_JAR = "${tlc}/share/tla2tools/tla2tools.jar";
         };
 
         packages.tlc = tlc;

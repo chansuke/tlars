@@ -12,7 +12,7 @@ stdenv.mkDerivation {
   buildPhase = ''
     runHook preBuild
     cd tlatools/org.lamport.tlatools
-    # customBuild.xml "generate": the JavaCC parser is not checked in.
+    # customBuild.xml "generate" (regenerates the checked-in JavaCC parser; output is identical).
     java -Dfile.encoding=UTF-8 -cp lib/javacc-4.0.jar javacc -OUTPUT_DIRECTORY=src/tla2sany/parser javacc/tla+.jj
     libs=$(find lib -name '*.jar' | tr '\n' ':')
     find src -name '*.java' > sources.txt
