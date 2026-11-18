@@ -14,9 +14,15 @@
       url = "github:tlaplus/Examples/334c3983a2f44ac78fce89d1d20aa79ceb3e6987";
       flake = false;
     };
+    # tla-ts's TLC conformance corpus (MIT), `packages/conformance/test`. Read by
+    # `xtask conformance`.
+    tla-ts = {
+      url = "github:aidenybai/tla-ts/9614c1cabb9b46c9b3a09f0b55cbc11dd485a038";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, tlaplus, tlaplus-examples }:
+  outputs = { self, nixpkgs, flake-utils, tlaplus, tlaplus-examples, tla-ts }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -42,6 +48,7 @@
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
           TLAPLUS_SRC = "${tlaplus}";
           TLAPLUS_EXAMPLES = "${tlaplus-examples}";
+          TLA_TS_CORPUS = "${tla-ts}/packages/conformance/test";
           # For compiling golden-file generators against TLC (tools/golden).
           TLA2TOOLS_JAR = "${tlc}/share/tla2tools/tla2tools.jar";
         };

@@ -38,6 +38,7 @@
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
+        "tla-ts": "tla-ts",
         "tlaplus": "tlaplus",
         "tlaplus-examples": "tlaplus-examples"
       }
@@ -54,6 +55,23 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "tla-ts": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1795015071,
+        "narHash": "sha256-Mj96z/kYVW0rY7q141Z9nWbtii3k0Li1f8om9ThzALo=",
+        "owner": "aidenybai",
+        "repo": "tla-ts",
+        "rev": "9614c1cabb9b46c9b3a09f0b55cbc11dd485a038",
+        "type": "github"
+      },
+      "original": {
+        "owner": "aidenybai",
+        "repo": "tla-ts",
+        "rev": "9614c1cabb9b46c9b3a09f0b55cbc11dd485a038",
         "type": "github"
       }
     },
