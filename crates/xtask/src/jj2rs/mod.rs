@@ -142,6 +142,48 @@ const TRANSLATED: &[(&str, &str)] = &[
     ("ParseUnit", "tla2sany/modanalyzer/ParseUnit.java"),
     ("ParseUnitRelatives", "tla2sany/modanalyzer/ParseUnitRelatives.java"),
     ("SpecObj", "tla2sany/modanalyzer/SpecObj.java"),
+    // The warnings SANY adds after level checking.
+    ("Linter", "tla2sany/linter/Linter.java"),
+    // The PlusCal parser and translator, for `pcal.Validator`'s checksums.
+    ("Symbol", "tla2tex/Symbol.java"),
+    ("Misc", "tla2tex/Misc.java"),
+    ("Debug", "tla2tex/Debug.java"),
+    ("IntPair", "pcal/IntPair.java"),
+    ("Changed", "pcal/Changed.java"),
+    ("MappingObject", "pcal/MappingObject.java"),
+    ("PCalLocation", "pcal/PCalLocation.java"),
+    ("PCalTLAGenerator", "pcal/PCalTLAGenerator.java"),
+    ("PcalSymTab", "pcal/PcalSymTab.java"),
+    ("PCalUnrecoverableErrorRuntimeException", "pcal/PCalUnrecoverableErrorRuntimeException.java"),
+    ("Region", "pcal/Region.java"),
+    ("AST", "pcal/AST.java"),
+    ("PcalBuiltInSymbols", "pcal/PcalBuiltInSymbols.java"),
+    ("PcalCharReader", "pcal/PcalCharReader.java"),
+    ("PcalParams", "pcal/PcalParams.java"),
+    ("PcalDebug", "pcal/PcalDebug.java"),
+    ("PcalFixIDs", "pcal/PcalFixIDs.java"),
+    ("trans", "pcal/trans.java"),
+    ("TLAExpr", "pcal/TLAExpr.java"),
+    ("PcalTranslate", "pcal/PcalTranslate.java"),
+    ("TLAToken", "pcal/TLAToken.java"),
+    ("TLAtoPCalMapping", "pcal/TLAtoPCalMapping.java"),
+    ("PcalTLAGen", "pcal/PcalTLAGen.java"),
+    ("Tokenize", "pcal/Tokenize.java"),
+    ("ParseAlgorithm", "pcal/ParseAlgorithm.java"),
+    ("UnrecoverableException", "pcal/exception/UnrecoverableException.java"),
+    ("UnrecoverablePositionedException", "pcal/exception/UnrecoverablePositionedException.java"),
+    ("TLCTranslationException", "pcal/exception/TLCTranslationException.java"),
+    ("PcalFixIDException", "pcal/exception/PcalFixIDException.java"),
+    ("TokenizerException", "pcal/exception/TokenizerException.java"),
+    ("PcalTranslateException", "pcal/exception/PcalTranslateException.java"),
+    ("FileToStringVectorException", "pcal/exception/FileToStringVectorException.java"),
+    ("TLAExprException", "pcal/exception/TLAExprException.java"),
+    ("StringVectorToFileException", "pcal/exception/StringVectorToFileException.java"),
+    ("ParseAlgorithmException", "pcal/exception/ParseAlgorithmException.java"),
+    ("PcalResourceFileReaderException", "pcal/exception/PcalResourceFileReaderException.java"),
+    ("PcalTLAGenException", "pcal/exception/PcalTLAGenException.java"),
+    ("PcalSymTabException", "pcal/exception/PcalSymTabException.java"),
+    ("RemoveNameConflictsException", "pcal/exception/RemoveNameConflictsException.java"),
 ];
 
 /// Members implemented by hand in `tlars-sany/src/parser/support.rs`, by signature key.
@@ -152,14 +194,32 @@ const HAND_WRITTEN: &[(&str, &str)] = &[
     ("TLAplusParser", "<init>(SanyOutput,byte[])"),
     // `catch (Throwable t)` around `System.arraycopy`.
     ("SimpleCharStream", "ExpandBuff(boolean)"),
-    // Anonymous visitor classes; used by the linter and TLC, not by semantic analysis.
-    ("SemanticNode", "walkChildren(ChildrenVisitor)"),
+    // Anonymous visitor classes; used by TLC, not by semantic analysis.
     ("SemanticNode", "isDefinedWith(SemanticNode)"),
     ("SemanticNode", "substituteFor(OpDefNode,OpDefNode)"),
     // Debug output of the syntax tree (`-DTLA-Print`); its only callers are patched out.
     ("ParseUnit", "writeParseTreeToFile(boolean,Errors,SanyOutput)"),
-    // Runs the PlusCal translator's validator, which is not translated yet.
+    // Runs `pcal.Validator`, which is hand-written (an inner enum, regexes, CRC32).
     ("SpecObj", "validateParseUnit(ParseUnit,Errors)"),
+    // The PlusCal translator's command line and file handling (`pcal.trans` as a program),
+    // which validation does not reach.
+    ("trans", "main(String[])"),
+    ("trans", "runMe(String[])"),
+    ("trans", "exitWithStatus(int)"),
+    ("trans", "fileToStringVector(String)"),
+    ("trans", "performTranslation(List)"),
+    ("trans", "TLCTranslate(AST)"),
+    ("trans", "WriteStringVectorToFile(List,String)"),
+    ("trans", "OutputHelpMessage()"),
+    // TLATeX's error reporting and timing, which PlusCal does not call.
+    ("Debug", "ReportError(String)"),
+    ("Debug", "now()"),
+    ("Debug", "printElapsedTime(long,String)"),
+    // A debugging dump that passes a `TLAToken[]` as `Object[]`; nothing calls it.
+    ("TLAExpr", "print(String)"),
+    ("Misc", "TeXifyIdent(String)"),
+    // `Arrays.hashCode` of an array of arrays hashes by identity; never a key.
+    ("TLAtoPCalMapping", "hashCode()"),
 ];
 
 /// Edits to the Java sources before translation, each an exact text that must occur once in
@@ -312,12 +372,218 @@ const PATCHES: &[(&str, &str, &str, &str)] = &[
         "",
         "-DTLA-Print debug output is not modelled",
     ),
+    (
+        "tla2sany/semantic/SemanticNode.java",
+        "public <T> ChildrenVisitor<T> walkChildren(final ChildrenVisitor<T> visitor) {",
+        "public ChildrenVisitor walkChildren(final ChildrenVisitor visitor) {",
+        "generic method; ChildrenVisitor's type parameter is erased",
+    ),
+    (
+        "tla2sany/linter/Linter.java",
+        "\tprivate void lintRecords(ModuleNode m, Errors errors) {\u{22ef}\t\t}).get();\n\t}",
+        LINTER_RECORDS,
+        "stream pipelines as the loops they mean (same order, same short-circuits); the anonymous ChildrenVisitor as a named class",
+    ),
+    (
+        "pcal/PcalCharReader.java",
+        "return input.codePoints().toArray();",
+        "return JavaStrings.codePoints(input);",
+        "stream pipeline",
+    ),
+    (
+        "pcal/PcalCharReader.java",
+        "return new String(currentLine, column, currentLine.length - column) + '\\n' ;",
+        "return JavaStrings.fromCodePoints(currentLine, column, currentLine.length - column) + '\\n' ;",
+        "new String(int[] codePoints, int offset, int count)",
+    ),
+    (
+        "pcal/ParseAlgorithm.java",
+        "! Arrays.stream(alternate).anyMatch(tok::equals)",
+        "! JavaStrings.arrayContains(alternate, tok)",
+        "stream pipeline",
+    ),
+    (
+        "pcal/ParseAlgorithm.java",
+        "\t\ttry {\n\t\t       result.setOrigin(new Region(begLoc, \n\t\t               ((AST) result.Do.elementAt(result.Do.size()-1)).getOrigin().getEnd())) ;\n\t\t} catch (ArrayIndexOutOfBoundsException e) {\n\t\t\tthrow new ParseAlgorithmException(\"Missing body of with statement\", result);\n\t\t}",
+        "\t\tif (result.Do.size() == 0) {\n\t\t\tthrow new ParseAlgorithmException(\"Missing body of with statement\", result);\n\t\t}\n\t\tresult.setOrigin(new Region(begLoc, ((AST) result.Do.elementAt(result.Do.size()-1)).getOrigin().getEnd())) ;",
+        "the ArrayIndexOutOfBoundsException caught is elementAt(-1) on an empty body; tested up front",
+    ),
+    (
+        "pcal/trans.java",
+        "!LABEL_ROOT_PATTERN.matcher(labelRootArg).matches()",
+        "!JavaStrings.isLabelRoot(labelRootArg)",
+        "a regex match: LABEL_ROOT_REGEX, [a-zA-Z][a-zA-Z0-9_]*",
+    ),
 ];
 
-/// The source of `file` with its [`PATCHES`] applied.
+/// [`PATCHES`]' replacement for `Linter.lintRecords` and its helpers.
+const LINTER_RECORDS: &str = r#"	private void lintRecords(ModuleNode m, Errors errors) {
+		final OpApplNode[] records = m.getRecords();
+
+		// All records across all modules.
+		final List<OpApplNode> allRecords = new ArrayList<OpApplNode>();
+		for (final ModuleNode mod : m.getExtendedModuleSet(true)) {
+			for (final OpApplNode r : mod.getRecords()) {
+				allRecords.add(r);
+			}
+		}
+		for (final OpApplNode r : records) {
+			allRecords.add(r);
+		}
+
+		for (final OpApplNode record : records) {
+			final List<OpApplNode> fieldPairs = getFieldPairs(record);
+			for (final OpApplNode fp : fieldPairs) {
+				final StringNode lhs = (StringNode) fp.getArgs()[0];
+				final ExprOrOpArgNode rhs = fp.getArgs()[1];
+				final SymbolNode s = m.getContext().getSymbol(lhs.getRep());
+				if (s != null) {
+					if (!isBuiltFromDeclarations(rhs)
+							&& !anyBuiltFromDeclarations(fieldPairs)
+							&& !anySameDomainBuiltFromDeclarations(allRecords, record)) {
+						errors.addMessage(ErrorCode.RECORD_CONSTRUCTOR_FIELD_NAME_CLASH, lhs.getLocation(),
+										"The field name \"%1$s\" in the record constructor is identical to the existing definition or declaration\n"
+										+ "named %1$s, located at %2$s.\n"
+										+ "The field in the record will not take the value of the %1$s definition or declaration.\n"
+										+ "In TLA+, field names in records are strings, regardless of any similarly named declarations or definitions.\n"
+												+ "Therefore, DOMAIN [%1$s |-> ...] = {\"%1$s\"} holds true.",
+										lhs.getRep(),
+										s.getLocation());
+					}
+				}
+			}
+		}
+	}
+
+	// fieldPairs.stream().anyMatch(Linter::isBuiltFromDeclarations)
+	private static boolean anyBuiltFromDeclarations(final List<OpApplNode> fieldPairs) {
+		for (final OpApplNode fp : fieldPairs) {
+			if (isBuiltFromDeclarations(fp)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// allRecords.stream().filter(r -> Records.sameDomain(r, record))
+	//     .flatMap(r -> getFieldPairs(r).stream()).anyMatch(Linter::isBuiltFromDeclarations)
+	private static boolean anySameDomainBuiltFromDeclarations(final List<OpApplNode> allRecords, final OpApplNode record) {
+		for (final OpApplNode r : allRecords) {
+			if (Records.sameDomain(r, record)) {
+				for (final OpApplNode fp : getFieldPairs(r)) {
+					if (isBuiltFromDeclarations(fp)) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	private static List<OpApplNode> getFieldPairs(OpApplNode record) {
+		final List<OpApplNode> out = new ArrayList<OpApplNode>();
+		for (final ExprOrOpArgNode arg : record.getArgs()) {
+			if (arg instanceof OpApplNode) {
+				out.add((OpApplNode) arg);
+			}
+		}
+		return out;
+	}
+
+	// true if the ExprOrOpArgNode is (transitively) built from a parameter
+	// (FormalParameterNode), CONSTANT (OpDeclNode), or a VARIABLE (OpDeclNode)
+	// declaration.
+	private static boolean isBuiltFromDeclarations(final ExprOrOpArgNode expr) {
+		final DeclarationFinder finder = new DeclarationFinder();
+		expr.walkChildren(finder);
+		return finder.found;
+	}
+
+	private static class DeclarationFinder extends ChildrenVisitor {
+		boolean found;
+
+		public void preVisit(final SemanticNode node) {
+			if (node instanceof OpApplNode) {
+				final SymbolNode operator = ((OpApplNode) node).getOperator();
+				if (operator instanceof OpDeclNode) {
+					found = true;
+				}
+				if (operator instanceof FormalParamNode) {
+					found = true;
+				}
+				if (operator instanceof OpDefNode) {
+					// Special cases for operator stubs in the standard modules.
+					if (operator.getName() == UniqueString.of("BOOLEAN")) {
+						found = true;
+						return;
+					}
+					final ModuleNode moduleNode = ((OpDefNode) operator).getOriginallyDefinedInModuleNode();
+					if (moduleNode != null && moduleNode.getName() == UniqueString.of("Integers")
+							&& operator.getName() == UniqueString.of("Int")) {
+						found = true;
+						return;
+					}
+					if (moduleNode != null && moduleNode.getName() == UniqueString.of("Naturals")
+							&& operator.getName() == UniqueString.of("Nat")) {
+						found = true;
+						return;
+					}
+					if (moduleNode != null && moduleNode.getName() == UniqueString.of("Reals")
+							&& operator.getName() == UniqueString.of("Reals")) {
+						found = true;
+						return;
+					}
+					// Follow the operator definition to see if it is built from declarations.
+					operator.walkChildren(this);
+				}
+			}
+		}
+
+		public boolean preempt(SemanticNode node) {
+			return found;
+		}
+	}"#;
+
+/// Identifiers that mean a different class in some files than elsewhere, renamed as whole
+/// words before translation: `(file prefix, from, to, why)`.
+const RENAMES: &[(&str, &str, &str, &str)] = &[
+    (
+        "pcal/",
+        "Vector",
+        "JavaVector",
+        "java.util.Vector, whose contains and indexOf compare with equals; SANY's tla2sany.utilities.Vector compares with ==",
+    ),
+    ("tla2tex/", "Vector", "JavaVector", "java.util.Vector, as in pcal/"),
+    ("pcal/Tokenize.java", "Token", "TexToken", "tla2tex.Token's constants, not the parser's Token"),
+];
+
+/// `src` with every whole-word `from` replaced by `to`.
+fn rename_word(src: &str, from: &str, to: &str) -> String {
+    let is_id = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$';
+    let mut out = String::with_capacity(src.len());
+    let mut rest = src;
+    while let Some(i) = rest.find(from) {
+        let before = rest[..i].chars().next_back();
+        let after = rest[i + from.len()..].chars().next();
+        out.push_str(&rest[..i]);
+        if before.is_some_and(is_id) || after.is_some_and(is_id) {
+            out.push_str(from);
+        } else {
+            out.push_str(to);
+        }
+        rest = &rest[i + from.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The source of `file` with its [`RENAMES`] and [`PATCHES`] applied.
 fn patched_source(tlc_src: &Path, file: &str) -> Result<String, String> {
     let path = tlc_src.join(file);
     let mut src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    for (_prefix, from, to, _why) in RENAMES.iter().filter(|r| file.starts_with(r.0)) {
+        src = rename_word(&src, from, to);
+    }
     for (f, before, after, why) in PATCHES.iter().filter(|p| p.0 == file) {
         let (start, end) = before.split_once('\u{22ef}').unwrap_or((before, ""));
         match src.matches(start).count() {
@@ -341,6 +607,7 @@ const RAW_OVERRIDES: &[(&str, &str, &str)] = &[
     ("TLAplusParser", "jj_expentries", "Vector<int[]>"),
     ("ModuleContext", "context", "Hashtable<String, ModulePointer>"),
     ("ModuleRelationships", "modRelHashtable", "Hashtable<ModulePointer, ModuleRelatives>"),
+    ("ParseAlgorithm", "allLabels", "Hashtable<String, String>"),
 ];
 
 fn parse_class(tlc_src: &Path, file: &str, class: &str) -> Result<(ast::ClassHeader, Vec<parse::Member>), String> {
@@ -354,6 +621,11 @@ fn parse_class(tlc_src: &Path, file: &str, class: &str) -> Result<(ast::ClassHea
     Ok((header, members))
 }
 
+thread_local! {
+    /// The extern (hand-written) class names, which nested classes must not reuse.
+    static EXTERN_NAMES: std::cell::RefCell<BTreeSet<String>> = Default::default();
+}
+
 /// Nested classes (`JJCalls`, `Context.Pair`, `Generator.Function.pair`) become top-level
 /// classes after their enclosing class, remembering it.
 fn flatten(
@@ -363,6 +635,16 @@ fn flatten(
     parsed: &mut Vec<(String, ast::ClassHeader, Vec<parse::Member>)>,
     outers: &mut BTreeMap<String, (String, bool)>,
 ) {
+    let mut header = header;
+    // A nested class named like a library class (`AST.Assert` and `util.Assert`) becomes
+    // `Outer_Name`; the sources refer to such classes by their qualified name.
+    if let Some(o) = outer
+        && EXTERN_NAMES.with(|n| n.borrow().contains(&header.name))
+    {
+        let renamed = format!("{o}_{}", header.name);
+        emit::NESTED_RENAMES.with(|r| r.borrow_mut().insert(format!("{o}.{}", header.name), renamed.clone()));
+        header.name = renamed;
+    }
     let name = header.name.clone();
     if let Some(o) = outer {
         outers.insert(name.clone(), (o.to_string(), !header.is_static));
@@ -424,6 +706,7 @@ fn emit_on_this_thread(tlaplus_src: &Path, out: &Path, check: bool) -> Result<()
     let tlc_src = tlaplus_src.join("tlatools/org.lamport.tlatools/src");
     let mut parsed: Vec<(String, ast::ClassHeader, Vec<parse::Member>)> = Vec::new();
     let mut outers: BTreeMap<String, (String, bool)> = BTreeMap::new();
+    EXTERN_NAMES.with(|n| *n.borrow_mut() = externs::classes().0.keys().cloned().collect());
     for (class, file) in TRANSLATED {
         // Nested classes (`JJCalls`, `LookaheadSuccess`) become top-level classes.
         let (header, all) = parse_class(&tlc_src, file, class)?;
@@ -453,6 +736,9 @@ fn emit_on_this_thread(tlaplus_src: &Path, out: &Path, check: bool) -> Result<()
         .collect();
     hier::HIER.with(|h| *h.borrow_mut() = hierarchy);
     let (mut classes, extern_consts) = externs::classes();
+    emit::EXTERN_ARITY.with(|a| {
+        *a.borrow_mut() = classes.iter().filter(|(_, i)| !i.type_params.is_empty()).map(|(c, i)| (c.clone(), i.type_params.len())).collect()
+    });
     // `ErrorCode`'s constants, from the enum's declaration.
     let error_codes = std::fs::read_to_string(tlc_src.join("tla2sany/semantic/ErrorCode.java")).map_err(|e| e.to_string())?;
     let info = classes.get_mut("ErrorCode").expect("ErrorCode extern");
@@ -511,7 +797,10 @@ fn emit_on_this_thread(tlaplus_src: &Path, out: &Path, check: bool) -> Result<()
         let (outer, file) = hier::HIER.with(|h| {
             let h = h.borrow();
             let mut top = class.clone();
-            let mut path = vec![class.clone()];
+            let mut path = vec![match &h.places[class].outer {
+                Some(o) => class.strip_prefix(&format!("{o}_")).unwrap_or(class).to_string(),
+                None => class.clone(),
+            }];
             while let Some(o) = h.places.get(&top).and_then(|p| p.outer.clone()) {
                 path.insert(0, o.clone());
                 top = o;
@@ -548,6 +837,13 @@ fn emit_on_this_thread(tlaplus_src: &Path, out: &Path, check: bool) -> Result<()
     println!("wrote {} ({} emission errors, {} distinct)", out.display(), errors.len(), counts.len());
     for (k, n) in &counts {
         println!("  {n:4}  {k}");
+    }
+    let members: BTreeSet<&str> = errors.iter().filter_map(|e| e.split(": ").next()).collect();
+    if !members.is_empty() {
+        println!("members with errors:");
+        for m in members {
+            println!("  {m}");
+        }
     }
     Ok(())
 }

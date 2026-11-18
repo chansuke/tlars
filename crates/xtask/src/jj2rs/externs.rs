@@ -29,12 +29,73 @@ class Vector<E>
     contains(E) -> boolean
     appendNoRepeats(Vector<E>)
 
+class JavaVector<E>
+    <init>()
+    <init>(int)
+    <init>(int, int)
+    <init>(JavaVector<E>)
+    add(E) -> boolean
+    add(int, E)
+    addAll(JavaVector<E>) -> boolean
+    addElement(E)
+    insertElementAt(E, int)
+    elementAt(int) -> E
+    get(int) -> E
+    set(int, E) -> E
+    setElementAt(E, int)
+    firstElement() -> E
+    lastElement() -> E
+    remove(int) -> E
+    removeElementAt(int)
+    removeAllElements()
+    contains(E) -> boolean
+    indexOf(E) -> int
+    size() -> int
+    isEmpty() -> boolean
+    clone() -> Object
+    elements() -> Enumeration<E>
+    iterator() -> Iterator<E>
+    toString() -> String
+
+class JavaStrings
+    static codePoints(String) -> int[]
+    static fromCodePoints(int[], int, int) -> String
+    static arrayContains(String[], String) -> boolean
+    static isLabelRoot(String) -> boolean
+
+class File
+    <init>(String)
+    getName() -> String
+    getPath() -> String
+
+class TexToken
+    const BUILTIN: int
+    const NUMBER: int
+    const STRING: int
+    const IDENT: int
+    const COMMENT: int
+    const DASHES: int
+    const END_MODULE: int
+    const PROLOG: int
+    const EPILOG: int
+    const PF_STEP: int
+    const PCAL_LABEL: int
+
+class TLAConstants
+    static MODULE_CLOSING_REGEX: String
+    static RECORD_ARROW: String
+
+class Files
+    static CONFIG_EXTENSION: String
+    static TLA_EXTENSION: String
+
 class Enumeration<E>
     hasMoreElements() -> boolean
     nextElement() -> E
 
 class Hashtable<K, V>
     <init>()
+    <init>(int)
     get(K) -> V
     put(K, V) -> V
     remove(K) -> V
@@ -153,15 +214,21 @@ class Long
 class Math
     static max(int, int) -> int
     static min(int, int) -> int
+    static abs(int) -> int
 
 class Character
     static isWhitespace(char) -> boolean
+    static isLetter(char) -> boolean
+    static isDigit(char) -> boolean
+    static isLetterOrDigit(char) -> boolean
+    static toString(int) -> String
 
 class System
     static out: PrintStream
     static arraycopy(Any, int, Any, int, int)
     static getProperty(String) -> String
     static getProperty(String, String) -> String
+    static setProperty(String, String) -> String
     static currentTimeMillis() -> long
 
 class PrintStream
@@ -187,6 +254,7 @@ class UniqueString
 class Location
     static nullLoc: Location
     <init>(UniqueString, int, int, int, int)
+    <init>(int, int, int, int)
     static moduleLocation(String) -> Location
     toString() -> String
     beginLine() -> int
@@ -222,6 +290,10 @@ class FileUtil
 
 class ToolIO
     static getDefaultResolver() -> FilenameToStream
+    static out: PrintStream
+    static err: PrintStream
+    const SYSTEM: int
+    static getMode() -> int
 
 class LogLevel
     static ERROR: LogLevel
@@ -241,6 +313,11 @@ class EC
 
 class KeyWords
     static CONSTANT: String
+    static CONSTANTS: String
+    static EXTENDS: String
+    static MODULE: String
+    static SPECIFICATION: String
+    static VARIABLE: String
 
 enum ErrorCode
 
@@ -340,7 +417,8 @@ pub(crate) fn classes() -> (Classes, Vec<(String, String)>) {
             None => T::Void,
         };
         let is_ctor = name == "<init>";
-        let sig = MethodSig { params, ret, is_static: is_static || is_ctor, fallible, rust_name: String::new(), member: None, varargs, has_body: true };
+        let returns_param = ret.mentions_param();
+        let sig = MethodSig { params, ret, is_static: is_static || is_ctor, fallible, rust_name: String::new(), member: None, varargs, has_body: true, returns_param };
         info.methods.entry(name.into()).or_default().push(sig);
     }
     // Library exceptions: values of the generated `JThrow`.
@@ -354,6 +432,7 @@ pub(crate) fn classes() -> (Classes, Vec<(String, String)>) {
             member: None,
             varargs: false,
             has_body: true,
+            returns_param: false,
         };
         let mut info = ClassInfo { is_extern: true, ..ClassInfo::default() };
         info.methods.insert("getMessage".into(), vec![sig(T::Str, true)]);

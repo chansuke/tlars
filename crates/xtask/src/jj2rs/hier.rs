@@ -28,6 +28,9 @@ pub(crate) const EXTERN_THROWABLES: &[(&str, &str)] = &[
     ("UnsupportedEncodingException", "IOException"),
     ("FileNotFoundException", "IOException"),
     ("WrongInvocationException", "RuntimeException"),
+    ("NullPointerException", "RuntimeException"),
+    ("IndexOutOfBoundsException", "RuntimeException"),
+    ("ArrayIndexOutOfBoundsException", "IndexOutOfBoundsException"),
 ];
 
 pub(crate) fn is_extern_throwable(c: &str) -> bool {

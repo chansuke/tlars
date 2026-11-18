@@ -630,10 +630,20 @@ impl<'t> Parser<'t> {
                     while self.is_ident("catch") {
                         self.bump();
                         self.expect_punct("(")?;
-                        let ty = self.ty()?;
+                        if self.is_ident("final") {
+                            self.bump();
+                        }
+                        // `catch (A | B e)` is `catch (A e)` then `catch (B e)` with one body.
+                        let mut tys = vec![self.ty()?];
+                        while self.eat_punct("|") {
+                            tys.push(self.ty()?);
+                        }
                         let name = self.ident()?;
                         self.expect_punct(")")?;
-                        catches.push((ty, name, self.block()?));
+                        let body = self.block()?;
+                        for ty in tys {
+                            catches.push((ty, name.clone(), body.clone()));
+                        }
                     }
                     let finally = if self.is_ident("finally") {
                         self.bump();

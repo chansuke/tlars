@@ -36,8 +36,47 @@ pub(crate) enum T {
     Null,
 }
 
+/// Library generics whose Rust type is erased as in Java (`J<JavaVector>` for every
+/// `Vector<E>`): their sources mix raw and parameterized uses freely. Their methods that
+/// return an element take the expected element type as a turbofish.
+pub(crate) const ERASED_LIBRARY_GENERICS: &[&str] = &["JavaVector"];
+
+thread_local! {
+    /// The number of type parameters of each generic library class.
+    pub(crate) static EXTERN_ARITY: std::cell::RefCell<BTreeMap<String, usize>> = Default::default();
+    /// `Outer.Inner` -> the Rust name of a nested class renamed to avoid a clash.
+    pub(crate) static NESTED_RENAMES: std::cell::RefCell<BTreeMap<String, String>> = Default::default();
+}
+
+/// A regex that is an alternation of literal strings (`\\{|\\}|"`), as those strings.
+fn literal_alternatives(re: &str) -> Option<Vec<String>> {
+    let mut alts = vec![String::new()];
+    let mut chars = re.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                let e = chars.next()?;
+                if e.is_ascii_alphanumeric() {
+                    return None;
+                }
+                alts.last_mut().expect("one").push(e);
+            }
+            '|' => alts.push(String::new()),
+            '.' | '[' | ']' | '{' | '}' | '(' | ')' | '*' | '+' | '?' | '^' | '$' => return None,
+            c => alts.last_mut().expect("one").push(c),
+        }
+    }
+    alts.iter().all(|a| !a.is_empty()).then_some(alts)
+}
+
 /// The simple class name, with names that share one Rust type unified.
 pub(crate) fn class_name(name: &str) -> String {
+    let mut segs = name.rsplit('.');
+    if let (Some(inner), Some(outer)) = (segs.next(), segs.next())
+        && let Some(r) = NESTED_RENAMES.with(|m| m.borrow().get(&format!("{outer}.{inner}")).cloned())
+    {
+        return r;
+    }
     match name.rsplit('.').next().unwrap_or(name) {
         // The parser treats tree nodes through both names; one Rust type serves both.
         "TreeNode" => "SyntaxTreeNode".into(),
@@ -116,8 +155,16 @@ impl T {
             T::Obj(c, _) if HIER.with(|h| h.borrow().object_type(c).is_some()) => {
                 format!("J<{}>", HIER.with(|h| h.borrow().object_type(c).expect("family")))
             }
-            // Translated generic classes are erased: no type arguments in Rust.
-            T::Obj(c, args) if args.is_empty() || HIER.with(|h| h.borrow().places.contains_key(c)) => format!("J<{c}>"),
+            // Translated generic classes are erased: no type arguments in Rust; so are the
+            // library classes that hold `Object`s (`ERASED_LIBRARY_GENERICS`).
+            T::Obj(c, _) if HIER.with(|h| h.borrow().places.contains_key(c)) || ERASED_LIBRARY_GENERICS.contains(&c.as_str()) => {
+                format!("J<{c}>")
+            }
+            // A raw library generic (`Vector`) holds `Object`s.
+            T::Obj(c, args) if args.is_empty() => match EXTERN_ARITY.with(|a| a.borrow().get(c).copied()).unwrap_or(0) {
+                0 => format!("J<{c}>"),
+                n => format!("J<{c}<{}>>", vec!["J<Object>"; n].join(", ")),
+            },
             T::Obj(c, args) => format!("J<{c}<{}>>", args.iter().map(T::rust).collect::<Vec<_>>().join(", ")),
             T::Arr(e) => format!("JArr<{}>", e.rust()),
             T::Param(i) => format!("__Param{i}"),
@@ -135,6 +182,16 @@ impl T {
             T::Double => "0.0".into(),
             T::Void => "()".into(),
             _ => "JNull::null()".into(),
+        }
+    }
+
+    /// Whether a type parameter occurs in this type.
+    pub(crate) fn mentions_param(&self) -> bool {
+        match self {
+            T::Param(_) => true,
+            T::Obj(_, a) => a.iter().any(T::mentions_param),
+            T::Arr(e) => e.mentions_param(),
+            _ => false,
         }
     }
 
@@ -215,6 +272,8 @@ pub(crate) struct MethodSig {
     pub(crate) varargs: bool,
     /// Has a body (not abstract or an interface method).
     pub(crate) has_body: bool,
+    /// The declared return type mentions a type parameter (before substitution).
+    pub(crate) returns_param: bool,
 }
 
 pub(crate) type Classes = BTreeMap<String, ClassInfo>;
@@ -338,6 +397,7 @@ pub(crate) fn class_info(
                     member: Some(idx),
                     varargs: method.varargs,
                     has_body: method.has_body,
+                    returns_param: false,
                 });
             }
             _ => {}
@@ -347,7 +407,7 @@ pub(crate) fn class_info(
     if !members.iter().any(|m| matches!(m.kind, MemberKind::Constructor(_))) {
         info.methods.insert(
             "<init>".into(),
-            vec![MethodSig { params: Vec::new(), ret: T::Void, is_static: true, fallible: true, rust_name: String::new(), member: None, varargs: false, has_body: true }],
+            vec![MethodSig { params: Vec::new(), ret: T::Void, is_static: true, fallible: true, rust_name: String::new(), member: None, varargs: false, has_body: true, returns_param: false }],
         );
     }
     name_overloads(&mut info);
@@ -392,6 +452,8 @@ pub(crate) struct Emitter<'c> {
     pending_label: Option<String>,
     counter: usize,
     pub(crate) errors: Vec<String>,
+    /// Signature key of the member being emitted, for error reports.
+    member: String,
 }
 
 impl<'c> Emitter<'c> {
@@ -408,6 +470,7 @@ impl<'c> Emitter<'c> {
             pending_label: None,
             counter: 0,
             errors: Vec::new(),
+            member: String::new(),
         }
     }
 
@@ -417,7 +480,7 @@ impl<'c> Emitter<'c> {
     }
 
     fn err(&mut self, msg: String) -> String {
-        self.errors.push(format!("{}: {msg}", self.class));
+        self.errors.push(format!("{}.{}: {msg}", self.class, self.member));
         format!("compile_error!({msg:?})")
     }
 
@@ -1272,9 +1335,20 @@ impl<'c> Emitter<'c> {
     /// A resolved call; `recv` is `None` for static calls.
     fn emit_call(&mut self, owner: &str, sig: &MethodSig, recv: Option<String>, args: &[Expr]) -> (String, T) {
         let a = self.args_for_sig(args, sig);
+        // An erased library generic returns elements as the type the caller expects.
+        let turbofish = if ERASED_LIBRARY_GENERICS.contains(&owner) && sig.returns_param {
+            match &sig.ret {
+                T::Obj(c, targs) if matches!(c.as_str(), "Iterator" | "Enumeration") => {
+                    format!("::<{}>", targs.first().cloned().unwrap_or_else(|| T::obj("Object")).rust())
+                }
+                ret => format!("::<{}>", ret.rust()),
+            }
+        } else {
+            String::new()
+        };
         let call = match recv {
-            Some(r) if !sig.is_static => format!("{r}.{}({a})", sig.rust_name),
-            _ => format!("{owner}::{}({a})", sig.rust_name),
+            Some(r) if !sig.is_static => format!("{r}.{}{turbofish}({a})", sig.rust_name),
+            _ => format!("{owner}::{}{turbofish}({a})", sig.rust_name),
         };
         (if sig.fallible { self.tri(call) } else { call }, sig.ret.clone())
     }
@@ -1304,6 +1378,10 @@ impl<'c> Emitter<'c> {
                         return self.emit_call(&owner, &sig, Some(format!("({r})")), args);
                     }
                 }
+            }
+            if name == "getMessage" && args.is_empty() && self.field_of(&class, "detailMessage").is_some() {
+                let (v, _) = self.name("detailMessage");
+                return (v, T::Str);
             }
             return (self.err(format!("unknown method {name}/{}", args.len())), T::Void);
         };
@@ -1336,6 +1414,11 @@ impl<'c> Emitter<'c> {
                 None => match (name, args) {
                     ("toString", []) => (format!("JStr::of(&({recv}).java_string())"), T::Str),
                     ("hashCode", []) => (format!("({recv}).java_hash()"), T::Int),
+                    // `Throwable.getMessage()` of a translated exception: its `detailMessage`.
+                    ("getMessage", []) if self.field_of(class, "detailMessage").is_some() => {
+                        let (owner, t, is_static) = self.field_of(class, "detailMessage").expect("throwable");
+                        (self.read_field(&owner, "detailMessage", &t, is_static, Some(format!("({recv})"))), T::Str)
+                    }
                     ("equals", [o]) => {
                         let ot = rt.clone();
                         let o = self.expr_as(o, &ot);
@@ -1414,6 +1497,11 @@ impl<'c> Emitter<'c> {
         let str_arg = |this: &mut Self, i: usize| this.expr_as(&args[i], &T::Str);
         let int_arg = |this: &mut Self, i: usize| this.expr_as(&args[i], &T::Int);
         match (name, arg_types.as_slice()) {
+            // `String.equals(Object)`: false for anything but an equal string.
+            ("equals", [T::Obj(c, _)]) if c == "Object" => {
+                let o = self.expr(&args[0]).0;
+                (format!("{recv}.equals_object(&{o})"), T::Bool)
+            }
             ("equals", [_]) => (format!("{recv}.equals(&{})", str_arg(self, 0)), T::Bool),
             ("length", []) => (format!("{recv}.length()"), T::Int),
             ("isEmpty", []) => (format!("{recv}.is_empty()"), T::Bool),
@@ -1426,9 +1514,20 @@ impl<'c> Emitter<'c> {
             }
             ("indexOf", [T::Char]) => (format!("{recv}.index_of_char({})", self.expr_as(&args[0], &T::Char)), T::Int),
             ("indexOf", [T::Str]) => (format!("{recv}.index_of(&{})", str_arg(self, 0)), T::Int),
+            ("indexOf", [T::Str, _]) => {
+                let a = str_arg(self, 0);
+                let from = int_arg(self, 1);
+                (format!("{recv}.index_of_from(&{a}, {from})"), T::Int)
+            }
+            ("compareTo", [T::Str]) => (format!("{recv}.compare_to(&{})", str_arg(self, 0)), T::Int),
             ("lastIndexOf", [T::Str]) => (format!("{recv}.last_index_of(&{})", str_arg(self, 0)), T::Int),
             ("contains", [T::Str]) => (format!("{recv}.contains(&{})", str_arg(self, 0)), T::Bool),
             ("startsWith", [_]) => (format!("{recv}.starts_with(&{})", str_arg(self, 0)), T::Bool),
+            ("startsWith", [_, _]) => {
+                let a = str_arg(self, 0);
+                let at = int_arg(self, 1);
+                (format!("{recv}.starts_with_at(&{a}, {at})"), T::Bool)
+            }
             ("endsWith", [_]) => (format!("{recv}.ends_with(&{})", str_arg(self, 0)), T::Bool),
             ("concat", [_]) => (format!("concat(&{recv}, &{})", str_arg(self, 0)), T::Str),
             ("trim", []) => (format!("{recv}.trim()"), T::Str),
@@ -1442,6 +1541,12 @@ impl<'c> Emitter<'c> {
             // Only the regexes the sources use, each by a hand-written splitter.
             ("split", [_]) => match &args[0] {
                 Expr::Str(re) if unescape(re) == "\\r?\\n" => (format!("{recv}.split_lines()"), T::Arr(Box::new(T::Str))),
+                // An alternation of literal strings (`" |,|\\)"`).
+                Expr::Str(re) if literal_alternatives(&unescape(re)).is_some() => {
+                    let alts = literal_alternatives(&unescape(re)).expect("literal");
+                    let list: Vec<String> = alts.iter().map(|a| format!("{a:?}")).collect();
+                    (format!("{recv}.split_literals(&[{}])", list.join(", ")), T::Arr(Box::new(T::Str)))
+                }
                 other => (self.err(format!("String.split with regex {other:?}")), T::Void),
             },
             ("toString" | "intern", []) => (recv.to_string(), T::Str),
@@ -1663,6 +1768,10 @@ thread_local! {
 /// `recv.getClass()`: the runtime class, by simple name.
 fn get_class(recv: &str, t: &T) -> String {
     let c = t.class().unwrap_or_default();
+    // An `Object`'s class is whatever it holds.
+    if c == "Object" {
+        return format!("JClass(({recv}).java_class())");
+    }
     if HIER.with(|h| h.borrow().object_type(c).is_some()) {
         format!("JClass(({recv}).jread(|o| o.jclass_name()))")
     } else {
@@ -1781,8 +1890,10 @@ pub(crate) fn unescape(s: &str) -> String {
 /// Java identifiers that are Rust keywords.
 pub(crate) fn rust_ident(n: &str) -> String {
     match n {
-        "type" | "match" | "fn" | "mod" | "use" | "ref" | "move" | "loop" | "impl" | "trait" | "where" | "in" | "as" | "self"
-        | "Self" | "crate" | "super" | "mut" | "let" | "unsafe" | "dyn" | "async" | "await" | "box" | "yield" | "macro"
+        // Keywords that cannot be raw identifiers.
+        "self" | "Self" | "crate" | "super" => format!("{n}_"),
+        "type" | "match" | "fn" | "mod" | "use" | "ref" | "move" | "loop" | "impl" | "trait" | "where" | "in" | "as"
+        | "mut" | "let" | "unsafe" | "dyn" | "async" | "await" | "box" | "yield" | "macro"
         | "pub" | "struct" | "enum" | "extern" | "priv" | "override" | "typeof" | "virtual" | "final" | "abstract" | "become"
         | "do" | "unsized" | "try" | "gen" => format!("r#{n}"),
         other => other.to_string(),
@@ -2085,6 +2196,7 @@ pub(crate) fn emit_class(
         if hand_written.contains(&key) || !method.has_body {
             continue;
         }
+        em.member = key.clone();
         if is_ctor {
             let suffix = &sig.rust_name;
             instance_impl.push_str(&em.method(method, &format!("init__{name}_{suffix}"), true, false));
@@ -2286,18 +2398,39 @@ pub(crate) fn emit_values(classes: &Classes, names: &[String], out: &mut String)
             Some(s) if s.params[0].class() == Some("Object") => format!("self.{}(Object::of(other.clone())).expect(\"equals\")", s.rust_name),
             _ => "self.same(other)".into(),
         };
+        let default_string = format!("object_to_string({class_name}, self.identity_hash())");
         let string = match call("toString", 0) {
             Some(s) => format!("self.{}().expect(\"toString\").java_string()", s.rust_name),
-            None => format!("object_to_string({class_name}, self.identity_hash())"),
+            // Members that override `toString` below a root that does not (`AST.If`).
+            None if family => {
+                let concrete = HIER.with(|h| h.borrow().concrete_below(&root));
+                let arms: Vec<String> = concrete
+                    .iter()
+                    .filter_map(|k| {
+                        let s = em.overloads(k, "toString", 0).and_then(|(_, s)| s.into_iter().find(|s| !s.is_static))?;
+                        Some(format!("            {k:?} => self.{}().expect(\"toString\").java_string(),", s.rust_name))
+                    })
+                    .collect();
+                if arms.is_empty() {
+                    default_string
+                } else {
+                    format!(
+                        "match self.jread(|o| o.jclass_name()) {{\n{}\n            _ => {default_string},\n        }}",
+                        arms.join("\n")
+                    )
+                }
+            }
+            None => default_string,
         };
         let instance_of = if family {
             "self.jtest(|o| o.is_instance_of(class))".to_string()
         } else {
             format!("!self.is_null() && (class == {root:?} || class == \"Object\")")
         };
+        let class_of = if family { "self.jread(|o| o.jclass_name())".to_string() } else { format!("{root:?}") };
         let _ = writeln!(
             out,
-            "impl JValue for {rust} {{\n    fn java_instance_of(&self, class: &str) -> bool {{\n        {instance_of}\n    }}\n    fn is_java_null(&self) -> bool {{\n        self.is_null()\n    }}\n    fn object_string(&self) -> String {{\n        self.java_string()\n    }}\n    fn java_hash(&self) -> i32 {{\n        if self.is_null() {{ 0 }} else {{ {hash} }}\n    }}\n    fn java_equals(&self, other: &Self) -> bool {{\n        {eq}\n    }}\n}}\n\nimpl JToString for {rust} {{\n    fn java_string(&self) -> String {{\n        if self.is_null() {{ \"null\".into() }} else {{ {string} }}\n    }}\n}}\n"
+            "impl JValue for {rust} {{\n    fn java_class(&self) -> &'static str {{\n        {class_of}\n    }}\n    fn java_instance_of(&self, class: &str) -> bool {{\n        {instance_of}\n    }}\n    fn is_java_null(&self) -> bool {{\n        self.is_null()\n    }}\n    fn object_string(&self) -> String {{\n        self.java_string()\n    }}\n    fn java_hash(&self) -> i32 {{\n        if self.is_null() {{ 0 }} else {{ {hash} }}\n    }}\n    fn java_equals(&self, other: &Self) -> bool {{\n        {eq}\n    }}\n}}\n\nimpl JToString for {rust} {{\n    fn java_string(&self) -> String {{\n        if self.is_null() {{ \"null\".into() }} else {{ {string} }}\n    }}\n}}\n"
         );
     }
 }
