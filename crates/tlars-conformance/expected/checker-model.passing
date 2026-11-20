@@ -79,7 +79,7 @@ tlc/checker/constraints/excluded_initial_state_invariant_checked
 tlc/checker/constraints/excluded_state_checked_by_invariant
 tlc/checker/constraints/excluded_state_not_fingerprinted
 tlc/checker/constraints/some_initial_excluded
-tlc/checker/constraints/state_constraint_constant_true
+tlc/checker/constraints/state_constraint_constant_false
 tlc/checker/constraints/state_constraint_with_arg
 tlc/checker/constraints/state_keyword_plural
 tlc/checker/constraints/state_multiple_lines
@@ -122,6 +122,7 @@ tlc/checker/errors/error_replay_print
 tlc/checker/errors/error_second_initial_state
 tlc/checker/errors/error_select_field
 tlc/checker/errors/error_trace_two_steps
+tlc/checker/errors/exit_status_success_after_print
 tlc/checker/errors/nonterminal_constant_recursion
 tlc/checker/errors/stack_overflow_assume
 tlc/checker/errors/stack_overflow_init
@@ -132,7 +133,9 @@ tlc/checker/init/case_guard_nonbool
 tlc/checker/init/case_no_true_guard
 tlc/checker/init/case_other_taken
 tlc/checker/init/case_second_guard
+tlc/checker/init/constant_false_init
 tlc/checker/init/constant_operator_nonbool
+tlc/checker/init/constant_true_init
 tlc/checker/init/eq_assigns
 tlc/checker/init/eq_definition_chain_lhs
 tlc/checker/init/eq_definition_lhs
@@ -278,6 +281,9 @@ tlc/checker/invariants/config_constant_value_nonbool
 tlc/checker/invariants/config_order_first
 tlc/checker/invariants/config_order_second
 tlc/checker/invariants/config_replacement_op
+tlc/checker/invariants/constant_false_warns_then_violates
+tlc/checker/invariants/constant_true_operator
+tlc/checker/invariants/constant_true_warns
 tlc/checker/invariants/error_on_initial
 tlc/checker/invariants/first_pass_order_print
 tlc/checker/invariants/initial_duplicate_not_rechecked
@@ -435,6 +441,7 @@ tlc/checker/states/record_vs_function
 tlc/checker/states/set_and_string_differ_as_states
 tlc/checker/states/set_of_tuples_vs_seq
 tlc/checker/states/stuttering_counts
+tlc/checker/states/stuttering_is_not_invariant_rechecked
 tlc/checker/states/subset_vs_enumeration
 tlc/checker/states/tuple_vs_function
 tlc/checker/states/union_set_vs_enumeration

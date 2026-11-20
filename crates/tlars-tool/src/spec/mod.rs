@@ -147,7 +147,8 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         model_values,
         globals,
     };
-    fold_constant_defns(&mut tool, out)?;
+    let mut defns = defns;
+    fold_constant_defns(&mut tool, &mut defns, out)?;
     process_config(&config, &mut tool, &defns, out)?;
     Ok(tool)
 }
@@ -601,17 +602,17 @@ fn numeral_value(image: &str) -> Option<i32> {
 /// `processConstantDefns` (`SpecProcessor.java:226-357`): 0-arity constant-level definitions
 /// are evaluated once and replaced by their value. Every failure is swallowed (`catch
 /// (Throwable swallow)`), so the error resurfaces where the definition is used.
-fn fold_constant_defns(tool: &mut Tool, out: &dyn Report) -> Result<(), SpecError> {
+fn fold_constant_defns(tool: &mut Tool, defns: &mut Defns, out: &dyn Report) -> Result<(), SpecError> {
     let graph = tool.graph.clone();
     for (_, m) in graph.modules() {
         if !m.is_instantiated || m.parameter_free {
-            fold_module(tool, &graph, m, out)?;
+            fold_module(tool, defns, &graph, m, out)?;
         }
     }
     Ok(())
 }
 
-fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn Report) -> Result<(), SpecError> {
+fn fold_module(tool: &mut Tool, defns: &mut Defns, graph: &SemanticGraph, m: &ModuleNode, out: &dyn Report) -> Result<(), SpecError> {
     fold_constant_decls(tool, graph, m, out)?;
     for &d in m.op_defs.iter() {
         let def = graph.op_def(d);
@@ -641,11 +642,18 @@ fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn
                 .and_then(|v| v.deep_normalize(&mut ev).map(|()| v))
         };
         if let Ok(v) = folded {
-            tool.bindings.op_defs[target.index()] = Some(OpBinding::Value(v));
+            tool.bindings.op_defs[target.index()] = Some(OpBinding::Value(v.clone()));
+            // `:367-370`: the name-keyed table takes the value too, but only where it still
+            // holds this very definition. That is why `INVARIANT Inv` on `Inv == TRUE`
+            // reaches `processConfigInvariants` as a boolean and warns (2149).
+            let name = graph.op_def(target).name;
+            if matches!(defns.get(&name), Some(Some(OpBinding::Replaced(d))) if *d == target) {
+                defns.insert(name, Some(OpBinding::Value(v)));
+            }
         }
     }
     for &inner in m.inner_modules.iter() {
-        fold_module(tool, graph, graph.module(inner), out)?;
+        fold_module(tool, defns, graph, graph.module(inner), out)?;
     }
     Ok(())
 }
