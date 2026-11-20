@@ -72,8 +72,9 @@ impl<'a> Session<'a> {
         self.env.clock.now_millis()
     }
 
-    /// `EC.ExitStatus.errorConstantToExitStatus`, except `-continue` exits 0.
+    /// `EC.ExitStatus.errorConstantToExitStatus` (`TLC.java:384`). Under `-continue` the
+    /// checker itself returns `NO_ERROR` for violations; every other error keeps its status.
     pub(crate) fn exit_status(&self, ec: Ec) -> ExitStatus {
-        if self.options.continue_after_violation { ExitStatus::Success } else { ec.exit_status() }
+        ec.exit_status()
     }
 }

@@ -25,6 +25,9 @@ pub(crate) fn process(session: &Session<'_>) -> Exit {
     let out = &session.reporter;
     // `printWelcome`, the last step of `handleParameters` (`TLC.java:1318`).
     out.message(Ec::TLC_VERSION, &[crate::VERSION]);
+    if session.options.recover.is_some() {
+        todo!("M3: -recover (UniqueString.internTbl.recover before FP64.Init, TLC.java:1349-1354)");
+    }
     if session.options.mode != Mode::ModelCheck || session.options.dfid.is_some() {
         todo!("M5: simulation and DFID runs");
     }
@@ -41,14 +44,13 @@ pub(crate) fn process(session: &Session<'_>) -> Exit {
         human_readable_runtime(runtime)
     };
     out.message(Ec::TLC_FINISHED, &[&text]);
-    if session.options.generate_te_spec && result != Ec::NO_ERROR {
-        todo!("M3: the trace-exploration spec");
-    }
+    // The trace-exploration spec is written only for a recorded error trace
+    // (`TraceExplorationSpec.java:73-76`), and no trace is recorded before M3's search.
     Exit::Returned(result)
 }
 
 /// `getModelCheckingRuntime` (`TLC.java:1560-1596`), in `LinkedHashMap` order. The JVM's
-/// entries describe tlars; the FPSet and queue names are the TLC defaults tlars mirrors.
+/// entries describe tlars (DESIGN.md); the FPSet and queue names follow TLC's properties.
 fn banner_parameters(session: &Session<'_>) -> Vec<String> {
     let workers = session.options.workers;
     let host = &session.env.host;
@@ -67,9 +69,14 @@ fn banner_parameters(session: &Session<'_>) -> Vec<String> {
         session.seed.to_string(),
         session.fp_index.to_string(),
         session.env.pid.to_string(),
-        "MSBDiskFPSet".to_string(),
-        "DiskStateQueue".to_string(),
+        simple_class_name(session.property("tlc2.tool.fp.FPSet.impl").unwrap_or("tlc2.tool.fp.MSBDiskFPSet")),
+        session.property("tlc2.tool.queue.IStateQueue").unwrap_or("DiskStateQueue").to_string(),
     ]
+}
+
+/// `fpSetConfig.getImplementation()` after its last `.`.
+fn simple_class_name(class: &str) -> String {
+    class.rsplit('.').next().unwrap_or(class).to_string()
 }
 
 /// The `RunMode.MODEL_CHECK` branch of `process()`: `new FastTool(...)`, then
@@ -77,12 +84,15 @@ fn banner_parameters(session: &Session<'_>) -> Vec<String> {
 fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
     let out = &session.reporter;
     let (user_dir, main_file) = main_file(session);
-    let config = read_config(session, &user_dir)?;
+    let library_paths = library_paths(session, &main_file);
+    let config = read_config(session, &user_dir, &library_paths)?;
     if session.options.tool_mode {
         out.message(Ec::TLC_SANY_START, &[]);
     }
-    let library_paths: Vec<PathBuf> = session.property("TLA-Library").map_or_else(Vec::new, |p| std::env::split_paths(p).collect());
-    let mut sany_out = SanyLines { out, stderr: &session.stderr };
+    // `DelayedPrintStream` (`SpecProcessor.java:420`): with 2220 suppressed, SANY's console
+    // output is held back, and dropped unless SANY throws.
+    let delayed = session.options.suppressed.contains(&Ec::TLC_SANY_START);
+    let mut sany_out = SanyLines { out, stderr: &session.stderr, held: delayed.then(Vec::new) };
     let loaded = tlars_sany::load(
         LoadRequest {
             root_file: &main_file,
@@ -101,12 +111,13 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
     out.message(Ec::TLC_STARTING, &[]);
     let graph = match loaded {
         Ok(graph) => graph,
-        Err(SanyFailed::FrontEnd) => todo!("M5: TLC_PARSING_FAILED2 with the FrontEndException"),
+        Err(SanyFailed::FrontEnd) => todo!("M5: TLC_PARSING_FAILED2 with the FrontEndException, after releasing held SANY output"),
         Err(SanyFailed::Parse { errors } | SanyFailed::Semantic { errors }) => {
             let errors = errors.iter().map(String::as_str).collect::<Vec<_>>();
             return Err(Exit::Returned(out.runtime_exception(Ec::TLC_PARSING_FAILED, &errors)));
         }
-        Err(SanyFailed::Exit(_)) => return Err(Exit::Returned(out.runtime_exception(Ec::TLC_PARSING_FAILED, &[]))),
+        // `Assert.fail(TLC_PARSING_FAILED)` without parameters (`SpecProcessor.java:458`).
+        Err(SanyFailed::Exit(_)) => return Err(Exit::Returned(print_failure(out, Ec::TLC_PARSING_FAILED))),
     };
     let globals = globals(session);
     let tool = match tlars_tool::build_tool(ToolInput { graph, config, globals, extras: session.options.extras.clone(), out }) {
@@ -115,9 +126,28 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
             let params = params.iter().map(String::as_str).collect::<Vec<_>>();
             return Err(Exit::Returned(out.runtime_exception(ec, &params)));
         }
+        Err(SpecError::Failure { ec }) => return Err(Exit::Returned(print_failure(out, ec))),
         Err(SpecError::UnsupportedJavaOverride { .. }) => todo!("M5: user Java overrides"),
     };
     Ok(crate::bfs::model_check(&tool, out, session.seed))
+}
+
+/// `printTLCRuntimeException` for `Assert.fail(ec)`: with no parameters it falls back to
+/// `printError(ec, exception)`, which prints the exception's message as the parameter and is
+/// not suppressible (`MP.java:1852-1855`, `1797-1803`).
+fn print_failure(out: &dyn Report, ec: Ec) -> Ec {
+    let message = out.text(ec, &[]);
+    out.error(ec, &[&message])
+}
+
+/// `TLC.main`'s resolver (`TLC.java:343-354`): a main file with a directory part searches
+/// that directory after the user directory, in place of `-DTLA-Library`.
+fn library_paths(session: &Session<'_>, main_file: &str) -> Vec<PathBuf> {
+    // `FileUtil.parseDirname`: everything up to the last separator.
+    match main_file.rfind(std::path::MAIN_SEPARATOR) {
+        Some(i) => vec![session.cwd.join(&main_file[..=i])],
+        None => session.property("TLA-Library").map_or_else(Vec::new, |p| std::env::split_paths(p).collect()),
+    }
 }
 
 /// The end of `handleParameters` (`TLC.java:1236-1242`): an absolute spec path becomes the
@@ -133,9 +163,10 @@ fn main_file(session: &Session<'_>) -> (PathBuf, String) {
     }
 }
 
-/// `new ModelConfig(...).parse()` (`ModelConfig.java:171-180`): the file is resolved like a
-/// module, without the library fallback mattering for a `.cfg`.
-fn read_config(session: &Session<'_>, user_dir: &Path) -> Result<tlars_sany::cfg::ModelConfig, Exit> {
+/// `new ModelConfig(...).parse()` (`ModelConfig.java:171-180`): `resolver.resolve(name,
+/// false)` looks in the user directory, then the library paths. The standard-module
+/// locations it tries next hold no `.cfg`.
+fn read_config(session: &Session<'_>, user_dir: &Path, library_paths: &[PathBuf]) -> Result<tlars_sany::cfg::ModelConfig, Exit> {
     let out = &session.reporter;
     // `configFile = mainFile` after an absolute main file was reduced to its name.
     let base = session.options.config.clone().unwrap_or_else(|| {
@@ -146,9 +177,10 @@ fn read_config(session: &Session<'_>, user_dir: &Path) -> Result<tlars_sany::cfg
         todo!("M5: a cfg embedded in a monolithic spec");
     }
     let name = format!("{base}.cfg");
-    let text = match std::fs::read(user_dir.join(&name)) {
-        Ok(text) => text,
-        Err(_) => {
+    let found = std::iter::once(user_dir).chain(library_paths.iter().map(PathBuf::as_path)).map(|d| d.join(&name)).find(|p| p.exists());
+    let text = match found.map(std::fs::read) {
+        Some(Ok(text)) => text,
+        _ => {
             out.error(Ec::CFG_ERROR_READING_FILE, &[&name, "File not found."]);
             return Err(Exit::System(Ec::CFG_ERROR_READING_FILE.exit_status()));
         }
@@ -189,11 +221,16 @@ fn globals(session: &Session<'_>) -> TlcGlobals {
 struct SanyLines<'s, 'a> {
     out: &'s dyn Report,
     stderr: &'s std::sync::Mutex<Box<dyn std::io::Write + Send + 'a>>,
+    /// `DelayedPrintStream`'s buffer, when 2220 is suppressed.
+    held: Option<Vec<String>>,
 }
 
 impl SanyOut for SanyLines<'_, '_> {
     fn line(&mut self, text: &str) {
-        self.out.raw(&format!("{text}\n"));
+        match self.held.as_mut() {
+            Some(held) => held.push(text.to_string()),
+            None => self.out.raw(&format!("{text}\n")),
+        }
     }
     fn err_line(&mut self, text: &str) {
         use std::io::Write;
