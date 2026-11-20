@@ -122,8 +122,10 @@ fn split_appl(ev: &mut Ev<'_>, pred: ExprId, c: &Ctx, name: Option<OpDefId>, out
                     let evaluated = (|| {
                         let mut c1 = c.clone();
                         for (&p, a) in params.iter().zip(args.iter()) {
-                            let v = ev.eval(a.expect_expr(), c, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR)?;
-                            c1 = c1.cons(SymbolRef::Param(p), Binding::Value(v));
+                            // `this.eval(args[i], con, TLCState.Empty, cm)`, which for an
+                            // operator argument is the operator itself, not an expression.
+                            let v = ev.eval_arg(*a, c, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR)?;
+                            c1 = c1.cons(SymbolRef::Param(p), v);
                         }
                         Ok::<Ctx, crate::error::EvalError>(c1)
                     })();

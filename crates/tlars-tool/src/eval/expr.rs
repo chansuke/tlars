@@ -71,6 +71,25 @@ impl<'t> Ev<'t> {
         }
     }
 
+    /// `Tool.eval(SemanticNode, ...)` on an argument node: an expression evaluates to a
+    /// value, and an `OpArgNode` evaluates to what `lookup` finds for the operator it names,
+    /// which TLC wraps in an `OpLambdaValue` (`evalImplOpArgKind`, `Tool.java:1888-1895`).
+    /// tlars keeps an operator as a `Binding` instead, since no `Value` may hold one.
+    pub(crate) fn eval_arg(
+        &mut self,
+        arg: ExprOrOpArg,
+        c: &Ctx,
+        s0: StateRef<'_>,
+        s1: StateRef<'_>,
+        control: EvalControl,
+    ) -> EvalResult<Binding> {
+        match arg {
+            ExprOrOpArg::Expr(e) => Ok(Binding::Value(self.eval(e, c, s0, s1, control)?)),
+            ExprOrOpArg::OpArg(_) => Ok(self.get_val(arg, c, false)),
+            ExprOrOpArg::Absent => unreachable!("only CASE's OTHER guard is absent"),
+        }
+    }
+
     /// `getVal`: an expression argument is passed by name, an operator argument as what it
     /// names.
     fn get_val(&mut self, arg: ExprOrOpArg, c: &Ctx, cachable: bool) -> Binding {
