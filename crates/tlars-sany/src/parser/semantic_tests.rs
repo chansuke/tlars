@@ -50,7 +50,7 @@ fn run_one(out: &mut String, interner: &Interner, root: &Path, file: &str, depth
     let dir = path.parent().expect("parent").to_path_buf();
     let name = path.file_name().expect("file name").to_string_lossy().into_owned();
     let sany_out = SanyOutput::new_0();
-    let spec = SpecObj::new_2(JStr::of(&name), FilenameToStream::new(Some(dir), Vec::new()))?;
+    let spec = SpecObj::new_2(JStr::of(&name), FilenameToStream::new(Some(dir), Vec::new(), std::env::current_dir().expect("working directory")))?;
     let exit = match driver::parse(&spec, &sany_out, &SETTINGS) {
         Ok(code) => code.code().to_string(),
         Err(_) => "FrontEndException".to_string(),
@@ -261,6 +261,7 @@ fn check_load(golden: &Path, root: &Path) {
             root_file: &name,
             user_dir: Some(&dir),
             library_paths: &[],
+            working_dir: &dir,
             interner: interner.clone(),
             extra_root_extends: &[],
             suppressed_codes: &[],

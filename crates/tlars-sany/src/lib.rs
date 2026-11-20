@@ -65,8 +65,12 @@ pub struct LoadRequest<'a> {
     /// `ToolIO.setUserDir`: TLC sets it to the spec's directory when `mainFile` is an
     /// absolute path; otherwise modules are found from the working directory.
     pub user_dir: Option<&'a Path>,
-    /// `-DTLA-Library` paths, searched after the user directory.
+    /// `-DTLA-Library` paths, searched after the user directory, as given: a relative one
+    /// is printed as written and opened relative to `working_dir`.
     pub library_paths: &'a [PathBuf],
+    /// The JVM's `user.dir`: the user directory when none is set, and the base of relative
+    /// paths.
+    pub working_dir: &'a Path,
     /// Session interner. The cfg was already parsed into it (cfg strings intern first).
     pub interner: Arc<Interner>,
     /// `ParameterizedSpecObj`: modules that `-inv`, `-postCondition`, ... force into the
@@ -102,6 +106,7 @@ pub fn load(req: LoadRequest<'_>, out: &mut dyn SanyOut) -> Result<graph::Semant
         root_file: req.root_file.to_string(),
         user_dir: req.user_dir.map(Path::to_path_buf),
         library_paths: req.library_paths.to_vec(),
+        working_dir: req.working_dir.to_path_buf(),
         interner: req.interner.clone(),
         suppressed_codes: req.suppressed_codes.to_vec(),
         messages_as_errors: req.messages_as_errors.to_vec(),
