@@ -314,7 +314,7 @@ impl<'a> ModelChecker<'a> {
                 Ok(false) => {
                     if self.continue_after_violation {
                         self.out.error(Ec::TLC_INVARIANT_VIOLATED_BEHAVIOR, &[&name]);
-                        self.print_trace(ev, cur, Some(succ));
+                        self.print_trace(ev, cur, Some(Succ::Complete(succ)));
                         continue;
                     }
                     if self.set_err(ErrState::Invariant { id, pred: cur.clone(), state: succ.clone() }) {
@@ -347,7 +347,7 @@ impl<'a> ModelChecker<'a> {
                 Ok(false) => {
                     if self.continue_after_violation {
                         self.out.error(Ec::TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR, &[&name]);
-                        self.print_trace(ev, cur, Some(succ));
+                        self.print_trace(ev, cur, Some(Succ::Complete(succ)));
                         continue;
                     }
                     if self.set_err(ErrState::ImpliedAction { id, pred: cur.clone(), state: succ.clone() }) {
@@ -414,8 +414,8 @@ impl<'a> ModelChecker<'a> {
                 let label = ev.action_name(action);
                 self.out.error(Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_NEXT, &[&label, plural, &names]);
             }
-            // The successor is incomplete, so only the prefix up to `cur` is printed.
-            self.print_trace_and_stop(&mut ev, cur, None);
+            self.print_trace(&mut ev, cur, Some(Succ::Partial(s1)));
+            self.queue.finish_all();
         }
         Halt::Stop
     }
@@ -529,7 +529,7 @@ impl<'a> ModelChecker<'a> {
 
     /// `printTraceAndStop`: the trace, then every worker is told to stop.
     fn print_trace_and_stop(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<&State>) {
-        self.print_trace(ev, cur, succ);
+        self.print_trace(ev, cur, succ.map(Succ::Complete));
         self.queue.finish_all();
     }
 
@@ -562,7 +562,7 @@ impl<'a> ModelChecker<'a> {
 
     /// `ConcurrentTLCTrace.printTrace(s1, s2)` (`TLCTrace.java:349-443`): 2121, then the
     /// reconstructed prefix, `s1` and `s2`, each printed as 2217.
-    fn print_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<&State>) {
+    fn print_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>) {
         self.out.error(Ec::TLC_BEHAVIOR_UP_TO_THIS_POINT, &[]);
         let fps = self.traces.fingerprints_to(cur.ptr);
         // An initial `s1` is printed as it stands, with no regeneration at all
@@ -601,7 +601,7 @@ impl<'a> ModelChecker<'a> {
         let pred = prefix.last().expect("a prefix of at least one state").state.clone();
         let pred_fp = fps[fps.len() - 2];
         number += 1;
-        if !self.print_successor(ev, &pred, pred_fp, &cur.state, printed.as_ref(), number) {
+        if !self.print_successor(ev, &pred, pred_fp, Succ::Complete(&cur.state), printed.as_ref(), number) {
             return;
         }
         if let Some(succ) = succ {
@@ -616,10 +616,32 @@ impl<'a> ModelChecker<'a> {
         ev: &mut Ev<'_>,
         pred: &State,
         pred_fp: tlars_tool::Fp,
-        state: &State,
+        succ: Succ<'_>,
         printed: Option<&State>,
         number: usize,
     ) -> bool {
+        // An incomplete successor has no fingerprint, so TLC matches it by state equality
+        // and prints it with its unassigned variables as `null`.
+        let state = match succ {
+            Succ::Complete(state) => state,
+            Succ::Partial(s1) => {
+                return match ev.successor_action_of(pred, pred_fp, s1) {
+                    Ok(action) => {
+                        let shown = ev.print_partial_state(s1);
+                        let label = match action {
+                            Some(a) => ev.action_label(a),
+                            None => "<Initial predicate>".to_string(),
+                        };
+                        self.out.state(Ec::TLC_STATE_PRINT2, &[&number.to_string(), &label, &shown, "-1"]);
+                        true
+                    }
+                    Err(e) => {
+                        self.out.error(Ec::GENERAL, &[&e.message]);
+                        false
+                    }
+                };
+            }
+        };
         let fp = match ev.fingerprint(state) {
             Ok(fp) => fp,
             Err(e) => {
@@ -743,6 +765,13 @@ fn java_class(e: &EvalError) -> &str {
         EvalErrorKind::Eval => "tlc2.tool.EvalException",
         _ => "java.lang.RuntimeException",
     }
+}
+
+/// The state a trace ends on after `cur`: none, a complete successor, or the incomplete one
+/// `TLC_STATE_NOT_COMPLETELY_SPECIFIED_NEXT` reports.
+enum Succ<'a> {
+    Complete(&'a State),
+    Partial(&'a PartialState),
 }
 
 /// `StateVec`: the successors `doNext` collects before it checks any of them.

@@ -350,12 +350,14 @@ tlc/checker/next/fcn_nonbool
 tlc/checker/next/fcn_nonfunction
 tlc/checker/next/forall_assigns
 tlc/checker/next/forall_chains_instances
+tlc/checker/next/forall_empty_alone
 tlc/checker/next/forall_empty_continues
 tlc/checker/next/guard_reads_earlier_prime
 tlc/checker/next/guard_reads_later_prime
 tlc/checker/next/if_guard_nonbool
 tlc/checker/next/if_guard_reads_earlier_prime
 tlc/checker/next/if_guard_reads_later_prime
+tlc/checker/next/implies_false_alone_unassigned
 tlc/checker/next/implies_false_continues
 tlc/checker/next/implies_nonbool
 tlc/checker/next/implies_true_generates
@@ -397,6 +399,13 @@ tlc/checker/next/subseteq_after_assign_drops
 tlc/checker/next/subseteq_enumerates
 tlc/checker/next/subseteq_nat
 tlc/checker/next/subseteq_nonvariable_lhs_false
+tlc/checker/next/unassigned_after_several_states
+tlc/checker/next/unassigned_all_variables
+tlc/checker/next/unassigned_disjunct_inline
+tlc/checker/next/unassigned_one_variable_one_action
+tlc/checker/next/unassigned_one_variable_two_actions
+tlc/checker/next/unassigned_parameterized
+tlc/checker/next/unassigned_two_variables
 tlc/checker/next/unbound_operator_arg_prime
 tlc/checker/prime/constant_level_operator_constant_prime_cached
 tlc/checker/prime/constant_primed
@@ -444,6 +453,7 @@ tlc/checker/states/membership_across_kinds_fails
 tlc/checker/states/model_value_vs_integer_in_state_ok
 tlc/checker/states/model_values_distinct_states
 tlc/checker/states/nested_representation
+tlc/checker/states/no_state_all_null_print_in_error
 tlc/checker/states/no_string_vs_string_set_in_fp
 tlc/checker/states/record_field_order
 tlc/checker/states/record_set_vs_enumeration
@@ -494,6 +504,7 @@ tlc/checker/unchanged/nonarity_op_with_args_changed
 tlc/checker/unchanged/nonarity_op_with_args_unassigned
 tlc/checker/unchanged/operator_parameter_tuple
 tlc/checker/unchanged/operator_parameter_variable
+tlc/checker/unchanged/partial_unchanged
 tlc/checker/unchanged/reads_after_unchanged
 tlc/checker/unchanged/reads_before_unchanged
 tlc/checker/unchanged/record_unassigned

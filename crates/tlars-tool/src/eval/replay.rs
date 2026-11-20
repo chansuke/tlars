@@ -42,6 +42,26 @@ impl<'t> Ev<'t> {
         Ok(None)
     }
 
+    /// `getState(TLCState s1, TLCState s)` (`Tool.java:3805-3822`): the action whose
+    /// successor *equals* `target`, which is how an incomplete successor is matched, since it
+    /// has no fingerprint.
+    pub fn successor_action_of(&mut self, pred: &State, pred_fp: Fp, target: &PartialState) -> EvalResult<Option<ActionId>> {
+        self.begin_expansion(pred_fp);
+        let count = self.tool.actions.len();
+        for i in 0..count {
+            let id = self.tool.actions[i].id();
+            let mut sink = PartialMatch { want: target, found: None };
+            match self.next_states_of(pred, id, &mut sink) {
+                Ok(()) | Err(Halt::Stop) => {}
+                Err(Halt::Eval(e)) => return Err(e),
+            }
+            if sink.found.is_some() {
+                return Ok(Some(id));
+            }
+        }
+        Ok(None)
+    }
+
     /// `RandomEnumerableValues.reset()`: rewind the init-generation stream before replay.
     pub fn reset_init_random(&mut self) {
         self.locals.effects.reset_random(self.tool.globals.seed);
@@ -59,6 +79,21 @@ impl InitSink for InitMatch {
         let Some(state) = ev.complete(s) else { return Ok(()) };
         if self.found.is_none() && ev.fingerprint(&state)? == self.want {
             self.found = Some(state);
+        }
+        Ok(())
+    }
+}
+
+/// `TLCStateMut.equals` over the partial successors of one action.
+struct PartialMatch<'a> {
+    want: &'a PartialState,
+    found: Option<()>,
+}
+
+impl NextSink for PartialMatch<'_> {
+    fn add_next(&mut self, ev: &mut Ev<'_>, _s0: &State, _action: ActionId, s1: &PartialState) -> Flow {
+        if self.found.is_none() && ev.states_match(s1, self.want)? {
+            self.found = Some(());
         }
         Ok(())
     }

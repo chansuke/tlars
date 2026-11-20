@@ -295,6 +295,20 @@ impl<'t> Ev<'t> {
         }
     }
 
+    /// `TLCStateMut.equals` (`TLCStateMut.java:85-100`): slot by slot, an unassigned slot
+    /// matching only another unassigned one.
+    pub fn states_match(&mut self, a: &PartialState, b: &PartialState) -> EvalResult<bool> {
+        for i in 0..self.tool.var_count() {
+            let slot = self.tool.vars.slot(i);
+            match (a.lookup(slot).cloned(), b.lookup(slot).cloned()) {
+                (None, None) => {}
+                (Some(x), Some(y)) if x.tlc_equals(self, &y)? => {}
+                _ => return Ok(false),
+            }
+        }
+        Ok(true)
+    }
+
     /// `TLCState.equals` as `SetOfStates.put0` uses it: an equality that throws is `false`.
     pub fn states_equal_or_false(&mut self, a: &State, b: &State) -> bool {
         (0..a.len()).all(|i| {
