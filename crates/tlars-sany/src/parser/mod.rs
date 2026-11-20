@@ -9,6 +9,7 @@
 //! calls that are not translated (Java library, `UniqueString`, `Location`, ...), and
 //! `files` how modules are found and read.
 
+mod cfg_parse;
 mod driver;
 mod files;
 mod freeze;
@@ -19,6 +20,7 @@ mod pcal_validator;
 mod support;
 
 
+pub(crate) use cfg_parse::parse_cfg;
 pub(crate) use load::{ConsoleLine, LoadJob, load_on_this_thread};
 
 #[cfg(test)]
