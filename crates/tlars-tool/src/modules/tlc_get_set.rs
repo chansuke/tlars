@@ -21,12 +21,15 @@ const NAMED_REGISTER_PREFIX: &str = "s:";
 
 /// The string keys whose value tlars cannot build yet: the run's configuration, its spec
 /// objects, the per-worker register maps, and the version record.
-const UNIMPLEMENTED: &[&str] = &["config", "spec", "revision", "action", "all", "all:named"];
+const UNIMPLEMENTED: &[&str] = &["spec", "revision", "action", "all", "all:named"];
 
 /// `getStatistics()`' fields, in the order `AbstractChecker` fills them
 /// (`AbstractChecker.java:683-709`). The record prints them in intern-token order, which is
 /// `TLCGetSet`'s declaration order, not this one.
 const STATS_FIELDS: &[&str] = &["queue", "distinct", "initial", "generated", "diameter", "duration", "worker"];
+
+/// `createConfig()`' fields, in the order `AbstractChecker` fills them (`:713-736`).
+const CONFIG_FIELDS: &[&str] = &["mode", "deadlock", "worker", "seed", "fingerprint", "install"];
 
 /// `TLCGetSet.TLCGetEval` (`TLCGetSet.java:160-185`).
 pub(crate) fn tlc_get(
@@ -90,7 +93,7 @@ fn tlc_get_string(ev: &mut Ev<'_>, name: Atom, s0: StateRef<'_>, control: EvalCo
     }
     // Every counter below is a `TLCGlobals.mainChecker` call, so without a checker the NPE
     // TLC catches turns into `TLCGet(key) was undefined`.
-    if matches!(key.as_str(), "diameter" | "generated" | "distinct" | "queue" | "stats") && ev.tool().run_counters().is_none() {
+    if matches!(key.as_str(), "diameter" | "generated" | "distinct" | "queue" | "stats" | "config") && ev.tool().run_counters().is_none() {
         return Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key]));
     }
     match key.as_str() {
@@ -108,6 +111,7 @@ fn tlc_get_string(ev: &mut Ev<'_>, name: Atom, s0: StateRef<'_>, control: EvalCo
             return narrow(ev, counters.duration_secs().max(0) as u64);
         }
         "stats" => return statistics(ev),
+        "config" => return Ok(config(ev)),
         _ => {}
     }
     // `System.getProperty(key.substring(2), key)`: the default is the whole key, `-D` and all.
@@ -148,6 +152,26 @@ fn statistics(ev: &mut Ev<'_>) -> EvalResult<Value> {
     let interner = ev.tool().graph().interner();
     let names = STATS_FIELDS.iter().map(|n| interner.intern(n)).collect();
     Ok(Value::Record(Value::record_arc(names, values, false)))
+}
+
+/// `AbstractChecker.createConfig()` (`:711-736`), which the checker builds once at startup.
+/// `mode` is `"bfs"` for the model checker; the simulator's own record is M5.
+fn config(ev: &mut Ev<'_>) -> Value {
+    let globals = ev.tool().globals();
+    let (deadlock, workers, seed) = (globals.check_deadlock, globals.workers, globals.seed);
+    let install = globals.install_location.clone();
+    let poly = ev.tool().fp64.irred_poly();
+    let interner = ev.tool().graph().interner();
+    let values = vec![
+        Value::Str(interner.intern("bfs")),
+        Value::Bool(deadlock),
+        Value::Int(workers as i32),
+        Value::Str(interner.intern(&seed.to_string())),
+        Value::Str(interner.intern(&poly.to_string())),
+        Value::Str(interner.intern(&install)),
+    ];
+    let names = CONFIG_FIELDS.iter().map(|n| interner.intern(n)).collect();
+    Value::Record(Value::record_arc(names, values, false))
 }
 
 /// `TLCGetSet.TLCSet` (`TLCGetSet.java:463-535`).

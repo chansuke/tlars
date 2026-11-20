@@ -35,4 +35,6 @@ pub struct TlcGlobals {
     /// The `-D` properties the CLI was given, in the order given (a later one wins). What
     /// `TLCGet("-Dkey")` falls back to when nothing set that key at run time.
     pub properties: Vec<(String, String)>,
+    /// `TLCGlobals.Version.installLocation()`, reported by `TLCGet("config").install`.
+    pub install_location: String,
 }

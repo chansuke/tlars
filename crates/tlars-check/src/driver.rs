@@ -290,6 +290,7 @@ fn globals(session: &Session<'_>) -> TlcGlobals {
         aril: o.aril,
         no_timestamps: session.property_is_true("tlc2.output.MP.noTimestamps"),
         properties: session.properties.clone(),
+        install_location: session.env.install_location.clone(),
     }
 }
 
