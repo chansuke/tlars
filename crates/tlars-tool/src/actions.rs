@@ -52,9 +52,10 @@ fn action(ev: &Ev<'_>, pred: ExprId, c: &Ctx, op_def: Option<OpDefId>, is_init: 
     Action { id: ActionId(index as u32), pred, ctx: c.clone(), name, op_def, is_init, is_internal: false }
 }
 
-/// `getActions(next, Context.Empty)`.
-pub(crate) fn split_next(ev: &mut Ev<'_>, next: ExprId, c: &Ctx, out: &mut Vec<Action>) -> EvalResult<()> {
-    split(ev, next, c, None, out, false)
+/// `getActions(next)` (`Tool.java:269-271`), which threads the next-state *definition* down
+/// as the name every action that splitting does not rename inherits.
+pub(crate) fn split_next(ev: &mut Ev<'_>, next: ExprId, c: &Ctx, op_def: Option<OpDefId>, out: &mut Vec<Action>) -> EvalResult<()> {
+    split(ev, next, c, op_def, out, false)
 }
 
 /// `getInitStateSpec()`: one action per initial predicate, unsplit.

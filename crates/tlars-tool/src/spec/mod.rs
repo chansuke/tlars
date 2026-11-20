@@ -826,7 +826,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
         let mut locals = WorkerLocals::new(0, tool.globals.seed);
         let mut ev = tool.ev(&mut locals, out);
         if let Some(next) = &next_pred {
-            crate::actions::split_next(&mut ev, next.expr, &next.ctx, &mut actions).map_err(uncaught)?;
+            crate::actions::split_next(&mut ev, next.expr, &next.ctx, next.op_def, &mut actions).map_err(uncaught)?;
         }
     }
     tool.init_actions = init_preds
