@@ -319,6 +319,13 @@ impl<'t> Ev<'t> {
                 }
                 Ok(Value::Bool(forall))
             }
+            Builtin::SetEnumerate => {
+                let mut elems = Vec::with_capacity(args.len());
+                for i in 0..args.len() {
+                    elems.push(self.eval(arg(i), c, s0, s1, control)?);
+                }
+                Ok(Value::set_enum(elems))
+            }
             Builtin::Unimplemented(name) => Err(EvalError::unimplemented(format!("the operator {name} (M2 unit 4)"))),
         }
     }
@@ -462,6 +469,7 @@ enum Builtin {
     Case,
     BoundedForall,
     BoundedExists,
+    SetEnumerate,
     Unimplemented(&'static str),
 }
 
@@ -494,6 +502,7 @@ impl Builtin {
             "$Case" => Builtin::Case,
             "$BoundedForall" => Builtin::BoundedForall,
             "$BoundedExists" => Builtin::BoundedExists,
+            "$SetEnumerate" => Builtin::SetEnumerate,
             other => Builtin::Unimplemented(BUILT_IN_OPS.iter().copied().find(|n| *n == other)?),
         })
     }

@@ -22,6 +22,19 @@ impl Value {
             Value::Model(m) => interner.text(m.name).to_string(),
             Value::Interval(i) if i.lo <= i.hi => format!("{}..{}", i.lo, i.hi),
             Value::Interval(_) => "{}".to_string(),
+            Value::SetEnum(set) => {
+                // `toString` normalises first (`SetEnumValue.java:347-372`).
+                let elems = super::order::normalized(ev, set)?.to_vec();
+                let mut out = String::from("{");
+                for (i, e) in elems.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    out.push_str(&e.to_tlc_string(ev)?);
+                }
+                out.push('}');
+                out
+            }
             Value::User(u) => match &**u {
                 UserValue::Nat => "Nat".to_string(),
                 UserValue::Int => "Int".to_string(),

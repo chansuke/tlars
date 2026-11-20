@@ -106,6 +106,21 @@ pub struct IntervalValue {
     pub(crate) hi: i32,
 }
 
+impl IntervalValue {
+    /// `IntervalValue.size()`; TLC's int arithmetic, which a full-range interval overflows.
+    pub(crate) fn size(&self) -> i32 {
+        if self.hi < self.lo { 0 } else { self.hi.wrapping_sub(self.lo).wrapping_add(1) }
+    }
+
+    /// `toSetEnum()`: the elements in order, already normalised.
+    pub(crate) fn to_set_enum_arc(&self) -> Arc<SetEnumValue> {
+        let elems: Box<[Value]> = (i64::from(self.lo)..=i64::from(self.hi)).map(|n| Value::Int(n as i32)).collect();
+        let norm = OnceLock::new();
+        let _ = norm.set(elems.clone());
+        Arc::new(SetEnumValue { built: elems, norm })
+    }
+}
+
 pub struct TupleValue {
     pub(crate) elems: Box<[Value]>,
 }
@@ -313,6 +328,14 @@ impl Value {
         Value::Tuple(Arc::new(TupleValue { elems: elems.into_boxed_slice() }))
     }
 
+    /// A SetEnum built normalised (`new SetEnumValue(elems, true)`).
+    pub(crate) fn set_enum_normalized(elems: Vec<Value>) -> Value {
+        let elems = elems.into_boxed_slice();
+        let norm = OnceLock::new();
+        let _ = norm.set(elems.clone());
+        Value::SetEnum(Arc::new(SetEnumValue { built: elems, norm }))
+    }
+
     /// Unnormalised SetEnum, as `{e : x \in S}` and cfg `{...}` produce.
     pub(crate) fn set_enum(elems: Vec<Value>) -> Value {
         Value::SetEnum(Arc::new(SetEnumValue { built: elems.into_boxed_slice(), norm: OnceLock::new() }))
@@ -326,7 +349,21 @@ impl Value {
 
     /// `toSetEnum()`: `None` if this value is not an enumerable set.
     pub(crate) fn to_set_enum(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<SetEnumValue>>> {
-        todo!()
+        match self {
+            Value::SetEnum(s) => Ok(Some(s.clone())),
+            Value::Interval(i) => Ok(Some(i.to_set_enum_arc())),
+            Value::Subset(_)
+            | Value::KSubset(_)
+            | Value::SetOfFcns(_)
+            | Value::SetOfRcds(_)
+            | Value::SetOfTuples(_)
+            | Value::Union(_)
+            | Value::SetCup(_)
+            | Value::SetCap(_)
+            | Value::SetDiff(_)
+            | Value::SetPred(_) => Err(crate::error::EvalError::unimplemented(format!("toSetEnum of {} (M2 unit 3)", self.kind_string()))),
+            _ => Ok(None),
+        }
     }
 
     /// `toFcnRcd()`: tuples, records and enumerable FcnLambdas as functions.

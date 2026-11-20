@@ -40,6 +40,23 @@ impl Value {
             (Value::Str(a), Value::Str(b)) => Ok(a == b),
             (Value::Str(_), _) => mismatch(ev, "check", "string"),
             (Value::Interval(a), Value::Interval(b)) => Ok(if a.lo > a.hi { b.lo > b.hi } else { a.lo == b.lo && a.hi == b.hi }),
+            (Value::Interval(a), _) => Value::SetEnum(a.to_set_enum_arc()).tlc_equals(ev, other),
+            (Value::SetEnum(a), _) => {
+                let Some(b) = other.to_set_enum(ev)? else {
+                    let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
+                    return Err(EvalError::detailed(format!("Attempted to check equality of the set {x} with the value:\n{y}"), None));
+                };
+                let (xs, ys) = (normalized(ev, a)?.to_vec(), normalized(ev, &b)?.to_vec());
+                if xs.len() != ys.len() {
+                    return Ok(false);
+                }
+                for (x, y) in xs.iter().zip(&ys) {
+                    if !x.tlc_equals(ev, y)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
             (Value::User(_), _) => Ok(self.user_compare(ev, other)? == Ordering::Equal),
             _ => Err(EvalError::unimplemented(format!("equality of {} (M2 unit 3)", self.kind_string()))),
         }
@@ -78,7 +95,46 @@ impl Value {
 
     /// `IValue.compareTo`.
     pub(crate) fn tlc_compare(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Ordering> {
-        todo!()
+        if matches!(other, Value::Model(_)) {
+            return Err(EvalError::unimplemented("ModelValue.modelValueCompareTo (M3)".into()));
+        }
+        let mismatch = |ev: &mut Ev<'_>, noun: &str| -> EvalResult<Ordering> {
+            let (a, b) = (self.ppr(ev)?, other.ppr(ev)?);
+            Err(EvalError::detailed(format!("Attempted to compare {noun} {a} with non-{noun}:\n{b}"), None))
+        };
+        match (self, other) {
+            (Value::Bool(a), Value::Bool(b)) => Ok(a.cmp(b)),
+            (Value::Bool(_), _) => mismatch(ev, "boolean"),
+            (Value::Int(a), Value::Int(b)) => Ok(a.cmp(b)),
+            (Value::Int(_), _) => mismatch(ev, "integer"),
+            // `UniqueString.compareTo`: by intern token, not by text.
+            (Value::Str(a), Value::Str(b)) => Ok(a.tok().cmp(&b.tok())),
+            (Value::Str(_), _) => mismatch(ev, "string"),
+            (Value::Interval(a), Value::Interval(b)) => {
+                let (sa, sb) = (a.size(), b.size());
+                Ok(if sa != sb { sa.cmp(&sb) } else if sa == 0 { Ordering::Equal } else { a.lo.cmp(&b.lo) })
+            }
+            (Value::Interval(a), _) => Value::SetEnum(a.to_set_enum_arc()).tlc_compare(ev, other),
+            (Value::SetEnum(a), _) => {
+                let Some(b) = other.to_set_enum(ev)? else {
+                    let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
+                    return Err(EvalError::detailed(format!("Attempted to compare the set {x} with the value:\n{y}"), None));
+                };
+                let (xs, ys) = (normalized(ev, a)?.to_vec(), normalized(ev, &b)?.to_vec());
+                if xs.len() != ys.len() {
+                    return Ok(xs.len().cmp(&ys.len()));
+                }
+                for (x, y) in xs.iter().zip(&ys) {
+                    let c = x.tlc_compare(ev, y)?;
+                    if c != Ordering::Equal {
+                        return Ok(c);
+                    }
+                }
+                Ok(Ordering::Equal)
+            }
+            (Value::User(_), _) => self.user_compare(ev, other),
+            _ => Err(EvalError::unimplemented(format!("comparison of {} (M2 unit 3)", self.kind_string()))),
+        }
     }
 
     /// `member(elem)`: `elem \in self`.
@@ -101,6 +157,29 @@ impl Value {
                     Err(EvalError::detailed(format!("Attempted to check if the value:\n{e}\nis in the integer interval {s}"), None))
                 }
                 _ => Ok(false),
+            },
+            // `ValueVec.search`: binary search once normalised, `equals` scan before.
+            Value::SetEnum(set) => match set.norm.get() {
+                Some(norm) => {
+                    let (mut lo, mut hi) = (0, norm.len());
+                    while lo < hi {
+                        let mid = lo + (hi - lo) / 2;
+                        match elem.tlc_compare(ev, &norm[mid])? {
+                            Ordering::Equal => return Ok(true),
+                            Ordering::Less => hi = mid,
+                            Ordering::Greater => lo = mid + 1,
+                        }
+                    }
+                    Ok(false)
+                }
+                None => {
+                    for e in set.built.iter() {
+                        if e.tlc_equals(ev, elem)? {
+                            return Ok(true);
+                        }
+                    }
+                    Ok(false)
+                }
             },
             Value::User(u) => match (&**u, elem) {
                 (UserValue::Nat, Value::Int(x)) => Ok(*x >= 0),
@@ -128,9 +207,34 @@ impl Value {
 }
 
 /// `SetEnumValue.normalize()` / `ValueVec.sort(true)`: binary insertion, dedup on
-/// `compareTo == 0`. Publishes into `norm` on success only.
+/// `compareTo == 0` (the element already placed stays). Publishes into `norm` on success
+/// only.
 pub(crate) fn normalized<'a>(ev: &mut Ev<'_>, set: &'a SetEnumValue) -> EvalResult<&'a [Value]> {
-    todo!()
+    if let Some(norm) = set.norm.get() {
+        return Ok(norm);
+    }
+    let mut out: Vec<Value> = Vec::with_capacity(set.built.len());
+    let mut elems = set.built.iter();
+    if let Some(first) = elems.next() {
+        out.push(first.clone());
+    }
+    for elem in elems {
+        let (mut lo, mut hi, mut idx) = (0, out.len(), 0);
+        let mut cmp = Ordering::Equal;
+        while lo < hi {
+            idx = lo + (hi - lo) / 2;
+            cmp = elem.tlc_compare(ev, &out[idx])?;
+            match cmp {
+                Ordering::Equal => break,
+                Ordering::Less => hi = idx,
+                Ordering::Greater => lo = idx + 1,
+            }
+        }
+        if cmp != Ordering::Equal {
+            out.insert(if cmp == Ordering::Less { idx } else { idx + 1 }, elem.clone());
+        }
+    }
+    Ok(set.norm.get_or_init(|| out.into_boxed_slice()))
 }
 
 /// The one representation-independent view that `tlc_equals`, `tlc_compare` and
