@@ -202,8 +202,21 @@ pub fn run(inv: Invocation<'_>) -> ExitStatus {
     let no_timestamps = property_is_true(&properties, "tlc2.output.MP.noTimestamps");
     match cli::parse(args, inv.env.host.cores) {
         Ok(options) => {
+            let stack = inv.env.worker_stack_bytes;
             let session = session::Session::new(inv, options, properties);
-            match driver::process(&session) {
+            // Evaluation recurses once per nesting level; it gets a worker-sized stack so the
+            // evaluator's own depth guard, not the native stack, decides when TLC's
+            // StackOverflowError happens.
+            let exit = std::thread::scope(|scope| {
+                std::thread::Builder::new()
+                    .name("main".into())
+                    .stack_size(stack)
+                    .spawn_scoped(scope, || driver::process(&session))
+                    .expect("spawning the TLC main thread")
+                    .join()
+                    .unwrap_or_else(|e| std::panic::resume_unwind(e))
+            });
+            match exit {
                 driver::Exit::Returned(ec) => session.exit_status(ec),
                 driver::Exit::System(status) => status,
             }

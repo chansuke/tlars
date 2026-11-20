@@ -12,7 +12,7 @@
 
 mod bindings;
 
-pub(crate) use bindings::{Bindings, OpBinding};
+pub(crate) use bindings::{Bindings, DeclBinding, OpBinding};
 
 use crate::ctx::Ctx;
 use crate::eval::{EvalControl, WorkerLocals};
@@ -113,10 +113,14 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         let name = graph.interner().text(graph.decl(d).name).to_string();
         return Err(SpecError::Config { ec: Ec::TLC_CONFIG_VALUE_NOT_ASSIGNED_TO_CONSTANT_PARAM, params: vec![name] });
     }
-    // TODO(M2 unit 4): processModuleOverrides binds the Java implementations of the standard
-    // modules (`modules::REGISTRY`) here, before constant folding sees their TLA+ bodies.
+    let bodies = module_overrides(&graph);
     let mut tool = Tool {
-        bindings: Bindings { op_defs: op_defs.into(), decls: (0..graph.decl_count()).map(|_| None).collect(), literals: literals.into() },
+        bindings: Bindings {
+            op_defs: op_defs.into(),
+            bodies: bodies.into(),
+            decls: (0..graph.decl_count()).map(|_| None).collect(),
+            literals: literals.into(),
+        },
         graph: std::sync::Arc::new(graph),
         vars,
         init_actions: Box::new([]),
@@ -138,6 +142,30 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
     fold_constant_defns(&mut tool, out);
     process_config(&config, &tool)?;
     Ok(tool)
+}
+
+/// `processModuleOverrides` (`SpecProcessor.java:1024-1075`) for the standard modules:
+/// each module named like a `tlc2.module` class has the bodies of its definitions (its
+/// extended ones included) bound to the class's methods; a later module rebinds a shared
+/// definition. Methods tlars does not implement yet stay unimplemented natives.
+fn module_overrides(graph: &SemanticGraph) -> Vec<Option<OpBinding>> {
+    let mut bodies: Vec<Option<OpBinding>> = (0..graph.expr_count()).map(|_| None).collect();
+    for (mid, m) in graph.modules() {
+        let module = graph.interner().text(m.name);
+        if !crate::modules::JAVA_MODULES.contains(&&*module) {
+            continue;
+        }
+        for &d in m.op_defs.iter() {
+            let def = graph.op_def(d);
+            let Some(body) = def.body else { continue };
+            if let Some(id) = crate::modules::NativeId::of_module(&module, &graph.interner().text(def.name)) {
+                bodies[body.index()] = Some(OpBinding::Native(id));
+            } else if def.module == mid {
+                bodies[body.index()] = Some(OpBinding::Unimplemented);
+            }
+        }
+    }
+    bodies
 }
 
 /// `processConstants` (`SpecProcessor.java:1950-2091`): literal values for numerals and
@@ -244,12 +272,14 @@ impl ConstantPass<'_> {
 }
 
 /// The values `processSpec` puts into `defns` before `processConstants` (`:503-509`).
-/// `Strings`' Java methods are added there too; they come with the native modules.
+/// `Strings`' Java methods are added there too.
 fn predefined(name: &str) -> Option<Value> {
     match name {
         "TRUE" => Some(Value::Bool(true)),
         "FALSE" => Some(Value::Bool(false)),
         "BOOLEAN" => Some(Value::set_enum(vec![Value::Bool(false), Value::Bool(true)])),
+        // `Strings.STRING()`, the one method of `tlc2.module.Strings` (`:503-526`).
+        "STRING" => Some(Value::User(std::sync::Arc::new(crate::value::UserValue::String))),
         _ => None,
     }
 }
@@ -297,6 +327,10 @@ fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn
             Some(_) => continue,
         };
         let Some(body) = graph.op_def(target).body else { continue };
+        // A Java override on the body makes `lookup` return it instead of the definition.
+        if tool.bindings.body_chain(graph, body).is_some() {
+            continue;
+        }
         if graph.level(body) != Level::Constant {
             continue;
         }
