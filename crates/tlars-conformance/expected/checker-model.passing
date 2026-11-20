@@ -82,8 +82,10 @@ tlc/checker/constraints/excluded_initial_state_invariant_checked
 tlc/checker/constraints/excluded_state_checked_by_invariant
 tlc/checker/constraints/excluded_state_not_fingerprinted
 tlc/checker/constraints/nonboolean_action
+tlc/checker/constraints/nonboolean_state
 tlc/checker/constraints/nonboolean_state_on_successor
 tlc/checker/constraints/some_initial_excluded
+tlc/checker/constraints/state_constraint_action_level
 tlc/checker/constraints/state_constraint_constant_false
 tlc/checker/constraints/state_constraint_constant_true
 tlc/checker/constraints/state_constraint_with_arg
@@ -136,6 +138,7 @@ tlc/checker/errors/error_trace_two_steps
 tlc/checker/errors/exit_status_success_after_print
 tlc/checker/errors/nonterminal_constant_recursion
 tlc/checker/errors/stack_overflow_assume
+tlc/checker/errors/stack_overflow_constraint
 tlc/checker/errors/stack_overflow_init
 tlc/checker/errors/stack_overflow_next
 tlc/checker/init/all_assigned_evaluates_rest
@@ -431,6 +434,7 @@ tlc/checker/prime/operator_parameter_primed_argument
 tlc/checker/prime/operator_parameter_primed_in_body
 tlc/checker/prime/operator_primed
 tlc/checker/prime/operator_with_arguments_primed
+tlc/checker/prime/prime_in_constraint
 tlc/checker/prime/prime_in_invariant
 tlc/checker/prime/prime_on_exists_in_guard
 tlc/checker/prime/prime_on_unassigned_in_set_builder
@@ -465,6 +469,7 @@ tlc/checker/states/record_vs_function
 tlc/checker/states/set_and_string_differ_as_states
 tlc/checker/states/set_of_tuples_vs_seq
 tlc/checker/states/set_vs_integer_invariant_fails_equality
+tlc/checker/states/state_with_infinite_value_fails_fingerprint
 tlc/checker/states/stuttering_counts
 tlc/checker/states/stuttering_is_not_invariant_rechecked
 tlc/checker/states/subset_vs_enumeration

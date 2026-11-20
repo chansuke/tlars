@@ -323,6 +323,7 @@ impl<'a> ModelChecker<'a> {
                     }
                     return Err(Halt::Stop);
                 }
+                Err(e) if is_java_error(&e) => return Err(Halt::Eval(e)),
                 Err(e) => {
                     // `doNextEvalFailed`: keeps the call stack and reports the invariant's code.
                     let recorded = ErrState::Eval { pred: cur.clone(), succ: Some(succ.clone()), error: e.clone() };
@@ -356,6 +357,7 @@ impl<'a> ModelChecker<'a> {
                     }
                     return Err(Halt::Stop);
                 }
+                Err(e) if is_java_error(&e) => return Err(Halt::Eval(e)),
                 Err(e) => {
                     let recorded = ErrState::Eval { pred: cur.clone(), succ: Some(succ.clone()), error: e.clone() };
                     if self.set_err_with(recorded, Ec::TLC_ACTION_PROPERTY_EVALUATION_FAILED, true) {
@@ -702,7 +704,6 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
             }
             return Ok(());
         }
-        self.failed_state = None;
         let Some(state) = ev.complete(s) else {
             let shown = ev.print_partial_state(s);
             mc.out.error(Ec::TLC_INITIAL_STATE, &["current state is not a legal state", &shown]);
@@ -710,6 +711,8 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
             self.stopped = true;
             return Err(Halt::Stop);
         };
+        // `DoInitFunctor`'s catch records the state it was working on, whatever step failed.
+        self.failed_state = Some(state.clone());
         let in_model = ev.is_in_model(&state)?;
         let mut seen = false;
         if in_model {
@@ -724,7 +727,6 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
         if seen && !self.force_checks {
             return Ok(());
         }
-        self.failed_state = Some(state.clone());
         for id in mc.tool.invariants() {
             let name = mc.tool.invariant_name(id);
             let name = ev.tool().graph().interner().text(name).to_string();
@@ -755,6 +757,12 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
 
 /// What `modelCheckImpl` prints in place of a `StackOverflowError`'s null message.
 const STACK_OVERFLOW_MESSAGE: &str = "This was a Java StackOverflowError. It was probably the result\nof an incorrect recursive function definition that caused TLC to enter\nan infinite loop when trying to compute the function or its application\nto an element in its putative domain.";
+
+/// A `java.lang.Error` rather than an `Exception`, which the `catch (Exception e)` around
+/// the invariant and implied-action checks does not catch (`ModelChecker.java:520, 571`).
+fn is_java_error(e: &EvalError) -> bool {
+    matches!(e.kind, tlars_tool::EvalErrorKind::StackOverflow | tlars_tool::EvalErrorKind::Assertion)
+}
 
 /// The Java class `ECGeneralMsg` names. TLC disguises its own `Assert.TLCRuntimeException`
 /// as `java.lang.RuntimeException` (`MP.java:1754-1761`).
