@@ -260,6 +260,7 @@ mod tests {
             check_deadlock: true,
             continue_after_violation: false,
             difftrace: false,
+            use_view: false,
             expand: true,
             enum_bound: 2000,
             width: 80,

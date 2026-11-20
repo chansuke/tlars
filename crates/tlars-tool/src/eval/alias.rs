@@ -84,7 +84,7 @@ impl Ev<'_> {
                     _ => crate::ctx::Ctx::EMPTY,
                 };
                 match self.eval(body, &ctx, StateRef::Full(current), successor, EvalControl::CLEAR) {
-                    Ok(v) => match self.to_alias_record(&v)? {
+                    Ok(v) => match self.alias_record(&v)? {
                         Some(record) => return Ok(Aliased { original: current.clone(), record: Some(record) }),
                         // `toState()` returned null: not a record, so TLC prints the state.
                         None => None,
@@ -111,7 +111,7 @@ impl Ev<'_> {
                 names.push(interner.intern(EVAL_ERROR));
                 values.push(Value::Str(interner.intern(&message)));
                 let rcd = Value::Record(Value::record_arc(names, values, false));
-                let record = self.to_alias_record(&rcd)?.expect("a record converts to a state");
+                let record = self.alias_record(&rcd)?.expect("a record converts to a state");
                 Ok(Aliased { original: current.clone(), record: Some(record) })
             }
         }
@@ -131,7 +131,7 @@ impl Ev<'_> {
     /// `Value.toState()` (`RecordValue.java:858-889`, `FcnRcdValue.java:659-666`): a record,
     /// or a function record whose domain is all strings, binds the variables it names and
     /// keeps every field for printing. Anything else is `null`.
-    fn to_alias_record(&mut self, v: &Value) -> EvalResult<Option<AliasRecord>> {
+    fn alias_record(&mut self, v: &Value) -> EvalResult<Option<AliasRecord>> {
         let rcd = match v {
             Value::Record(r) => r.clone(),
             // `FcnRcdValue.toRcd()`: only an explicit all-string domain converts.

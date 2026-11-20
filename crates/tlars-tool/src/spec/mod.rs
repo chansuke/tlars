@@ -816,9 +816,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     if config.rl_reward.is_some() || config.periodic.is_some() {
         return Err(unimplemented("_RL_REWARD and _PERIODIC (M5)"));
     }
-    if !config.possible.is_empty() {
-        return Err(unimplemented("_POSSIBLE (M3 unit 5)"));
-    }
+    config_possible(config, tool, defns)?;
     let alias = config_alias(config, tool, defns, out);
     let view = config_view(config, tool, defns)?;
     let symmetry = config_symmetry(config, tool, unprocessed, out)?;
@@ -1244,6 +1242,40 @@ fn named_checks(
         }
     }
     Ok(checks)
+}
+
+/// `processConfigPossible`'s validation loop (`SpecProcessor.java:1764-1790`). Every name
+/// must be a 0-arity, non-temporal definition. Witnessing them needs the module TLC
+/// generates, parses and analyses at run time, which is not here yet.
+fn config_possible(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<(), SpecError> {
+    if config.possible.is_empty() {
+        return Ok(());
+    }
+    let graph = tool.graph.clone();
+    for name in &config.possible {
+        let fail = |ec: Ec| SpecError::Config { ec, params: vec!["possible".to_string(), name.clone()] };
+        match defn_of(defns, &graph, name) {
+            None => return Err(fail(Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED)),
+            Some(OpBinding::Replaced(d)) => {
+                if !graph.op_def(d).params.is_empty() {
+                    return Err(fail(Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG));
+                }
+                // https://github.com/tlaplus/tlaplus/issues/827
+                if graph.op_level(d) >= Level::Temporal {
+                    return Err(SpecError::Config {
+                        ec: Ec::TLC_CONFIG_ID_HAS_VALUE,
+                        params: vec![
+                            "possible".to_string(),
+                            name.clone(),
+                            "a temporal formula; only state- and action-level predicates are supported".to_string(),
+                        ],
+                    });
+                }
+            }
+            Some(_) => return Err(fail(Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT)),
+        }
+    }
+    Err(unimplemented("_POSSIBLE's generated module and its named registers (M3 unit 5)"))
 }
 
 /// `Spec.hasAlias` + `Spec.getAliasSpec` (`Spec.java:274-304`). TLC calls `getAliasSpec`
