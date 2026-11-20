@@ -194,6 +194,10 @@ impl<'t> Ev<'t> {
     pub fn out(&self) -> &'t dyn Report {
         self.out
     }
+    /// `IdThread.GetId()`, which is 0 on the main thread (`getStatistics`'s `worker` field).
+    pub(crate) fn worker_id(&self) -> u16 {
+        self.locals.worker_id
+    }
 
     // ---- checks the engine runs around each successor (ITool) ----
 

@@ -50,12 +50,24 @@ impl StateRandom {
 
 /// Read-only run counters owned by the checker (`TLCGet("distinct")`, `"generated"`,
 /// `"queue"`, `"diameter"`, `"duration"`, `"stats"`). The checker implements this; the
-/// evaluator only reads through it.
-pub trait RunCounters: Sync {
+/// evaluator only reads through it. One method per `AbstractChecker` getter, read live, so a
+/// counter answers what it would have answered at that point of the search.
+///
+/// No implementation attached means `TLCGlobals.mainChecker == null`, which in TLC is an NPE
+/// the module turns into `TLC_MODULE_TLCGET_UNDEFINED`.
+pub trait RunCounters: Send + Sync {
+    /// `getDistinctStatesGenerated`.
     fn distinct(&self) -> u64;
+    /// `getStatesGenerated`.
     fn generated(&self) -> u64;
+    /// `getInitialStatesGenerated`.
+    fn initial(&self) -> u64;
+    /// `getStateQueueSize`.
     fn queue(&self) -> u64;
+    /// `getProgress`, the level `TLCTrace` reports.
     fn diameter(&self) -> u32;
+    /// `(System.currentTimeMillis() - startTime) / 1000`.
+    fn duration_secs(&self) -> i64;
 }
 
 /// `IdThread.localValues` and `IdThread.namedRegisters`: what `TLCSet` writes and `TLCGet`

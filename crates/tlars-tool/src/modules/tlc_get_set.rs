@@ -19,22 +19,14 @@ use tlars_sany::graph::ExprOrOpArg;
 /// than one of the keys below.
 const NAMED_REGISTER_PREFIX: &str = "s:";
 
-/// The string keys whose value comes from the running checker. tlars does not hand the
-/// evaluator the checker's counters, configuration or spec objects yet.
-const FROM_CHECKER: &[&str] = &[
-    "diameter",
-    "generated",
-    "distinct",
-    "queue",
-    "duration",
-    "stats",
-    "config",
-    "spec",
-    "revision",
-    "action",
-    "all",
-    "all:named",
-];
+/// The string keys whose value tlars cannot build yet: the run's configuration, its spec
+/// objects, the per-worker register maps, and the version record.
+const UNIMPLEMENTED: &[&str] = &["config", "spec", "revision", "action", "all", "all:named"];
+
+/// `getStatistics()`' fields, in the order `AbstractChecker` fills them
+/// (`AbstractChecker.java:683-709`). The record prints them in intern-token order, which is
+/// `TLCGetSet`'s declaration order, not this one.
+const STATS_FIELDS: &[&str] = &["queue", "distinct", "initial", "generated", "diameter", "duration", "worker"];
 
 /// `TLCGetSet.TLCGetEval` (`TLCGetSet.java:160-185`).
 pub(crate) fn tlc_get(
@@ -93,8 +85,30 @@ fn tlc_get_string(ev: &mut Ev<'_>, name: Atom, s0: StateRef<'_>, control: EvalCo
             None => Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key])),
         };
     }
-    if FROM_CHECKER.contains(&key.as_str()) {
+    if UNIMPLEMENTED.contains(&key.as_str()) {
         return Err(EvalError::unimplemented(format!("TLCGet(\"{key}\") (M3 unit 5)")));
+    }
+    // Every counter below is a `TLCGlobals.mainChecker` call, so without a checker the NPE
+    // TLC catches turns into `TLCGet(key) was undefined`.
+    if matches!(key.as_str(), "diameter" | "generated" | "distinct" | "queue" | "stats") && ev.tool().run_counters().is_none() {
+        return Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key]));
+    }
+    match key.as_str() {
+        // `IntValue.gen(getProgress())`, already an int in Java.
+        "diameter" => return Ok(Value::Int(ev.tool().run_counters().expect("checked above").diameter() as i32)),
+        "generated" => return narrow(ev, ev.tool().run_counters().expect("checked above").generated()),
+        "distinct" => return narrow(ev, ev.tool().run_counters().expect("checked above").distinct()),
+        "queue" => return narrow(ev, ev.tool().run_counters().expect("checked above").queue()),
+        // `duration` reads the clock alone and needs no checker, but tlars has no clock
+        // outside a run.
+        "duration" => {
+            let Some(counters) = ev.tool().run_counters() else {
+                return Err(EvalError::unimplemented("TLCGet(\"duration\") outside a run (M3 unit 5)".into()));
+            };
+            return narrow(ev, counters.duration_secs().max(0) as u64);
+        }
+        "stats" => return statistics(ev),
+        _ => {}
     }
     // `System.getProperty(key.substring(2), key)`: the default is the whole key, `-D` and all.
     if let Some(property) = key.strip_prefix("-D") {
@@ -102,6 +116,38 @@ fn tlc_get_string(ev: &mut Ev<'_>, name: Atom, s0: StateRef<'_>, control: EvalCo
         return Ok(Value::Str(ev.tool().graph().interner().intern(&text)));
     }
     Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key]))
+}
+
+/// `IntValue.gen(Math.toIntExact(v))`: a counter past `Integer.MAX_VALUE` is an
+/// `ArithmeticException`, which the module reports as `TLC_MODULE_OVERFLOW`.
+fn narrow(ev: &mut Ev<'_>, v: u64) -> EvalResult<Value> {
+    match i32::try_from(v) {
+        Ok(n) => Ok(Value::Int(n)),
+        Err(_) => Err(eval_exception(ev, Ec::TLC_MODULE_OVERFLOW, &[&v.to_string()])),
+    }
+}
+
+/// `IntValue.narrowToIntValue(v)`: a value that does not fit becomes -1.
+fn narrow_to_int(v: u64) -> Value {
+    Value::Int(i32::try_from(v).unwrap_or(-1))
+}
+
+/// `AbstractChecker.getStatistics()` (`:683-709`).
+fn statistics(ev: &mut Ev<'_>) -> EvalResult<Value> {
+    let counters = ev.tool().run_counters().expect("checked by the caller");
+    let worker = ev.worker_id();
+    let values = vec![
+        narrow_to_int(counters.queue()),
+        narrow_to_int(counters.distinct()),
+        narrow_to_int(counters.initial()),
+        narrow_to_int(counters.generated()),
+        narrow_to_int(u64::from(counters.diameter())),
+        narrow_to_int(counters.duration_secs().max(0) as u64),
+        Value::Int(i32::from(worker)),
+    ];
+    let interner = ev.tool().graph().interner();
+    let names = STATS_FIELDS.iter().map(|n| interner.intern(n)).collect();
+    Ok(Value::Record(Value::record_arc(names, values, false)))
 }
 
 /// `TLCGetSet.TLCSet` (`TLCGetSet.java:463-535`).

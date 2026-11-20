@@ -80,6 +80,9 @@ pub struct Tool {
     /// What `TLCSet("-Dkey", v)` wrote, newest last. TLC calls `System.setProperty`, a JVM
     /// global; tlars keeps it per run, so two runs in one process cannot see each other's.
     pub(crate) set_properties: std::sync::Mutex<Vec<(String, String)>>,
+    /// `TLCGlobals.mainChecker`, as far as `TLCGet` needs it: the run's live counters, set
+    /// once by the checker. Unset until then, which is TLC's `null`.
+    pub(crate) counters: std::sync::OnceLock<Arc<dyn crate::effects::RunCounters>>,
 }
 
 impl Tool {
@@ -94,6 +97,13 @@ impl Tool {
     }
     pub fn globals(&self) -> &TlcGlobals {
         &self.globals
+    }
+    /// `TLCGlobals.mainChecker = this`: the checker publishes its counters for `TLCGet`.
+    pub fn attach_counters(&self, counters: Arc<dyn crate::effects::RunCounters>) {
+        let _ = self.counters.set(counters);
+    }
+    pub(crate) fn run_counters(&self) -> Option<&dyn crate::effects::RunCounters> {
+        self.counters.get().map(|c| &**c)
     }
     /// `System.getProperty(name)`: what `TLCSet` wrote last, else the CLI's `-D` option.
     pub(crate) fn property(&self, name: &str) -> Option<String> {
