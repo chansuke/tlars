@@ -240,7 +240,18 @@ impl<'a> ModelChecker<'a> {
                             let mut ev = self.tool.ev(&mut locals, self.out);
                             ev.print_state(&state, None)
                         };
-                        self.out.error(Ec::TLC_INITIAL_STATE, &[&message, &shown]);
+                        match shown {
+                            Ok(shown) => {
+                                self.out.error(Ec::TLC_INITIAL_STATE, &[&message, &shown]);
+                            }
+                            // `errState.toString()` is an argument of that `printError`, so
+                            // a `-view` whose VIEW fails here throws out of `modelCheckImpl`
+                            // before anything is printed and `TLC.process` reports it.
+                            Err(e) => {
+                                let body = tlars_msg::unexpected_exception(java_class(&e), &e.message);
+                                return Err((self.out.error(Ec::GENERAL, &[&body]), false));
+                            }
+                        }
                     }
                     None => {
                         self.out.error(Ec::GENERAL, &[&message]);
@@ -807,7 +818,7 @@ impl<'a> ModelChecker<'a> {
     fn print_state(&self, ev: &mut Ev<'_>, step: &tlars_tool::StateInfo, prev: Option<&State>, number: usize) -> Result<(), EvalError> {
         let difftrace = self.tool.globals().difftrace;
         let label = ev.state_label(step);
-        let shown = ev.print_state(&step.state, if difftrace { prev } else { None });
+        let shown = ev.print_state(&step.state, if difftrace { prev } else { None })?;
         // `currentStateInfo.fingerPrint()` for the `fp:` field: a value a variable may not
         // hold fails here, and the failure replaces the rest of the trace.
         let fp = ev.fingerprint(&step.state)?.raw() as i64;
@@ -888,7 +899,7 @@ impl InitSink<'_, '_> {
             let name = mc.tool.invariant_name(id);
             let name = ev.tool().graph().interner().text(name).to_string();
             if !ev.check_invariant(id, &state)? {
-                let shown = ev.print_state(&state, None);
+                let shown = ev.print_state(&state, None)?;
                 mc.out.error(Ec::TLC_INVARIANT_VIOLATED_INITIAL, &[&name, &shown]);
                 if !mc.continue_after_violation {
                     mc.set_err(ErrState::InvariantInitial { id, state: state.clone() });
@@ -900,7 +911,7 @@ impl InitSink<'_, '_> {
         }
         for id in mc.tool.implied_inits() {
             if !ev.check_implied_init(id, &state)? {
-                let shown = ev.print_state(&state, None);
+                let shown = ev.print_state(&state, None)?;
                 mc.out.error(Ec::TLC_PROPERTY_VIOLATED_INITIAL, &["", &shown]);
                 self.result = Ec::TLC_PROPERTY_VIOLATED_INITIAL;
                 self.stopped = true;

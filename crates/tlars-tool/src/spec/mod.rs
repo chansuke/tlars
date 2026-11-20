@@ -808,12 +808,22 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
     }
     let model_constraints = named_checks(&config.constraints, tool, defns, out, "constraint")?;
     let action_constraints = named_checks(&config.action_constraints, tool, defns, out, "action constraint")?;
-    if config.rl_reward.is_some() || config.periodic.is_some() || !config.possible.is_empty() || !config.postconditions.is_empty() {
-        return Err(unimplemented("_RL_REWARD, _PERIODIC, _POSSIBLE and POSTCONDITION (M3 unit 5)"));
+    if config.rl_reward.is_some() || config.periodic.is_some() {
+        return Err(unimplemented("_RL_REWARD and _PERIODIC (M5)"));
     }
-    if config.view.is_some() || config.symmetry.is_some() || config.alias.is_some() {
-        return Err(unimplemented("VIEW, SYMMETRY and ALIAS (M3 unit 5)"));
+    if !config.possible.is_empty() {
+        return Err(unimplemented("_POSSIBLE (M3 unit 5)"));
     }
+    if !config.postconditions.is_empty() {
+        return Err(unimplemented("POSTCONDITION (M3 unit 5)"));
+    }
+    if config.symmetry.is_some() {
+        return Err(unimplemented("SYMMETRY (M3 unit 5)"));
+    }
+    if config.alias.is_some() {
+        return Err(unimplemented("ALIAS (M3 unit 5)"));
+    }
+    let view = config_view(config, tool, defns)?;
 
     // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
     tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
@@ -824,6 +834,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
         .collect();
     tool.model_constraints = model_constraints.into();
     tool.action_constraints = action_constraints.into();
+    tool.view = view;
     tool.temporal = crate::tool::Temporal {
         fairness: temporals.into_iter().map(|p| (p.expr, p.ctx)).collect(),
         properties: Box::new([]),
@@ -1228,6 +1239,35 @@ fn named_checks(
         }
     }
     Ok(checks)
+}
+
+/// `Spec.getViewSpec` (`Spec.java:243-272`), which `TLCStateMut.setTool` calls from the
+/// `Tool` constructor: after `processConfig` and before the next-state relation is split.
+/// The name resolves against `defns`, so a VIEW whose definition `processConstantDefns`
+/// folded to a value is "not a definition" and fails as a constant.
+fn config_view(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<Option<NamedCheck>, SpecError> {
+    let Some(name) = config.view.as_deref().filter(|s| !s.is_empty()) else { return Ok(None) };
+    let graph = tool.graph.clone();
+    match defn_of(defns, &graph, name) {
+        None => Err(SpecError::Config {
+            ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
+            params: vec!["view function".to_string(), name.to_string()],
+        }),
+        Some(OpBinding::Replaced(d)) => {
+            if !graph.op_def(d).params.is_empty() {
+                return Err(SpecError::Config {
+                    ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG,
+                    params: vec!["view function".to_string(), name.to_string()],
+                });
+            }
+            let body = graph.op_def(d).body.expect("a user definition has a body");
+            Ok(Some(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY }))
+        }
+        Some(_) => Err(SpecError::Config {
+            ec: Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT,
+            params: vec!["view function".to_string(), name.to_string()],
+        }),
+    }
 }
 
 /// `this.defns.get(name)`, which interns the cfg identifier.

@@ -50,6 +50,11 @@ impl State {
     pub(crate) fn values(&self) -> &[Value] {
         &self.0
     }
+    /// `new TLCStateMut(vals)`: the state a symmetry permutation produced, which
+    /// `fingerPrint` evaluates the VIEW against (`TLCStateMut.java:275-278`).
+    pub(crate) fn of_values(values: Vec<Value>) -> State {
+        State(values.into())
+    }
     pub(crate) fn snapshot(&self) -> Snapshot {
         Snapshot(self.0.iter().map(|v| Some(v.clone())).collect())
     }

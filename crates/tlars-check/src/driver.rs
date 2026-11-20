@@ -278,6 +278,7 @@ fn globals(session: &Session<'_>) -> TlcGlobals {
         check_deadlock: o.deadlock_check,
         continue_after_violation: o.continue_after_violation,
         difftrace: o.difftrace,
+        use_view: o.view,
         expand: !o.terse,
         enum_bound: 2000,
         width: 80,

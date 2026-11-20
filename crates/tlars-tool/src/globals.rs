@@ -16,6 +16,9 @@ pub struct TlcGlobals {
     pub check_deadlock: bool,
     pub continue_after_violation: bool,
     pub difftrace: bool,
+    /// `-view` (`TLCGlobals.useView`): a trace state prints its VIEW instead of its
+    /// variables.
+    pub use_view: bool,
     /// `-terse` clears it: lazy sets are not expanded when printed.
     pub expand: bool,
     /// `TLCGlobals.enumBound` (2000).

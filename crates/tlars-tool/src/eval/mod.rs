@@ -238,15 +238,34 @@ impl<'t> Ev<'t> {
     /// the values' own fingerprints in `vars[]` order. Each value normalises itself on the
     /// way, which is why fingerprinting a state also leaves it shareable.
     pub fn fingerprint(&mut self, s: &State) -> EvalResult<Fp> {
-        if self.tool.has_symmetry() || self.tool.view.is_some() {
-            return Err(crate::error::EvalError::unimplemented("SYMMETRY and VIEW fingerprints (M3 unit 5)".into()));
+        if self.tool.has_symmetry() {
+            return Err(crate::error::EvalError::unimplemented("SYMMETRY fingerprints (M3 unit 5)".into()));
         }
         let mut fp = self.tool.fp64.new_fp();
-        for i in 0..s.len() {
-            let v = s.get(self.tool.vars.slot(i)).clone();
-            fp = v.fingerprint(self, fp)?;
+        match &self.tool.view {
+            // The values' own fingerprints in `vars[]` order. Each value normalises itself
+            // on the way, which is why fingerprinting a state also leaves it shareable.
+            None => {
+                for i in 0..s.len() {
+                    let v = s.get(self.tool.vars.slot(i)).clone();
+                    fp = v.fingerprint(self, fp)?;
+                }
+                Ok(fp)
+            }
+            // With a VIEW the state's own values are normalised explicitly, because only
+            // the view's value is fingerprinted (`TLCStateMut.java:261-281`).
+            Some(view) => {
+                let (expr, ctx) = (view.expr, view.ctx.clone());
+                for i in 0..s.len() {
+                    let v = s.get(self.tool.vars.slot(i)).clone();
+                    v.deep_normalize(self)?;
+                }
+                self.with_fast_tool(|ev| {
+                    let val = ev.eval(expr, &ctx, crate::state::StateRef::Full(s), crate::state::StateRef::Empty, EvalControl::CLEAR)?;
+                    val.fingerprint(ev, fp)
+                })
+            }
         }
-        Ok(fp)
     }
     /// One INVARIANT, `Ok(false)` = violated.
     pub fn check_invariant(&mut self, id: CheckId<Invariant>, s: &State) -> EvalResult<bool> {
@@ -325,7 +344,38 @@ impl<'t> Ev<'t> {
     /// `TLCStateMut.toString` (`TLCStateMut.java:327-396`): `x = v` for one variable, else
     /// `/\ x = v` per variable in `vars[]` order; `prev` given = `-difftrace`, which prints
     /// only the variables that changed.
-    pub fn print_state(&mut self, s: &State, prev: Option<&State>) -> String {
+    ///
+    /// `-view` with a VIEW prints the view's value instead, but only on the no-argument
+    /// `toString()`: `-difftrace` reaches `toString(lastState)`, which has no view branch.
+    pub fn print_state(&mut self, s: &State, prev: Option<&State>) -> EvalResult<String> {
+        if prev.is_none()
+            && self.tool.globals.use_view
+            && let Some(view) = &self.tool.view
+        {
+            let (expr, ctx) = (view.expr, view.ctx.clone());
+            return self.with_fast_tool(|ev| {
+                let val = ev.eval(expr, &ctx, crate::state::StateRef::Full(s), crate::state::StateRef::Empty, EvalControl::CLEAR)?;
+                ev.view_string(expr, &val)
+            });
+        }
+        Ok(self.print_variables(s, prev))
+    }
+
+    /// `SemanticNode.toString(IValue)` (`SemanticNode.java:495-497`). `OpApplNode` overrides
+    /// it for a tuple whose size equals the node's `allParams`, printing one conjunct per
+    /// parameter; the semantic graph does not carry `allParams`, so that branch is not
+    /// decidable here.
+    fn view_string(&mut self, expr: ExprId, val: &crate::value::Value) -> EvalResult<String> {
+        if matches!(val, crate::value::Value::Tuple(_)) {
+            let _ = expr;
+            return Err(EvalError::unimplemented(
+                "printing a tuple-valued VIEW under -view (OpApplNode.toString needs allParams) (M3)".into(),
+            ));
+        }
+        val.ppr(self)
+    }
+
+    fn print_variables(&mut self, s: &State, prev: Option<&State>) -> String {
         let interner = self.tool.graph.interner().clone();
         let single = s.len() == 1;
         let mut out = String::new();
@@ -410,6 +460,17 @@ impl<'t> Ev<'t> {
     }
 
     // ---- internal ----
+
+    /// `TLCStateMut.mytool`: the static the `Tool` constructor set, which is always the
+    /// `FastTool`. So the VIEW is evaluated by the plain tool even while the failing step is
+    /// being replayed under a `CallStackTool`: its sub-expressions leave no frames on the
+    /// nested-expression stack and its values carry no source.
+    fn with_fast_tool<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = self.locals.call_stack.take();
+        let r = f(self);
+        self.locals.call_stack = saved;
+        r
+    }
 
     /// `IdThread.setCurrentState(s0)`: the next RandomElement draw re-seeds with
     /// `fp(s0) ^ seed`. Called by `next_states` and by trace replay, never by init.
