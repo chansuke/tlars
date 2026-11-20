@@ -68,6 +68,7 @@ tlc/checker/bfs/trace_uses_first_parent
 tlc/checker/bfs/two_variable_counts
 tlc/checker/constraints/action_bounds
 tlc/checker/constraints/action_compares_steps
+tlc/checker/constraints/action_constraint_with_arg
 tlc/checker/constraints/action_excluded_invariant_checked
 tlc/checker/constraints/action_excluded_then_reachable_otherwise
 tlc/checker/constraints/action_not_on_initial
@@ -84,6 +85,7 @@ tlc/checker/constraints/nonboolean_action
 tlc/checker/constraints/nonboolean_state_on_successor
 tlc/checker/constraints/some_initial_excluded
 tlc/checker/constraints/state_constraint_constant_false
+tlc/checker/constraints/state_constraint_constant_true
 tlc/checker/constraints/state_constraint_with_arg
 tlc/checker/constraints/state_keyword_plural
 tlc/checker/constraints/state_multiple_lines
@@ -91,11 +93,13 @@ tlc/checker/constraints/state_order_failure_first
 tlc/checker/constraints/state_order_short_circuits
 tlc/checker/constraints/state_stops_exploration
 tlc/checker/constraints/state_then_action_order
+tlc/checker/constraints/undefined_action_constraint
 tlc/checker/constraints/undefined_state_constraint
 tlc/checker/deadlock/action_constraint_excluded_successor_not_deadlock
 tlc/checker/deadlock/after_steps
 tlc/checker/deadlock/all_seen_not_deadlock
 tlc/checker/deadlock/at_initial_state
+tlc/checker/deadlock/config_false_disables
 tlc/checker/deadlock/config_nonboolean
 tlc/checker/deadlock/config_true_keeps
 tlc/checker/deadlock/config_twice

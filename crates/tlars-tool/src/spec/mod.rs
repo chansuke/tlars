@@ -807,7 +807,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
         return Err(SpecError::Failure { ec: Ec::TLC_CONFIG_MISSING_NEXT });
     }
     let model_constraints = named_checks(&config.constraints, tool, defns, out, "constraint")?;
-    let action_constraints = named_checks(&config.action_constraints, tool, defns, out, "action-constraint")?;
+    let action_constraints = named_checks(&config.action_constraints, tool, defns, out, "action constraint")?;
     if config.rl_reward.is_some() || config.periodic.is_some() || !config.possible.is_empty() || !config.postconditions.is_empty() {
         return Err(unimplemented("_RL_REWARD, _PERIODIC, _POSSIBLE and POSTCONDITION (M3 unit 5)"));
     }
@@ -815,6 +815,8 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
         return Err(unimplemented("VIEW, SYMMETRY and ALIAS (M3 unit 5)"));
     }
 
+    // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
+    tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
     let ConfigPass { init_preds, next_pred, invariants, temporals } = pass;
     tool.invariants = invariants
         .into_iter()
@@ -1207,6 +1209,9 @@ fn named_checks(
                     params: vec![what.to_string(), name.clone()],
                 });
             }
+            // A constraint that folded to TRUE is accepted and contributes nothing; any
+            // other value is rejected (`SpecProcessor.java:1684-1692`).
+            Some(OpBinding::Value(Value::Bool(true))) => {}
             Some(other) => {
                 let shown = binding_string(tool, &other, out)?;
                 return Err(SpecError::Config {
