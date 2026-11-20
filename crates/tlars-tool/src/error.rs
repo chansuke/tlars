@@ -19,6 +19,9 @@ pub enum EvalErrorKind {
     StackOverflow,
     /// `AssertionError` → `TLC_BUG`.
     Assertion,
+    /// An unchecked JVM exception TLC does not raise on purpose: a cast or a read past an
+    /// array inside a value class. `class` is the Java class name `TLC.process` prints.
+    Jvm { class: &'static str },
     /// A construct tlars does not evaluate yet. It travels like TLC's exceptions, so code
     /// that swallows failures (constant folding) swallows it too; anywhere else it surfaces
     /// as an error whose text TLC never prints.
@@ -52,6 +55,18 @@ impl EvalError {
     /// `EC.GENERAL` and the reason as its message.
     pub(crate) fn detailed(reason: String, loc: Option<Loc>) -> EvalError {
         EvalError { ec: Ec::GENERAL, message: reason, loc, kind: EvalErrorKind::Runtime }
+    }
+
+    /// `(T) v` on a value of another class, as TLC's value classes cast without checking.
+    pub(crate) fn class_cast(from: &str, to: &str) -> EvalError {
+        let message = tlars_java::class_cast(&format!("tlc2.value.impl.{from}"), &format!("tlc2.value.impl.{to}"));
+        EvalError { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ClassCastException" } }
+    }
+
+    /// `a[i]` past the end, as TLC's value classes index without checking.
+    pub(crate) fn index_out_of_bounds(index: usize, length: usize) -> EvalError {
+        let message = tlars_java::index_out_of_bounds(index as i64, length);
+        EvalError { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ArrayIndexOutOfBoundsException" } }
     }
 
     pub(crate) fn unimplemented(what: String) -> EvalError {

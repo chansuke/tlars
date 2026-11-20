@@ -73,8 +73,19 @@ impl Value {
                 let elems: Box<[Value]> = super::order::normalized(ev, set)?.into();
                 Ok(Some(ValueEnumeration { state: EnumState::Slice { elems, next: 0 } }))
             }
-            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::User(_) | Value::Undef => Ok(None),
-            _ => Err(EvalError::unimplemented(format!("enumerating {} (M2 unit 3)", self.kind_string()))),
+            // `Enumerable` leaves out the scalars and the four function classes, so a
+            // quantifier over one of them reports a non-enumerable bound.
+            Value::Bool(_)
+            | Value::Int(_)
+            | Value::Str(_)
+            | Value::Model(_)
+            | Value::User(_)
+            | Value::Undef
+            | Value::Tuple(_)
+            | Value::Record(_)
+            | Value::FcnRcd(_)
+            | Value::FcnLambda(_) => Ok(None),
+            _ => Err(EvalError::unimplemented(format!("enumerating {} (M2 unit 5)", self.kind_string()))),
         }
     }
 

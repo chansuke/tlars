@@ -18,14 +18,16 @@
 
 pub(crate) mod enumerate;
 mod fingerprint;
+mod function;
 mod order;
 mod print;
 
+pub(crate) use function::{Except, warn};
 
 use crate::ctx::Ctx;
+use crate::error::{EvalError, EvalResult};
 use crate::eval::{EvalControl, Ev};
-use crate::error::EvalResult;
-use crate::state::Snapshot;
+use crate::state::{Snapshot, StateRef};
 use std::sync::{Arc, OnceLock};
 use tlars_sany::Atom;
 use tlars_sany::graph::{ExprId, ParamId, SymbolRef};
@@ -142,10 +144,14 @@ pub struct RecordValue {
 
 pub enum FcnDomain {
     Explicit(Box<[Value]>),
-    /// `FcnRcdValue.intv`: printed as a tuple when `lo == 1`.
-    Interval { lo: i32, hi: i32 },
+    /// `FcnRcdValue.intv`: printed as a tuple when `lo == 1`, and always normalised.
+    Interval(IntervalValue),
 }
 
+/// Domain and values as constructed, plus the normalised (sorted by domain) pair once
+/// computed. An interval domain is normalised by construction, so `norm` stays empty and
+/// `is_normalized` reports the domain's kind. A failed sort (a duplicate domain element) is
+/// not cached, so the error re-surfaces at the next use, as in TLC.
 pub struct FcnRcdValue {
     pub(crate) domain: FcnDomain,
     pub(crate) values: Box<[Value]>,
@@ -203,6 +209,24 @@ pub struct Closure {
     pub(crate) control: EvalControl,
 }
 
+impl Closure {
+    /// `new FcnLambdaValue(..., c, s0, s1, control)`, whose constructor copies both states.
+    /// Copying them is M3, so a closure built while a state is bound is refused here instead
+    /// of forcing with the wrong variables later.
+    pub(crate) fn capture(ctx: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Closure> {
+        if !matches!((s0, s1), (StateRef::Empty, StateRef::Empty)) {
+            return Err(EvalError::unimplemented("a function or set closure over a state (M3)".into()));
+        }
+        Ok(Closure { ctx: ctx.clone(), s0: None, s1: None, control })
+    }
+
+    /// The captured `(state, pstate)` as `eval` takes them.
+    pub(crate) fn states(&self) -> (StateRef<'_>, StateRef<'_>) {
+        debug_assert!(self.s0.is_none() && self.s1.is_none(), "capture refuses a closure over a state");
+        (StateRef::Empty, StateRef::Empty)
+    }
+}
+
 /// `{x \in S : P}` over a non-Reducible `S`.
 pub struct SetPredValue {
     pub(crate) vars: Box<[ParamId]>,
@@ -218,11 +242,12 @@ pub struct SetPredValue {
 /// cycle that would leak under `Arc`. Here `rec_name` is kept and `f := self` is consed onto
 /// the context *at apply time*: same semantics, no cycle.
 pub struct FcnLambdaValue {
+    /// `FcnParams`: one entry per `x, y \in S` list, as `(formals, isTuple, domain)`.
     pub(crate) params: Box<[(Box<[ParamId]>, bool, Value)]>,
     pub(crate) body: ExprId,
     pub(crate) env: Closure,
     pub(crate) rec_name: Option<SymbolRef>,
-    pub(crate) excepts: Box<[(Box<[Value]>, Value)]>,
+    pub(crate) excepts: Box<[Except]>,
     pub(crate) converted: OnceLock<Arc<FcnRcdValue>>,
 }
 
@@ -328,6 +353,31 @@ impl Value {
         Value::Tuple(Arc::new(TupleValue { elems: elems.into_boxed_slice() }))
     }
 
+    /// `new RecordValue(names, values, isNorm)`.
+    pub(crate) fn record_arc(names: Vec<Atom>, values: Vec<Value>, is_norm: bool) -> Arc<RecordValue> {
+        let (names, values) = (names.into_boxed_slice(), values.into_boxed_slice());
+        let norm = OnceLock::new();
+        if is_norm {
+            let _ = norm.set((names.clone(), values.clone()));
+        }
+        Arc::new(RecordValue { names, values, norm })
+    }
+
+    /// `new FcnRcdValue(domain, values, isNorm)`.
+    pub(crate) fn fcn_rcd_arc(domain: Vec<Value>, values: Vec<Value>, is_norm: bool) -> Arc<FcnRcdValue> {
+        let (domain, values) = (domain.into_boxed_slice(), values.into_boxed_slice());
+        let norm = OnceLock::new();
+        if is_norm {
+            let _ = norm.set((domain.clone(), values.clone()));
+        }
+        Arc::new(FcnRcdValue { domain: FcnDomain::Explicit(domain), values, norm })
+    }
+
+    /// `new FcnRcdValue(intv, values)`.
+    pub(crate) fn fcn_rcd_interval_arc(intv: IntervalValue, values: Vec<Value>) -> Arc<FcnRcdValue> {
+        Arc::new(FcnRcdValue { domain: FcnDomain::Interval(intv), values: values.into_boxed_slice(), norm: OnceLock::new() })
+    }
+
     /// A SetEnum built normalised (`new SetEnumValue(elems, true)`).
     pub(crate) fn set_enum_normalized(elems: Vec<Value>) -> Value {
         let elems = elems.into_boxed_slice();
@@ -339,12 +389,6 @@ impl Value {
     /// Unnormalised SetEnum, as `{e : x \in S}` and cfg `{...}` produce.
     pub(crate) fn set_enum(elems: Vec<Value>) -> Value {
         Value::SetEnum(Arc::new(SetEnumValue { built: elems.into_boxed_slice(), norm: OnceLock::new() }))
-    }
-
-    /// `toTuple()` with the calling operator's error text on failure, e.g.
-    /// "The first argument of Append must be a sequence, but instead it is: ...".
-    pub(crate) fn to_tuple_elems(&self, ev: &mut Ev<'_>, op: &str, arg_pos: u32) -> EvalResult<Vec<Value>> {
-        todo!()
     }
 
     /// `toSetEnum()`: `None` if this value is not an enumerable set.
@@ -366,11 +410,6 @@ impl Value {
         }
     }
 
-    /// `toFcnRcd()`: tuples, records and enumerable FcnLambdas as functions.
-    pub(crate) fn to_fcn_rcd(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<FcnRcdValue>>> {
-        todo!()
-    }
-
     /// `Reducible`: only Interval and SetEnum; decides eager vs lazy set operators.
     pub(crate) fn is_reducible(&self) -> bool {
         matches!(self, Value::Interval(_) | Value::SetEnum(_))
@@ -387,7 +426,42 @@ impl Value {
                 }
                 order::normalized(ev, set).map(|_| ())
             }
-            _ => Err(crate::error::EvalError::unimplemented("deepNormalize of compound values (M2 unit 3)".into())),
+            Value::Tuple(t) => {
+                for e in t.elems.iter() {
+                    e.deep_normalize(ev)?;
+                }
+                Ok(())
+            }
+            // The snapshot's values, then the record / function itself
+            // (`RecordValue.java:653-666`, `FcnRcdValue.java:751-764`).
+            Value::Record(r) => {
+                for v in r.snapshot().1.iter() {
+                    v.deep_normalize(ev)?;
+                }
+                order::record_normalized(ev, r).map(|_| ())
+            }
+            Value::FcnRcd(f) => {
+                for v in f.snapshot().1.iter() {
+                    v.deep_normalize(ev)?;
+                }
+                f.normalize(ev).map(|_| ())
+            }
+            Value::FcnLambda(f) => match f.converted.get() {
+                Some(r) => Value::FcnRcd(r.clone()).deep_normalize(ev),
+                None => {
+                    for ex in f.excepts.iter() {
+                        ex.value.deep_normalize(ev)?;
+                        for p in ex.path.iter() {
+                            p.deep_normalize(ev)?;
+                        }
+                    }
+                    for (_, _, domain) in f.params.iter() {
+                        domain.deep_normalize(ev)?;
+                    }
+                    Ok(())
+                }
+            },
+            _ => Err(EvalError::unimplemented("deepNormalize of this value (M2 unit 5)".into())),
         }
     }
 
