@@ -16,6 +16,7 @@
 use super::{FcnRcdValue, IntervalValue, RecordValue, SetEnumValue, UserValue, Value};
 use crate::error::{EvalError, EvalResult};
 use crate::eval::Ev;
+use crate::value::enumerate::EnumOrder;
 use std::cmp::Ordering;
 use std::sync::Arc;
 use tlars_msg::Ec;
@@ -40,7 +41,7 @@ impl Value {
             (Value::Int(_), _) => mismatch(ev, "check", "integer"),
             (Value::Str(a), Value::Str(b)) => Ok(a == b),
             (Value::Str(_), _) => mismatch(ev, "check", "string"),
-            (Value::Interval(a), Value::Interval(b)) => Ok(if a.lo > a.hi { b.lo > b.hi } else { a.lo == b.lo && a.hi == b.hi }),
+            (Value::Interval(a), Value::Interval(b)) => interval_equals(ev, *a, *b),
             (Value::Interval(a), _) => Value::SetEnum(a.to_set_enum_arc()).tlc_equals(ev, other),
             (Value::SetEnum(a), _) => {
                 let Some(b) = other.to_set_enum(ev)? else {
@@ -167,7 +168,7 @@ impl Value {
             (Value::Str(a), Value::Str(b)) => Ok(a.tok().cmp(&b.tok())),
             (Value::Str(_), _) => mismatch(ev, "string"),
             (Value::Interval(a), Value::Interval(b)) => {
-                let (sa, sb) = (a.size(), b.size());
+                let (sa, sb) = (a.size(ev)?, b.size(ev)?);
                 Ok(if sa != sb { sa.cmp(&sb) } else if sa == 0 { Ordering::Equal } else { a.lo.cmp(&b.lo) })
             }
             (Value::Interval(a), _) => Value::SetEnum(a.to_set_enum_arc()).tlc_compare(ev, other),
@@ -320,6 +321,128 @@ impl Value {
         }
     }
 
+    /// `isFinite()`: what `FiniteSets!IsFiniteSet` answers, and what the set classes consult
+    /// about their operands. The scalars fail instead of answering.
+    pub(crate) fn is_finite(&self, ev: &mut Ev<'_>) -> EvalResult<bool> {
+        let not_a_set = |ev: &mut Ev<'_>, noun: &str| -> EvalResult<bool> {
+            let shown = self.ppr(ev)?;
+            Err(EvalError::detailed(format!("Attempted to check if the {noun} {shown} is a finite set."), None))
+        };
+        match self {
+            Value::Bool(_) => not_a_set(ev, "boolean"),
+            Value::Int(_) => not_a_set(ev, "integer"),
+            Value::Str(_) => not_a_set(ev, "string"),
+            Value::Model(_) => not_a_set(ev, "model value"),
+            Value::Undef => not_a_set(ev, "value"),
+            Value::Interval(_) | Value::SetEnum(_) | Value::Tuple(_) | Value::Record(_) | Value::FcnRcd(_) => Ok(true),
+            Value::FcnLambda(_) => {
+                let shown = self.ppr(ev)?;
+                Err(EvalError::detailed(format!("Attempted to check if the function:\n{shown}\nis a finite set."), None))
+            }
+            // `Naturals.Nat`, `Integers.Int`, `Strings.STRING` are infinite; `Seq(S)` is
+            // finite only when `S` is empty (`Sequences.java:417-422`).
+            Value::User(u) => match &**u {
+                UserValue::Nat | UserValue::Int | UserValue::String => Ok(false),
+                UserValue::Seq(range) => Ok(range.is_finite(ev)? && range.is_empty(ev)?),
+                _ => Err(EvalError::unimplemented("isFinite of this special set (M2 unit 4)".into())),
+            },
+            Value::Subset(s) => s.base.is_finite(ev),
+            Value::KSubset(s) => s.base.is_finite(ev),
+            Value::SetCup(s) => Ok(s.left.is_finite(ev)? && s.right.is_finite(ev)?),
+            // The text has no space before "is", as the concatenation in TLC lacks one.
+            Value::SetCap(s) => {
+                if !s.left.is_finite(ev)? && !s.right.is_finite(ev)? {
+                    let shown = self.ppr(ev)?;
+                    return Err(EvalError::detailed(format!("Attempted to check if the set {shown}is finite."), None));
+                }
+                Ok(true)
+            }
+            Value::SetDiff(s) => {
+                if s.left.is_finite(ev)? {
+                    return Ok(true);
+                }
+                if !s.right.is_finite(ev)? {
+                    let shown = self.ppr(ev)?;
+                    return Err(EvalError::detailed(format!("Attempted to check if the set {shown}is finite."), None));
+                }
+                Ok(false)
+            }
+            // `[S -> T]` is finite when either side is empty, when both are finite, or when
+            // the range has one element (`SetOfFcnsValue.java:171-186`).
+            Value::SetOfFcns(s) => {
+                let finite_domain = s.domain.is_finite(ev)?;
+                if finite_domain && s.domain.is_empty(ev)? {
+                    return Ok(true);
+                }
+                let finite_range = s.range.is_finite(ev)?;
+                if finite_range && s.range.is_empty(ev)? {
+                    return Ok(true);
+                }
+                if finite_domain && finite_range {
+                    return Ok(true);
+                }
+                Ok(finite_range && s.range.size(ev)? == 1)
+            }
+            Value::SetOfRcds(s) => all_finite(ev, &s.sets),
+            Value::SetOfTuples(s) => all_finite(ev, &s.sets),
+            Value::Union(u) => {
+                if !u.set.is_enumerable() {
+                    let shown = self.ppr(ev)?;
+                    return Err(EvalError::detailed(format!("Attempted to check if the nonenumerable set:\n{shown}\nis a finite set."), None));
+                }
+                let mut elems = u.set.elements(ev, EnumOrder::Native)?.expect("an enumerable value enumerates");
+                while let Some(v) = elems.next(ev)? {
+                    if !v.is_finite(ev)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            Value::SetPred(p) => {
+                if !p.inner.is_finite(ev)? {
+                    let shown = p.inner.ppr(ev)?;
+                    return Err(EvalError::detailed(
+                        format!("Attempted to check if expression of form {{x \\in S : p(x)}} is a finite set, but cannot check if S:\n{shown}\nis finite."),
+                        None,
+                    ));
+                }
+                Ok(true)
+            }
+        }
+    }
+
+    /// `Value.isEmpty()` (`Value.java:150-254`): a per-class rule, cheap where the class
+    /// knows the answer without enumerating.
+    pub(crate) fn is_empty(&self, ev: &mut Ev<'_>) -> EvalResult<bool> {
+        let first_is_none = |ev: &mut Ev<'_>, v: &Value| -> EvalResult<bool> {
+            let mut elems = v.elements(ev, EnumOrder::Native)?.expect("an enumerable value enumerates");
+            Ok(elems.next(ev)?.is_none())
+        };
+        match self {
+            // Normalisation only drops duplicates, so the constructed elements answer this.
+            Value::SetEnum(s) => Ok(s.built.is_empty()),
+            Value::Interval(i) => Ok(i.size(ev)? == 0),
+            Value::SetCap(_) | Value::SetCup(_) | Value::SetDiff(_) | Value::Union(_) | Value::SetPred(_) => first_is_none(ev, self),
+            // `[{} -> T]` is `{<<>>}` for every `T`, which is why an empty domain rules the
+            // emptiness out instead of implying it.
+            Value::SetOfFcns(s) => Ok(!s.domain.is_empty(ev)? && s.range.is_empty(ev)?),
+            Value::SetOfRcds(s) => any_empty(ev, &s.sets),
+            Value::SetOfTuples(s) => any_empty(ev, &s.sets),
+            // `SUBSET S` always contains `{}`.
+            Value::Subset(_) => Ok(false),
+            Value::KSubset(_) => Err(EvalError::unimplemented("KSubsetValue.hasNoElements (M5)".into())),
+            Value::User(u) => match &**u {
+                UserValue::Nat | UserValue::Int | UserValue::String => Ok(false),
+                UserValue::Seq(_) => Ok(false),
+                _ => Err(EvalError::unimplemented("isEmpty of this special set (M2 unit 4)".into())),
+            },
+            _ => {
+                let shown = self.ppr(ev)?;
+                Err(EvalError::detailed(format!("Shouldn't call isEmpty() on value {shown}"), None))
+            }
+        }
+    }
+
     /// `size()`: the cardinality a set reports and the number of points a function has.
     pub(crate) fn size(&self, ev: &mut Ev<'_>) -> EvalResult<i32> {
         let uncountable = |ev: &mut Ev<'_>, noun: &str| -> EvalResult<i32> {
@@ -333,7 +456,7 @@ impl Value {
             Value::Model(_) => uncountable(ev, "model value"),
             Value::User(_) => uncountable(ev, "overridden value"),
             Value::Undef => uncountable(ev, "value"),
-            Value::Interval(i) => Ok(i.size()),
+            Value::Interval(i) => i.size(ev),
             Value::SetEnum(s) => Ok(normalized(ev, s)?.len() as i32),
             Value::Tuple(t) => Ok(t.elems.len() as i32),
             Value::Record(r) => Ok(r.names.len() as i32),
@@ -348,6 +471,32 @@ impl Value {
             _ => Err(EvalError::unimplemented(format!("the cardinality of {} (M2 unit 5)", self.kind_string()))),
         }
     }
+}
+
+/// `isFinite()` of a set of records or of tuples: an empty constituent makes the whole set
+/// empty, hence finite, even when another constituent is infinite
+/// (`SetOfRcdsValue.java:138-149`).
+fn all_finite(ev: &mut Ev<'_>, sets: &[Value]) -> EvalResult<bool> {
+    let mut all = true;
+    for s in sets {
+        if s.is_finite(ev)? {
+            if s.is_empty(ev)? {
+                return Ok(true);
+            }
+        } else {
+            all = false;
+        }
+    }
+    Ok(all)
+}
+
+fn any_empty(ev: &mut Ev<'_>, sets: &[Value]) -> EvalResult<bool> {
+    for s in sets {
+        if s.is_empty(ev)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// `SetEnumValue.normalize()` / `ValueVec.sort(true)`: binary insertion, dedup on
@@ -482,9 +631,13 @@ pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Valu
     Ok(())
 }
 
-/// `IntervalValue.equals(IntervalValue)`: every empty interval is the same set.
-fn interval_equals(a: IntervalValue, b: IntervalValue) -> bool {
-    (a.size() == 0 && b.size() == 0) || (a.lo == b.lo && a.hi == b.hi)
+/// `IntervalValue.equals(IntervalValue)`: every empty interval is the same set. The size
+/// of the receiver is read first, so an interval too large to count fails here.
+fn interval_equals(ev: &mut Ev<'_>, a: IntervalValue, b: IntervalValue) -> EvalResult<bool> {
+    if a.size(ev)? == 0 {
+        return Ok(b.size(ev)? == 0);
+    }
+    Ok(a.lo == b.lo && a.hi == b.hi)
 }
 
 /// `FcnRcdValue.equals` (`FcnRcdValue.java:261-340`). An interval domain is compared against
@@ -499,14 +652,14 @@ fn fcn_equals(ev: &mut Ev<'_>, a: &FcnRcdValue, b: &FcnRcdValue) -> EvalResult<b
     // The side with the interval walks the other side's domain as lo, lo+1, ...
     let (interval, explicit) = match (a.interval(), b.interval()) {
         (Some(ai), Some(bi)) => {
-            if !interval_equals(ai, bi) {
+            if !interval_equals(ev, ai, bi)? {
                 return Ok(false);
             }
             return values_equal(ev, av, bv);
         }
         (Some(ai), None) => {
             let bd = bd.expect("an explicit domain");
-            if bd.len() as i64 != i64::from(ai.size()) {
+            if bd.len() as i64 != i64::from(ai.size(ev)?) {
                 return Ok(false);
             }
             (ai, bd)

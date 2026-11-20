@@ -109,9 +109,26 @@ pub struct IntervalValue {
 }
 
 impl IntervalValue {
-    /// `IntervalValue.size()`; TLC's int arithmetic, which a full-range interval overflows.
-    pub(crate) fn size(&self) -> i32 {
-        if self.hi < self.lo { 0 } else { self.hi.wrapping_sub(self.lo).wrapping_add(1) }
+    /// `IntervalValue.size()` (`IntervalValue.java:120-137`): counted in `long`, so an
+    /// interval of more than `Integer.MAX_VALUE` elements fails instead of wrapping.
+    pub(crate) fn size(&self, ev: &mut Ev<'_>) -> EvalResult<i32> {
+        if self.hi < self.lo {
+            return Ok(0);
+        }
+        let sz = i64::from(self.hi) - i64::from(self.lo) + 1;
+        if sz > i64::from(i32::MAX) {
+            let shown = crate::value::print::ppr(ev, &format!("{}..{}", self.lo, self.hi))?;
+            return Err(EvalError::detailed(
+                format!("Size of interval value exceeds the maximum representable size (32bits): {shown}."),
+                None,
+            ));
+        }
+        Ok(sz as i32)
+    }
+
+    /// `high < low`, which every caller of `size()` that only asks about emptiness uses.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.hi < self.lo
     }
 
     /// `toSetEnum()`: the elements in order, already normalised.

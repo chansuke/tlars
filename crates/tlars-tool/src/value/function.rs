@@ -396,7 +396,7 @@ impl FcnRcdValue {
     /// `toTuple()` (`FcnRcdValue.java:620-642`); reads the snapshot, so it does not sort.
     fn to_tuple(&self) -> Option<Arc<TupleValue>> {
         if let FcnDomain::Interval(iv) = self.domain {
-            if iv.lo != 1 && iv.size() != 0 {
+            if iv.lo != 1 && !iv.is_empty() {
                 return None;
             }
             return Some(Arc::new(TupleValue { elems: self.values.clone() }));
@@ -671,7 +671,7 @@ impl FcnLambdaValue {
         }
         let elems = match &self.params[0].2 {
             Value::Interval(iv) => {
-                let sz = iv.size();
+                let sz = iv.size(ev)?;
                 if iv.lo != 1 && sz != 0 {
                     return Ok(None);
                 }

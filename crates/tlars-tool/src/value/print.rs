@@ -201,7 +201,7 @@ fn is_name(name: &str) -> bool {
 /// `isTuple()` (`FcnRcdValue.java:937-953`), which normalises the snapshot it is given.
 fn is_tuple(ev: &mut Ev<'_>, snap: &mut Snapshot) -> EvalResult<bool> {
     if let Some(iv) = snap.intv {
-        return Ok(iv.lo == 1 || iv.size() == 0);
+        return Ok(iv.lo == 1 || iv.is_empty());
     }
     if !snap.domain.iter().all(|d| matches!(d, Value::Int(_))) {
         return Ok(false);

@@ -8,6 +8,7 @@
 //! only*; SANY still level-checks the TLA+ text. User `.class` overrides are not supported
 //! in v1 (see DESIGN.md).
 
+mod finite_sets;
 mod naturals;
 mod sequences;
 mod tlc;
@@ -89,6 +90,8 @@ natives! {
     "Integers" "\\div" (I, I) naturals::divide_integers, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Divide(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
     "Integers" "%" (I, I) naturals::modulo, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Mod(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
     "Integers" "^" (I, I) naturals::expt, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Expt(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "FiniteSets" "IsFiniteSet" (V) finite_sets::is_finite_set, "public static tlc2.value.IBoolValue tlc2.module.FiniteSets.IsFiniteSet(tlc2.value.impl.Value)";
+    "FiniteSets" "Cardinality" (V) finite_sets::cardinality, "public static tlc2.value.impl.IntValue tlc2.module.FiniteSets.Cardinality(tlc2.value.impl.Value)";
     "TLC" "Print" (V, V) tlc::print, "public static tlc2.value.impl.Value tlc2.module.TLC.Print(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "PrintT" (V) tlc::print_t, "public static tlc2.value.impl.Value tlc2.module.TLC.PrintT(tlc2.value.impl.Value)";
     "TLC" "ToString" (V) tlc::to_string, "public static tlc2.value.impl.Value tlc2.module.TLC.ToString(tlc2.value.impl.Value)";
