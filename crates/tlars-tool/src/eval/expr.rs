@@ -32,7 +32,7 @@ impl<'t> Ev<'t> {
     pub fn eval(&mut self, expr: ExprId, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Value> {
         self.enter(expr)?;
         let r = self.eval_impl(expr, c, s0, s1, control);
-        self.leave();
+        self.leave(r.as_ref().err().map(|e| &e.kind));
         r
     }
 

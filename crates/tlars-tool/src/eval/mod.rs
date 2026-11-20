@@ -84,24 +84,50 @@ impl WorkerLocals {
     }
 }
 
-/// `CallStackTool`'s frames.
+/// `CallStackTool`'s frames (`tlc2.tool.CallStack`). A failure freezes the stack, so the
+/// `pop`s that run while the Rust stack unwinds leave it as it was at the throw.
 #[derive(Default)]
 pub struct CallStack {
-    frames: Vec<(ExprId, u32)>,
+    frames: Vec<ExprId>,
+    frozen: bool,
 }
 
 impl CallStack {
-    pub fn is_empty(&self) -> bool {
-        self.frames.is_empty()
+    fn push(&mut self, expr: ExprId) {
+        self.frames.push(expr);
     }
-    /// The indented position list printed under `TLC_NESTED_EXPRESSION`
-    /// (`CallStack.toString`): one numbered line per frame, deepest last.
-    pub fn to_tlc_string(&self, tool: &Tool) -> String {
-        let mut out = String::new();
-        for (i, (expr, _)) in self.frames.iter().enumerate() {
-            let loc = tool.graph().loc(*expr).tlc_text(tool.graph().interner());
-            out.push_str(&format!("{}. {loc}\n", i + 1));
+    fn pop(&mut self) {
+        if !self.frozen {
+            self.frames.pop();
         }
+    }
+    fn freeze(&mut self) {
+        self.frozen = true;
+    }
+    /// `CallStack.toString` (`CallStack.java:53-88`): one numbered line per frame, counted
+    /// from zero, with consecutive repeats of the same node collapsed.
+    pub fn to_tlc_string(&self, tool: &Tool) -> String {
+        if self.frames.is_empty() {
+            return "    The error call stack is empty.\n".to_string();
+        }
+        let graph = tool.graph();
+        let mut out = String::new();
+        let mut depth = 0;
+        let mut last = None;
+        for &expr in self.frames.iter() {
+            if last == Some(expr) {
+                continue;
+            }
+            last = Some(expr);
+            let loc = graph.loc(expr);
+            let module = loc.module.map_or_else(|| "null".to_string(), |m| graph.interner().text(m).to_string());
+            out.push_str(&format!(
+                "{depth}. Line {}, column {} to line {}, column {} in {module}\n",
+                loc.begin_line, loc.begin_col, loc.end_line, loc.end_col
+            ));
+            depth += 1;
+        }
+        out.push('\n');
         out
     }
 }
@@ -401,12 +427,42 @@ impl<'t> Ev<'t> {
             return Err(self.stack_overflow());
         }
         if let Some(cs) = self.locals.call_stack.as_mut() {
-            cs.frames.push((expr, self.depth));
+            cs.push(expr);
         }
         Ok(())
     }
-    pub(crate) fn leave(&mut self) {
+    /// The `catch { freeze; throw } finally { pop }` of every `CallStackTool` override. Only
+    /// the exceptions TLC catches there freeze the stack; a cast error or a stack overflow
+    /// unwinds through the `finally` and leaves nothing behind.
+    pub(crate) fn leave(&mut self, failure: Option<&crate::error::EvalErrorKind>) {
         self.depth -= 1;
+        let Some(cs) = self.locals.call_stack.as_mut() else { return };
+        let freezes = matches!(
+            failure,
+            Some(crate::error::EvalErrorKind::Runtime | crate::error::EvalErrorKind::Eval | crate::error::EvalErrorKind::Fingerprint { .. })
+        );
+        if freezes {
+            cs.freeze();
+        }
+        cs.pop();
+    }
+    /// `callStack.push(node)` around a generator step, released the same way as `leave`.
+    pub(crate) fn enter_generator(&mut self, expr: ExprId) {
+        if let Some(cs) = self.locals.call_stack.as_mut() {
+            cs.push(expr);
+        }
+    }
+    pub(crate) fn leave_generator(&mut self, failure: Option<&crate::error::Halt>) {
+        let Some(cs) = self.locals.call_stack.as_mut() else { return };
+        let freezes = matches!(
+            failure,
+            Some(crate::error::Halt::Eval(e))
+                if matches!(e.kind, crate::error::EvalErrorKind::Runtime | crate::error::EvalErrorKind::Eval | crate::error::EvalErrorKind::Fingerprint { .. })
+        );
+        if freezes {
+            cs.freeze();
+        }
+        cs.pop();
     }
     /// What the JVM's `StackOverflowError` becomes. It is an `Error`, so the `catch
     /// (Exception)` blocks TLC evaluates under (assumptions, invariants) let it through.

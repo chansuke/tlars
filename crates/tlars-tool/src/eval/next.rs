@@ -75,6 +75,23 @@ impl<'t> Ev<'t> {
         s1: &mut PartialState,
         sink: &mut dyn NextSink,
     ) -> Flow {
+        self.enter_generator(pred);
+        let r = self.next_impl_inner(a, pred, acts, c, s0, s1, sink);
+        self.leave_generator(r.as_ref().err());
+        r
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn next_impl_inner(
+        &mut self,
+        a: &Action,
+        pred: ExprId,
+        acts: Acts<'_>,
+        c: &Ctx,
+        s0: &State,
+        s1: &mut PartialState,
+        sink: &mut dyn NextSink,
+    ) -> Flow {
         let tool = self.tool;
         match tool.graph().expr(pred) {
             ExprNode::OpAppl { .. } => self.next_appl(a, pred, acts, c, s0, s1, sink),
@@ -483,6 +500,23 @@ impl<'t> Ev<'t> {
 
     /// `processUnchanged`: bind unbound primed vars to their s0 values, test bound ones.
     fn process_unchanged(
+        &mut self,
+        a: &Action,
+        expr: ExprId,
+        acts: Acts<'_>,
+        c: &Ctx,
+        s0: &State,
+        s1: &mut PartialState,
+        sink: &mut dyn NextSink,
+    ) -> Flow {
+        self.enter_generator(expr);
+        let r = self.process_unchanged_inner(a, expr, acts, c, s0, s1, sink);
+        self.leave_generator(r.as_ref().err());
+        r
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn process_unchanged_inner(
         &mut self,
         a: &Action,
         expr: ExprId,

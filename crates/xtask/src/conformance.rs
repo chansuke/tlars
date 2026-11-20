@@ -163,9 +163,27 @@ pub(crate) fn record(root: &Path, args: &Args) -> Result<(), String> {
 
 enum Verdict {
     Pass,
+    /// A difference tlars did not announce: wrong behaviour rather than a missing feature.
     Mismatch(String),
+    /// tlars stopped at a construct it does not implement, and said so.
+    Unimplemented(String),
     Panic(String),
     Timeout,
+}
+
+/// What `EvalError::unimplemented` and the remaining `todo!`s put in the output. A case that
+/// says this is blocked on a missing feature, not on wrong behaviour.
+const UNIMPLEMENTED: &[&str] = &["tlars does not implement", "not yet implemented"];
+
+fn verdict(want: &Outcome, got: &Outcome) -> Verdict {
+    if got == want {
+        return Verdict::Pass;
+    }
+    let difference = first_difference(want, got);
+    if UNIMPLEMENTED.iter().any(|m| got.transcript.contains(m)) {
+        return Verdict::Unimplemented(difference);
+    }
+    Verdict::Mismatch(difference)
 }
 
 /// tlars on one case, in-process, on its own thread (fresh thread-local state, a stack as
@@ -247,8 +265,8 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
     let verdicts = parallel(cases.clone(), args.jobs, move |case| {
         let want = &exp.0[&(case.id.clone(), context)];
         match run_tlars(&root_owned, case, context) {
-            Ok(got) if &got == want => Verdict::Pass,
-            Ok(got) => Verdict::Mismatch(first_difference(want, &got)),
+            Ok(got) => verdict(want, &got),
+            Err(Verdict::Panic(m)) if UNIMPLEMENTED.iter().any(|u| m.contains(u)) => Verdict::Unimplemented(format!("panic: {m}")),
             Err(v) => v,
         }
     });
@@ -259,6 +277,8 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
     let mut passing = Vec::new();
     let mut report = String::new();
     let mut panics: BTreeMap<String, usize> = BTreeMap::new();
+    let mut real = 0;
+    let mut unimplemented = 0;
     for (case, v) in cases.iter().zip(&verdicts) {
         let entry = by_category.entry(category(&case.id)).or_default();
         entry.1 += 1;
@@ -267,20 +287,36 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
                 entry.0 += 1;
                 passing.push(case.id.clone());
             }
-            Verdict::Mismatch(d) => report.push_str(&format!("{} mismatch: {d}\n", case.id)),
+            Verdict::Mismatch(d) => {
+                real += 1;
+                report.push_str(&format!("REAL {} mismatch: {d}\n", case.id));
+            }
+            Verdict::Unimplemented(d) => {
+                unimplemented += 1;
+                report.push_str(&format!("{} unimplemented: {d}\n", case.id));
+            }
             Verdict::Panic(m) => {
+                real += 1;
                 let first = m.lines().next().unwrap_or("").to_string();
                 *panics.entry(first.clone()).or_default() += 1;
-                report.push_str(&format!("{} panic: {first}\n", case.id));
+                report.push_str(&format!("REAL {} panic: {first}\n", case.id));
             }
-            Verdict::Timeout => report.push_str(&format!("{} timeout\n", case.id)),
+            Verdict::Timeout => {
+                real += 1;
+                report.push_str(&format!("REAL {} timeout\n", case.id));
+            }
         }
     }
     let total: usize = by_category.values().map(|v| v.1).sum();
     for (c, (p, n)) in &by_category {
         println!("  {c:<16} {p:>4}/{n}");
     }
-    println!("{} {}: {}/{total} pass", args.suite, context.name(), passing.len());
+    println!(
+        "{} {}: {}/{total} pass, {real} real mismatches, {unimplemented} blocked on unimplemented features",
+        args.suite,
+        context.name(),
+        passing.len()
+    );
     if !later.is_empty() {
         println!("  not run (later milestones): {}", later.iter().map(|(m, n)| format!("{m} {n}")).collect::<Vec<_>>().join(", "));
     }

@@ -166,25 +166,29 @@ impl<'a> ModelChecker<'a> {
     /// liveCheck.addInitState; if new *or* out of model: invariants, then implied inits.
     fn do_init(&mut self) -> Result<(), Ec> {
         let mut locals = WorkerLocals::new(0, self.seed);
-        let mut sink = InitSink { mc: self, result: Ec::NO_ERROR, stopped: false };
+        let mut sink = InitSink { mc: self, result: Ec::NO_ERROR, stopped: false, force_checks: false, failed_state: None };
         let flow = {
             let mut ev = self.tool.ev(&mut locals, self.out);
             ev.init_states(&mut sink)
         };
-        let result = sink.result;
+        let (result, errored) = (sink.result, sink.failed_state);
         match flow {
             Ok(()) | Err(Halt::Stop) => {}
             Err(Halt::Eval(e)) => {
                 // `modelCheckImpl`'s `catch (Throwable e)` around `doInit`: the state the
                 // functor was working on, if any, is printed with the message.
-                let errored = self.err.first.lock().expect("error slot").take();
                 let ec = eval_error_code(&e);
-                if let Some(ErrState::InvariantInitial { state, .. }) = errored {
-                    let mut ev = self.tool.ev(&mut locals, self.out);
-                    let shown = ev.print_state(&state, None);
-                    self.out.error(Ec::TLC_INITIAL_STATE, &[&e.message, &shown]);
-                } else {
-                    self.out.error(Ec::GENERAL, &[&e.message]);
+                match errored {
+                    Some(state) => {
+                        let shown = {
+                            let mut ev = self.tool.ev(&mut locals, self.out);
+                            ev.print_state(&state, None)
+                        };
+                        self.out.error(Ec::TLC_INITIAL_STATE, &[&e.message, &shown]);
+                    }
+                    None => {
+                        self.out.error(Ec::GENERAL, &[&e.message]);
+                    }
                 }
                 return Err(self.replay_init_call_stack(ec));
             }
@@ -195,21 +199,21 @@ impl<'a> ModelChecker<'a> {
         Ok(())
     }
 
-    /// TLC re-runs `doInit` under a `CallStackTool` and prints `TLC_NESTED_EXPRESSION`
-    /// (2103) with the positions of the expressions it was evaluating.
+    /// `doInit(cTool, true)`: TLC re-runs the whole initial-state generation under a
+    /// `CallStackTool`, with the invariant checks forced on states already seen. If the
+    /// re-run fails again, `TLC_NESTED_EXPRESSION` (2103) becomes the result.
     fn replay_init_call_stack(&mut self, ec: Ec) -> Ec {
+        self.initial_states.store(0, Relaxed);
         let mut locals = WorkerLocals::new(0, self.seed);
         locals.record_call_stack();
-        let mut sink = CountingSink;
-        let _ = {
+        let mut sink = InitSink { mc: self, result: Ec::NO_ERROR, stopped: false, force_checks: true, failed_state: None };
+        let flow = {
             let mut ev = self.tool.ev(&mut locals, self.out);
             ev.init_states(&mut sink)
         };
-        match locals.take_call_stack() {
-            Some(stack) if !stack.is_empty() => {
-                self.out.error(Ec::TLC_NESTED_EXPRESSION, &[&stack.to_tlc_string(self.tool)]);
-                ec
-            }
+        let stack = locals.take_call_stack().expect("recording was switched on");
+        match flow {
+            Err(Halt::Eval(_)) => self.out.error(Ec::TLC_NESTED_EXPRESSION, &[&stack.to_tlc_string(self.tool)]),
             _ => ec,
         }
     }
@@ -496,6 +500,11 @@ struct InitSink<'s, 'a> {
     mc: &'s ModelChecker<'a>,
     result: Ec,
     stopped: bool,
+    /// `DoInitFunctor.forceChecks`: on the call-stack re-run the invariants are checked even
+    /// for states the FPSet already holds.
+    force_checks: bool,
+    /// `DoInitFunctor.errState`: the state the functor was working on when it threw.
+    failed_state: Option<State>,
 }
 
 impl tlars_tool::InitSink for InitSink<'_, '_> {
@@ -512,6 +521,7 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
             }
             return Ok(());
         }
+        self.failed_state = None;
         let Some(state) = ev.complete(s) else {
             let shown = ev.print_partial_state(s);
             mc.out.error(Ec::TLC_INITIAL_STATE, &["current state is not a legal state", &shown]);
@@ -530,9 +540,10 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
                 mc.queue.enqueue(Queued { state: state.clone(), fp, ptr, level: 1 });
             }
         }
-        if seen {
+        if seen && !self.force_checks {
             return Ok(());
         }
+        self.failed_state = Some(state.clone());
         for id in mc.tool.invariants() {
             let name = mc.tool.invariant_name(id);
             let name = ev.tool().graph().interner().text(name).to_string();
@@ -556,15 +567,7 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
                 return Err(Halt::Stop);
             }
         }
-        Ok(())
-    }
-}
-
-/// The functor the `CallStackTool` replay uses: it only has to drive generation again.
-struct CountingSink;
-
-impl tlars_tool::InitSink for CountingSink {
-    fn add_init(&mut self, _ev: &mut Ev<'_>, _s: &PartialState) -> Flow {
+        self.failed_state = None;
         Ok(())
     }
 }
