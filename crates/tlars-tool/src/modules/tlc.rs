@@ -9,7 +9,7 @@ use tlars_msg::Ec;
 fn shown(ev: &mut Ev<'_>, v: &Value) -> EvalResult<String> {
     v.deep_normalize(ev)?;
     let flat = v.to_tlc_string_unchecked(ev)?;
-    crate::value::print::ppr(ev, &flat)
+    Ok(crate::value::print::ppr(ev, &flat))
 }
 
 /// Prints `v1  v2` to `ToolIO.out` and returns `v2` (`TLC.java:63-78`).

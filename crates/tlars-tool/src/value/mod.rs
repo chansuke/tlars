@@ -119,7 +119,7 @@ impl IntervalValue {
         }
         let sz = i64::from(self.hi) - i64::from(self.lo) + 1;
         if sz > i64::from(i32::MAX) {
-            let shown = crate::value::print::ppr(ev, &format!("{}..{}", self.lo, self.hi))?;
+            let shown = crate::value::print::ppr(ev, &format!("{}..{}", self.lo, self.hi));
             return Err(EvalError::detailed(
                 format!("Size of interval value exceeds the maximum representable size (32bits): {shown}."),
                 None,
