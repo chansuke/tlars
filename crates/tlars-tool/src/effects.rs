@@ -71,6 +71,10 @@ impl Effects {
     pub(crate) fn new(run_seed: i64) -> Self {
         Effects { random: StateRandom::new(run_seed), registers: Vec::new(), current: None }
     }
+    /// `RandomEnumerableValues.reset()`: a fresh stream seeded with the run seed.
+    pub(crate) fn reset_random(&mut self, run_seed: i64) {
+        self.random = StateRandom::new(run_seed);
+    }
     pub(crate) fn rng(&mut self) -> &mut JavaRandom {
         self.random.for_draw(self.current)
     }

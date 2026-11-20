@@ -16,7 +16,7 @@ fn int_of(v: &Value) -> i32 {
 
 /// `new EvalException(ec, params)`: the message is `MP.getMessage(ec, params)`.
 pub(crate) fn eval_exception(ev: &Ev<'_>, ec: Ec, params: &[&str]) -> EvalError {
-    EvalError::eval(ec, ev.out().text(ec, params))
+    EvalError::eval(ec, ev.out().text(ec, params), params.iter().map(|p| p.to_string()).collect())
 }
 
 fn overflow(ev: &Ev<'_>, text: String) -> EvalError {

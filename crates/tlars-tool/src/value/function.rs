@@ -11,6 +11,7 @@
 //!   function ..." text.
 
 use super::order::{fcn_normalized, normalized, record_normalized};
+use super::Source;
 use super::{Closure, FcnDomain, FcnLambdaValue, FcnRcdValue, IntervalValue, RecordValue, SetOfTuplesValue, TupleValue, Value};
 use crate::ctx::{Binding, Ctx};
 use crate::error::{EvalError, EvalResult};
@@ -66,6 +67,11 @@ impl Value {
 
     /// `toTuple()`.
     pub(crate) fn to_tuple(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<TupleValue>>> {
+        let r = self.to_tuple_inner(ev);
+        self.fp(r)
+    }
+
+    fn to_tuple_inner(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<TupleValue>>> {
         match self {
             Value::Tuple(t) => Ok(Some(t.clone())),
             Value::Record(r) => Ok(r.names.is_empty().then(empty_tuple)),
@@ -77,6 +83,11 @@ impl Value {
 
     /// `toRcd()`.
     pub(crate) fn to_rcd(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<RecordValue>>> {
+        let r = self.to_rcd_inner(ev);
+        self.fp(r)
+    }
+
+    fn to_rcd_inner(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<RecordValue>>> {
         match self {
             Value::Record(r) => Ok(Some(r.clone())),
             Value::Tuple(t) => Ok(t.elems.is_empty().then(empty_rcd)),
@@ -89,6 +100,11 @@ impl Value {
 
     /// `toFcnRcd()`.
     pub(crate) fn to_fcn_rcd(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<FcnRcdValue>>> {
+        let r = self.to_fcn_rcd_inner(ev);
+        self.fp(r)
+    }
+
+    fn to_fcn_rcd_inner(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<FcnRcdValue>>> {
         match self {
             Value::FcnRcd(f) => Ok(Some(f.clone())),
             Value::Tuple(t) => {
@@ -107,6 +123,11 @@ impl Value {
 
     /// `FunctionValue.apply(arg, control)`.
     pub(crate) fn apply(&self, ev: &mut Ev<'_>, arg: &Value, control: EvalControl) -> EvalResult<Value> {
+        let r = self.apply_inner(ev, arg, control);
+        self.fp(r)
+    }
+
+    fn apply_inner(&self, ev: &mut Ev<'_>, arg: &Value, control: EvalControl) -> EvalResult<Value> {
         match self {
             Value::Tuple(t) => t.apply(ev, arg),
             Value::Record(r) => r.apply(ev, arg),
@@ -127,6 +148,11 @@ impl Value {
 
     /// `FunctionValue.select(arg)`: `None` = not in the domain.
     pub(crate) fn select(&self, ev: &mut Ev<'_>, arg: &Value) -> EvalResult<Option<Value>> {
+        let r = self.select_inner(ev, arg);
+        self.fp(r)
+    }
+
+    fn select_inner(&self, ev: &mut Ev<'_>, arg: &Value) -> EvalResult<Option<Value>> {
         match self {
             Value::Tuple(t) => t.select(ev, arg),
             Value::Record(r) => r.select(ev, arg),
@@ -138,6 +164,11 @@ impl Value {
 
     /// `Value.select(path)` (`Value.java:319-337`): the `@` of an EXCEPT component.
     pub(crate) fn select_path(&self, ev: &mut Ev<'_>, path: &[Value]) -> EvalResult<Option<Value>> {
+        let r = self.select_path_inner(ev, path);
+        self.fp(r)
+    }
+
+    fn select_path_inner(&self, ev: &mut Ev<'_>, path: &[Value]) -> EvalResult<Option<Value>> {
         let mut result = self.clone();
         for elem in path {
             if !result.is_function() {
@@ -154,6 +185,11 @@ impl Value {
 
     /// `FunctionValue.getDomain()`.
     pub(crate) fn get_domain(&self, ev: &mut Ev<'_>) -> EvalResult<Value> {
+        let r = self.get_domain_inner(ev);
+        self.fp(r)
+    }
+
+    fn get_domain_inner(&self, ev: &mut Ev<'_>) -> EvalResult<Value> {
         match self {
             Value::Tuple(t) => Ok(Value::Interval(IntervalValue { lo: 1, hi: t.elems.len() as i32 })),
             // The unsorted snapshot's names, so the domain is normalised exactly when the
@@ -176,6 +212,11 @@ impl Value {
 
     /// `takeExcept(ValueExcept)`.
     pub(crate) fn take_except(&self, ev: &mut Ev<'_>, ex: &mut Except) -> EvalResult<Value> {
+        let r = self.take_except_inner(ev, ex);
+        self.fp(r)
+    }
+
+    fn take_except_inner(&self, ev: &mut Ev<'_>, ex: &mut Except) -> EvalResult<Value> {
         match self {
             Value::Tuple(t) => t.take_except(ev, ex),
             Value::Record(r) => r.take_except(ev, ex),
@@ -192,6 +233,11 @@ impl Value {
 
     /// `takeExcept(ValueExcept[])`.
     pub(crate) fn take_excepts(&self, ev: &mut Ev<'_>, exs: &mut [Except]) -> EvalResult<Value> {
+        let r = self.take_excepts_inner(ev, exs);
+        self.fp(r)
+    }
+
+    fn take_excepts_inner(&self, ev: &mut Ev<'_>, exs: &mut [Except]) -> EvalResult<Value> {
         match self {
             Value::FcnLambda(f) => f.take_excepts(ev, exs),
             Value::Tuple(_) | Value::Record(_) | Value::FcnRcd(_) => {
@@ -234,7 +280,7 @@ impl Value {
 
 /// `TupleValue.EmptyTuple`.
 fn empty_tuple() -> Arc<TupleValue> {
-    Arc::new(TupleValue { elems: Box::new([]) })
+    Arc::new(TupleValue { elems: Box::new([]), source: Source::none() })
 }
 
 /// `RecordValue.EmptyRcd`.
@@ -399,7 +445,7 @@ impl FcnRcdValue {
             if iv.lo != 1 && !iv.is_empty() {
                 return None;
             }
-            return Some(Arc::new(TupleValue { elems: self.values.clone() }));
+            return Some(Arc::new(TupleValue { elems: self.values.clone(), source: Source::none() }));
         }
         let (domain, values) = self.snapshot();
         let domain = domain.expect("an explicit domain");
@@ -416,7 +462,7 @@ impl FcnRcdValue {
             }
             *slot = Some(values[i].clone());
         }
-        Some(Arc::new(TupleValue { elems: elems.into_iter().map(|v| v.expect("len distinct indices fill 1..len")).collect() }))
+        Some(Arc::new(TupleValue { elems: elems.into_iter().map(|v| v.expect("len distinct indices fill 1..len")).collect(), source: Source::none() }))
     }
 
     /// `toRcd()` (`FcnRcdValue.java:644-657`).
@@ -702,7 +748,7 @@ impl FcnLambdaValue {
                 elems
             }
         };
-        Ok(Some(Arc::new(TupleValue { elems: elems.into_boxed_slice() })))
+        Ok(Some(Arc::new(TupleValue { elems: elems.into_boxed_slice(), source: Source::none() })))
     }
 
     /// `select(arg)` where TLC stores the result in a `Value[]` without a null check.
@@ -728,7 +774,7 @@ impl FcnLambdaValue {
                 sets.push(domain.clone());
             }
         }
-        Ok(Value::SetOfTuples(Arc::new(SetOfTuplesValue { sets: sets.into_boxed_slice(), converted: OnceLock::new() })))
+        Ok(Value::SetOfTuples(Arc::new(SetOfTuplesValue { sets: sets.into_boxed_slice(), converted: OnceLock::new(), source: Source::none() })))
     }
 
     /// `apply(args, control)` (`FcnLambdaValue.java:152-270`).
@@ -791,6 +837,16 @@ impl FcnLambdaValue {
 
     /// The formals bound to `args`. `strict` is `apply`, which fails where `select` answers
     /// `None`: a domain miss, and a tuple argument whose length is not the formals'.
+    /// `Tool.getFcnContext` (`Tool.java:3989-4046`): the body's context for one argument.
+    /// A tuple argument of the wrong length is the one case `bind_args` answers `None` for,
+    /// which `getFcnContext` reports with its own wording.
+    pub(crate) fn fcn_context(self: &Arc<Self>, ev: &mut Ev<'_>, args: &Value) -> EvalResult<Ctx> {
+        match self.bind_args(ev, args, true)? {
+            Some(c1) => Ok(c1),
+            None => Err(self.no_match(ev, "the argument", args)?),
+        }
+    }
+
     fn bind_args(self: &Arc<Self>, ev: &mut Ev<'_>, args: &Value, strict: bool) -> EvalResult<Option<Ctx>> {
         let mut c1 = self.base_ctx();
         if self.arg_len() == 1 {
@@ -932,6 +988,8 @@ impl FcnLambdaValue {
             rec_name: self.rec_name,
             excepts: excepts.into_boxed_slice(),
             converted: OnceLock::new(),
+            // `new FcnLambdaValue(FcnLambdaValue)` copies no source.
+            source: Source::none(),
         }))
     }
 }

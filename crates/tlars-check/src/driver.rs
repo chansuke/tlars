@@ -141,7 +141,7 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
         }
         Err(SpecError::UnsupportedJavaOverride { .. }) => todo!("M5: user Java overrides"),
     };
-    Ok(crate::bfs::model_check(&tool, out, session.seed))
+    Ok(crate::bfs::model_check(&tool, session))
 }
 
 /// `printTLCRuntimeException` for `Assert.fail(ec)`: with no parameters it falls back to

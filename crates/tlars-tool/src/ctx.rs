@@ -68,25 +68,26 @@ impl Ctx {
         }
         None
     }
+    /// `Context.branch(c)`: a nameless cell that `lookup(var, true)` stops at.
     pub(crate) fn branch(&self) -> Ctx {
-        todo!()
+        Ctx(Some(Arc::new(Cell { name: CellName::Branch, binding: Binding::Value(Value::Undef), next: self.clone() })))
     }
     /// `Context.lookup(var)`: first cell whose name is `name`.
     pub(crate) fn lookup(&self, name: SymbolRef) -> Option<&Binding> {
+        self.lookup_cutoff(name, false)
+    }
+    /// `Context.lookup(var, cutoff)`: with `cutoff`, the search stops at a branch cell.
+    pub(crate) fn lookup_cutoff(&self, name: SymbolRef, cutoff: bool) -> Option<&Binding> {
         let mut cur = self.0.as_deref();
         while let Some(cell) = cur {
-            if let CellName::Sym(s) = cell.name {
-                if s == name {
-                    return Some(&cell.binding);
-                }
+            match cell.name {
+                CellName::Sym(s) if s == name => return Some(&cell.binding),
+                CellName::Branch if cutoff => return None,
+                _ => {}
             }
             cur = cell.next.0.as_deref();
         }
         None
-    }
-    /// `Context.lookup(var, cutoff)`.
-    pub(crate) fn lookup_cutoff(&self, name: SymbolRef, cutoff: bool) -> Option<&Binding> {
-        todo!()
     }
 }
 
@@ -103,6 +104,8 @@ pub(crate) struct Thunk {
 
 struct ThunkCache {
     value: Value,
+    /// `None` for the state TLC copied as `null` (`TLCState.Null`), which `isSubset` treats
+    /// as the set of all states.
     s0: Option<crate::state::Snapshot>,
     s1: Option<crate::state::Snapshot>,
     control: EvalControl,
@@ -112,26 +115,34 @@ impl Thunk {
     pub(crate) fn new(expr: ExprId, ctx: Ctx, cachable: bool) -> Arc<Thunk> {
         Arc::new(Thunk { expr, ctx, cachable, cache: Mutex::new(None) })
     }
-    /// `getCachedValue`: hit only if s0 ⊆ cached s0, s1 ⊆ cached s1 and controls are
-    /// semantically equivalent (`EvalControl.semanticallyEquivalent`). Only evaluations
-    /// without states are cached so far: the state snapshots come with M3.
-    pub(crate) fn cached(&self, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> Option<Value> {
-        if !matches!((s0, s1), (StateRef::Empty, StateRef::Empty)) {
+    /// `getCachedValue` (`LazyValue.java:162-174`): hit only if s0 ⊆ cached s0, s1 ⊆ cached s1
+    /// and the controls are semantically equivalent.
+    pub(crate) fn cached(&self, ev: &mut Ev<'_>, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> Option<Value> {
+        let cache = self.cache.lock().expect("thunk cache").clone()?;
+        if !control.semantically_equivalent(cache.control) {
             return None;
         }
-        let cache = self.cache.lock().expect("thunk cache").clone()?;
-        (cache.s0.is_none() && cache.s1.is_none() && control.semantically_equivalent(cache.control)).then(|| cache.value.clone())
+        (covers(ev, &cache.s0, &s0) && covers(ev, &cache.s1, &s1)).then(|| cache.value.clone())
     }
     /// `getValue`: cached, or evaluate in the captured context and publish.
     pub(crate) fn force(&self, ev: &mut Ev<'_>, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Value> {
-        if let Some(v) = self.cached(s0, s1, control) {
+        if let Some(v) = self.cached(ev, s0, s1, control) {
             return Ok(v);
         }
         let value = ev.eval(self.expr, &self.ctx, s0, s1, control)?;
-        if self.cachable && matches!((s0, s1), (StateRef::Empty, StateRef::Empty)) {
-            *self.cache.lock().expect("thunk cache") = Some(Arc::new(ThunkCache { value: value.clone(), s0: None, s1: None, control }));
+        if self.cachable {
+            let entry = ThunkCache { value: value.clone(), s0: s0.snapshot(), s1: s1.snapshot(), control };
+            *self.cache.lock().expect("thunk cache") = Some(Arc::new(entry));
         }
         Ok(value)
+    }
+}
+
+/// `TLCState.isSubset(s, cached)`: a cached `null` or `Empty` state covers every state.
+fn covers(ev: &mut Ev<'_>, cached: &Option<crate::state::Snapshot>, s: &StateRef<'_>) -> bool {
+    match cached {
+        None => true,
+        Some(snap) => snap.is_empty() || snap.covers(ev, s),
     }
 }
 

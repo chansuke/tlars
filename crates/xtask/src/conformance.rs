@@ -163,14 +163,36 @@ pub(crate) fn record(root: &Path, args: &Args) -> Result<(), String> {
 
 enum Verdict {
     Pass,
+    /// A difference tlars did not announce: wrong behaviour rather than a missing feature.
     Mismatch(String),
+    /// tlars stopped at a construct it does not implement, and said so.
+    Unimplemented(String),
     Panic(String),
     Timeout,
 }
 
+/// What a `todo!` panic says. A panic message cannot come from the spec under test, so
+/// matching on it is unambiguous; `EvalError::unimplemented` is reported out of band instead
+/// (`Invocation::unimplemented`), because a spec's own `Print` could imitate its text.
+const UNIMPLEMENTED_PANIC: &str = "not yet implemented";
+
+/// A run that reported a construct tlars does not implement never counts as a pass, however
+/// its exit status compares: the agreement would be accidental, and an `exit-only` case has
+/// no transcript that would expose it.
+fn verdict(want: &Outcome, got: &Outcome, unimplemented: bool) -> Verdict {
+    if unimplemented {
+        let difference = if got == want { "exit and transcript agree, but the run stopped at an unimplemented construct".to_string() } else { first_difference(want, got) };
+        return Verdict::Unimplemented(difference);
+    }
+    if got == want {
+        return Verdict::Pass;
+    }
+    Verdict::Mismatch(first_difference(want, got))
+}
+
 /// tlars on one case, in-process, on its own thread (fresh thread-local state, a stack as
 /// large as `-Xss`, and a timeout).
-fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<Outcome, Verdict> {
+fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<(Outcome, bool), Verdict> {
     let dir = scratch_dir(root, "tlars", case, context).map_err(Verdict::Panic)?;
     let args = case.materialize(context, &dir).map_err(|e| Verdict::Panic(e.to_string()))?;
     let keeps = context.keeps_state_space();
@@ -180,6 +202,7 @@ fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<Outcome, Verd
         .stack_size(256 << 20)
         .spawn(move || {
             let out = Arc::new(Mutex::new(Vec::new()));
+            let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
             let inv = tlars_check::Invocation {
                 args,
                 system_properties: Vec::new(),
@@ -187,14 +210,19 @@ fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<Outcome, Verd
                 stdout: Box::new(SharedBuf(out.clone())),
                 stderr: Box::new(std::io::sink()),
                 env: tlars_check::Env::hermetic(),
+                unimplemented: Some(flag.clone()),
             };
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tlars_check::run(inv)));
             let text = String::from_utf8_lossy(&out.lock().expect("lock")).into_owned();
+            let unimplemented = flag.load(std::sync::atomic::Ordering::Relaxed);
             let _ = tx.send(match result {
-                Ok(status) => Ok(Outcome {
-                    exit: status as i32,
-                    transcript: if exit_only { String::new() } else { transcript::normalize(&text, &dir.display().to_string(), keeps) },
-                }),
+                Ok(status) => Ok((
+                    Outcome {
+                        exit: status as i32,
+                        transcript: if exit_only { String::new() } else { transcript::normalize(&text, &dir.display().to_string(), keeps) },
+                    },
+                    unimplemented,
+                )),
                 Err(p) => Err(Verdict::Panic(panic_message(&p))),
             });
         })
@@ -247,8 +275,8 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
     let verdicts = parallel(cases.clone(), args.jobs, move |case| {
         let want = &exp.0[&(case.id.clone(), context)];
         match run_tlars(&root_owned, case, context) {
-            Ok(got) if &got == want => Verdict::Pass,
-            Ok(got) => Verdict::Mismatch(first_difference(want, &got)),
+            Ok((got, unimplemented)) => verdict(want, &got, unimplemented),
+            Err(Verdict::Panic(m)) if m.contains(UNIMPLEMENTED_PANIC) => Verdict::Unimplemented(format!("panic: {m}")),
             Err(v) => v,
         }
     });
@@ -259,6 +287,8 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
     let mut passing = Vec::new();
     let mut report = String::new();
     let mut panics: BTreeMap<String, usize> = BTreeMap::new();
+    let mut real = 0;
+    let mut unimplemented = 0;
     for (case, v) in cases.iter().zip(&verdicts) {
         let entry = by_category.entry(category(&case.id)).or_default();
         entry.1 += 1;
@@ -267,20 +297,36 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
                 entry.0 += 1;
                 passing.push(case.id.clone());
             }
-            Verdict::Mismatch(d) => report.push_str(&format!("{} mismatch: {d}\n", case.id)),
+            Verdict::Mismatch(d) => {
+                real += 1;
+                report.push_str(&format!("REAL {} mismatch: {d}\n", case.id));
+            }
+            Verdict::Unimplemented(d) => {
+                unimplemented += 1;
+                report.push_str(&format!("{} unimplemented: {d}\n", case.id));
+            }
             Verdict::Panic(m) => {
+                real += 1;
                 let first = m.lines().next().unwrap_or("").to_string();
                 *panics.entry(first.clone()).or_default() += 1;
-                report.push_str(&format!("{} panic: {first}\n", case.id));
+                report.push_str(&format!("REAL {} panic: {first}\n", case.id));
             }
-            Verdict::Timeout => report.push_str(&format!("{} timeout\n", case.id)),
+            Verdict::Timeout => {
+                real += 1;
+                report.push_str(&format!("REAL {} timeout\n", case.id));
+            }
         }
     }
     let total: usize = by_category.values().map(|v| v.1).sum();
     for (c, (p, n)) in &by_category {
         println!("  {c:<16} {p:>4}/{n}");
     }
-    println!("{} {}: {}/{total} pass", args.suite, context.name(), passing.len());
+    println!(
+        "{} {}: {}/{total} pass, {real} real mismatches, {unimplemented} blocked on unimplemented features",
+        args.suite,
+        context.name(),
+        passing.len()
+    );
     if !later.is_empty() {
         println!("  not run (later milestones): {}", later.iter().map(|(m, n)| format!("{m} {n}")).collect::<Vec<_>>().join(", "));
     }

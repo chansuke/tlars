@@ -95,6 +95,11 @@ impl ModelValue {
 impl Value {
     /// `IValue.equals`. The evaluator calls `lhs.tlc_equals(ev, rhs)` for `lhs = rhs`.
     pub(crate) fn tlc_equals(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<bool> {
+        let r = self.tlc_equals_inner(ev, other);
+        self.fp(r)
+    }
+
+    fn tlc_equals_inner(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<bool> {
         // The scalar classes accept their own class and model values, and fail otherwise
         // naming the receiver (`BoolValue.java`, `IntValue.java`, `StringValue.java`).
         let mismatch = |ev: &mut Ev<'_>, verb: &str, noun: &str| -> EvalResult<bool> {
@@ -298,6 +303,11 @@ impl Value {
 
     /// `IValue.compareTo`.
     pub(crate) fn tlc_compare(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Ordering> {
+        let r = self.tlc_compare_inner(ev, other);
+        self.fp(r)
+    }
+
+    fn tlc_compare_inner(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Ordering> {
         let mismatch = |ev: &mut Ev<'_>, noun: &str| -> EvalResult<Ordering> {
             let (a, b) = (self.ppr(ev)?, other.ppr(ev)?);
             Err(EvalError::detailed(format!("Attempted to compare {noun} {a} with non-{noun}:\n{b}"), None))
@@ -412,6 +422,11 @@ impl Value {
 
     /// `member(elem)`: `elem \in self`.
     pub(crate) fn member(&self, ev: &mut Ev<'_>, elem: &Value) -> EvalResult<bool> {
+        let r = self.member_inner(ev, elem);
+        self.fp(r)
+    }
+
+    fn member_inner(&self, ev: &mut Ev<'_>, elem: &Value) -> EvalResult<bool> {
         let not_a_set = |ev: &mut Ev<'_>, what: &str| -> EvalResult<bool> {
             let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
             Err(EvalError::detailed(format!("Attempted to check if the value:\n{e}\nis an element of the {what} {s}"), None))
@@ -653,6 +668,11 @@ impl Value {
     /// `isFinite()`: what `FiniteSets!IsFiniteSet` answers, and what the set classes consult
     /// about their operands. The scalars fail instead of answering.
     pub(crate) fn is_finite(&self, ev: &mut Ev<'_>) -> EvalResult<bool> {
+        let r = self.is_finite_inner(ev);
+        self.fp(r)
+    }
+
+    fn is_finite_inner(&self, ev: &mut Ev<'_>) -> EvalResult<bool> {
         let not_a_set = |ev: &mut Ev<'_>, noun: &str| -> EvalResult<bool> {
             let shown = self.ppr(ev)?;
             Err(EvalError::detailed(format!("Attempted to check if the {noun} {shown} is a finite set."), None))
@@ -743,6 +763,11 @@ impl Value {
     /// `Value.isEmpty()` (`Value.java:150-254`): a per-class rule, cheap where the class
     /// knows the answer without enumerating.
     pub(crate) fn is_empty(&self, ev: &mut Ev<'_>) -> EvalResult<bool> {
+        let r = self.is_empty_inner(ev);
+        self.fp(r)
+    }
+
+    fn is_empty_inner(&self, ev: &mut Ev<'_>) -> EvalResult<bool> {
         let first_is_none = |ev: &mut Ev<'_>, v: &Value| -> EvalResult<bool> {
             let mut elems = v.elements(ev, EnumOrder::Native)?.expect("an enumerable value enumerates");
             Ok(elems.next(ev)?.is_none())
@@ -774,6 +799,11 @@ impl Value {
 
     /// `size()`: the cardinality a set reports and the number of points a function has.
     pub(crate) fn size(&self, ev: &mut Ev<'_>) -> EvalResult<i32> {
+        let r = self.size_inner(ev);
+        self.fp(r)
+    }
+
+    fn size_inner(&self, ev: &mut Ev<'_>) -> EvalResult<i32> {
         let uncountable = |ev: &mut Ev<'_>, noun: &str| -> EvalResult<i32> {
             let shown = self.ppr(ev)?;
             Err(EvalError::detailed(format!("Attempted to compute the number of elements in the {noun} {shown}."), None))

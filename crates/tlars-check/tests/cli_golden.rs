@@ -45,6 +45,7 @@ fn usage_errors_match_tlc() {
             stdout: Box::new(out.clone()),
             stderr: Box::new(std::io::sink()),
             env: Env::hermetic(),
+            unimplemented: None,
         };
         let status = run(inv).code();
         let actual = String::from_utf8(out.0.lock().unwrap().clone()).unwrap();

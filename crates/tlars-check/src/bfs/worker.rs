@@ -1,7 +1,7 @@
 //! `tlc2.tool.Worker`. The bodies here are real code, not pseudocode, because their line
 //! order *is* TLC's observable behaviour (`Worker.java:92-140, 418-470`).
 
-use super::{ErrState, ModelChecker};
+use super::{is_java_error, ErrState, ModelChecker};
 use crate::fpset::{FpSet, Seen};
 use crate::liveness::SetOfStates;
 use crate::queue::Queued;
@@ -13,11 +13,17 @@ pub(super) struct Worker<'a> {
     mc: &'a ModelChecker<'a>,
     locals: WorkerLocals,
     sink: SinkState,
+    /// Which `stats` slot this worker reports into. The call-stack replay runs on a worker
+    /// TLC never registers (`new Worker(4223, ...)`), so its counters stay out of the
+    /// statistics the summary prints.
+    stats: Option<usize>,
 }
 
 /// The part of the worker that `addElement` mutates.
 struct SinkState {
     generated: u64,
+    /// `Worker.unseenSuccessorStates`, reset after each expanded state.
+    unseen: u32,
     /// Liveness successor set of the state being expanded, sized `16 * multiplier`.
     live_successors: Option<SetOfStates>,
     /// Grows whenever a successor set outgrew its initial capacity (`Worker.java:235`);
@@ -28,13 +34,39 @@ struct SinkState {
 impl<'a> Worker<'a> {
     pub(super) fn new(id: u16, mc: &'a ModelChecker<'a>) -> Self {
         let locals = WorkerLocals::new(id, mc.seed);
-        Worker { id, mc, locals, sink: SinkState { generated: 0, live_successors: None, live_multiplier: 1 } }
+        Worker { id, mc, locals, sink: SinkState { generated: 0, unseen: 0, live_successors: None, live_multiplier: 1 }, stats: Some(id as usize) }
+    }
+
+    /// A worker whose evaluation records the nested-expression stack, for the replay TLC
+    /// runs with a `CallStackTool`.
+    pub(super) fn recording(id: u16, mc: &'a ModelChecker<'a>) -> Self {
+        let mut w = Worker::new(id, mc);
+        w.locals.record_call_stack();
+        w.stats = None;
+        w
+    }
+
+    pub(super) fn take_call_stack(&mut self) -> Option<tlars_tool::CallStack> {
+        self.locals.take_call_stack()
     }
 
     /// `Worker.run`.
     pub(super) fn run(&mut self) {
         let mc = self.mc;
         while let Some(cur) = mc.queue.dequeue() {
+            let _ = self.expand(&cur);
+        }
+        mc.worker_done(self.id);
+    }
+
+    /// One iteration of `Worker.run`: expand `cur`, check for a deadlock, and record the
+    /// counters. The `Flow` is what the next-state generation returned, which the call-stack
+    /// replay inspects.
+    pub(super) fn expand(&mut self, cur: &Queued) -> Flow {
+        let mc = self.mc;
+        let cur = cur.clone();
+        let outcome;
+        {
             if mc.live.is_some() {
                 self.sink.live_successors = Some(SetOfStates::with_capacity(16 * self.sink.live_multiplier as usize));
             }
@@ -42,13 +74,16 @@ impl<'a> Worker<'a> {
             let generated_before = self.sink.generated;
             let mut ev = mc.tool.ev(&mut self.locals, mc.out);
             let mut sink = WorkerSink { mc, worker: self.id, cur: &cur, st: &mut self.sink, seen: SharedPut(&*mc.fpset) };
-            match ev.next_states(&cur.state, cur.fp, &mut sink) {
-                Ok(()) | Err(Halt::Stop) => {}
-                Err(Halt::Eval(e)) => mc.next_failed(&cur, None, e),
+            outcome = ev.next_states(&cur.state, cur.fp, &mut sink);
+            if let Err(Halt::Eval(e)) = &outcome {
+                mc.next_failed(&cur, None, e.clone());
             }
             // Deadlock = zero addElement calls, even if every successor was out of model.
-            if mc.check_deadlock && generated_before == self.sink.generated {
-                mc.set_err(ErrState::Deadlock { state: cur.clone() });
+            if mc.check_deadlock && generated_before == self.sink.generated && mc.set_err(ErrState::Deadlock { state: cur.clone() }) {
+                mc.out.error(tlars_msg::Ec::TLC_DEADLOCK_REACHED, &[]);
+                let mut ev = mc.tool.ev(&mut self.locals, mc.out);
+                mc.print_trace_and_stop(&mut ev, &cur, None);
+                mc.post_condition_trace(&mut ev, &cur, None, false);
             }
             if let (Some(live), Some(succs)) = (mc.live.as_ref(), self.sink.live_successors.take()) {
                 let mut ev = mc.tool.ev(&mut self.locals, mc.out);
@@ -56,9 +91,16 @@ impl<'a> Worker<'a> {
                     mc.next_failed(&cur, None, e);
                 }
             }
-            mc.stats[self.id as usize].generated.store(self.sink.generated, Relaxed);
+            if let Some(slot) = self.stats {
+                mc.stats[slot].generated.store(self.sink.generated, Relaxed);
+                // `outDegree.addSample(unseenSuccessorStates)`, with 32 buckets and the last
+                // one holding the overflow.
+                let bucket = (self.sink.unseen as usize).min(31);
+                mc.stats[slot].out_degree.lock().expect("out degree")[bucket] += 1;
+            }
+            self.sink.unseen = 0;
         }
-        mc.worker_done(self.id);
+        outcome
     }
 }
 
@@ -77,7 +119,7 @@ struct SharedPut<'s>(&'s dyn FpSet);
 
 impl SeenOracle for SharedPut<'_> {
     fn seen(&mut self, fp: tlars_tool::Fp) -> Seen {
-        self.0.put(fp.into())
+        self.0.put(fp)
     }
 }
 
@@ -99,8 +141,13 @@ impl<O: SeenOracle> NextSink for WorkerSink<'_, O> {
         };
         match self.examine(ev, s0, &succ) {
             Err(Halt::Eval(e)) => {
-                self.mc.next_failed(self.cur, Some(&succ), e);
-                Err(Halt::Stop)
+                // `addElement`'s `catch (Exception e) { throw new WrappingRuntimeException(e,
+                // succState); }` (`Worker.java:483-490`) carries the successor up to
+                // `Worker.run`. A `java.lang.Error` is not caught there, so it arrives
+                // without one and the counterexample ends at the predecessor.
+                let carried = (!is_java_error(&e)).then_some(&succ);
+                self.mc.next_failed(self.cur, carried, e.clone());
+                Err(Halt::Eval(e))
             }
             other => other,
         }
@@ -122,15 +169,19 @@ impl<O: SeenOracle> WorkerSink<'_, O> {
                 // Written before invariants run, so a violation's trace can include it.
                 new_ptr = Some(mc.traces.append(self.worker, Some(self.cur.ptr), fp));
                 new_fp = Some(fp);
+                mc.traces.record_level(self.worker, self.cur.level + 1);
+                self.st.unseen += 1;
             }
             if let Some(live) = self.st.live_successors.as_mut() {
                 live.put(ev, fp, succ.clone()); // even if seen
             }
         }
         if unseen {
-            mc.check_invariants(ev, self.cur, succ)?;
+            mc.check_invariants(ev, self.cur, succ, new_ptr.is_some())?;
         }
-        mc.check_implied_actions(ev, self.cur, succ)?; // always, even for seen states
+        // `Worker.writeState` sets the successor's worker id, which is what tells
+        // `doPostCondition` whether the state has a trace record of its own.
+        mc.check_implied_actions(ev, self.cur, succ, new_ptr.is_some())?; // always, even for seen states
         if let Some(ptr) = new_ptr {
             // in_model && unseen && no violation: other workers may now explore it.
             mc.queue.enqueue(Queued { state: succ.clone(), fp: new_fp.expect("set with ptr"), ptr, level: self.cur.level + 1 });

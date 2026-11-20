@@ -2,8 +2,8 @@
 //! returns [`Seen`] so the inverted boolean cannot be misread. Sets store `FpKey`, whose only
 //! constructor applies the 63-bit mask.
 
-use std::sync::atomic::AtomicU64;
-use tlars_tool::FpKey;
+use std::sync::Mutex;
+use tlars_tool::{Fp, FpKey};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Seen {
@@ -12,59 +12,74 @@ pub(crate) enum Seen {
 }
 
 pub(crate) trait FpSet: Send + Sync {
-    fn put(&self, key: FpKey) -> Seen;
-    fn contains(&self, key: FpKey) -> bool;
+    fn put(&self, fp: Fp) -> Seen;
+    fn contains(&self, fp: Fp) -> bool;
     fn size(&self) -> u64;
     /// `checkFPs()`: minimum distance between stored fingerprints, for the "based on the
     /// actual fingerprints" probability. Called once, after the search.
     fn min_distance(&self) -> Option<u64>;
 }
 
-/// Lock-free open addressing over `AtomicU64` slots (0 = empty; key 0 tracked separately).
-/// Grows by stop-the-world rehash under `StateQueue::suspend_all`.
+/// `MultiFPSet` over `2^bits` sets, each holding `FpKey`s. The default configuration has
+/// `fpBits == 1` because `FPSetConfiguration.getFpBits` raises 0 to 1 for every `DiskFPSet`
+/// (`FPSetConfiguration.java:52-58`), and the default implementation is `MSBDiskFPSet`. So
+/// the top bit picks the set (`MultiFPSet.java:103-109`) and only the remaining 63 are the
+/// key inside it (`HeapBasedDiskFPSet.java:251-253`): two fingerprints that differ in bit 63
+/// alone are two states, not one.
 pub(crate) struct MemFpSet {
-    slots: Box<[AtomicU64]>,
-    zero_present: std::sync::atomic::AtomicBool,
-    len: AtomicU64,
-}
-
-/// `-fpbits n`: `MultiFPSet` sharded on `fp >>> (64 - n)`.
-pub(crate) struct MultiFpSet {
-    shards: Box<[MemFpSet]>,
+    /// Indexed by `fp >>> (64 - bits)`.
+    shards: Box<[Shard]>,
     bits: u32,
 }
 
+/// The keys of one set in sorted order, which is what `DiskFPSet.checkFPs` reads back from
+/// its sorted file. One lock: with the corpus's single worker there is nothing to contend,
+/// and the disk-backed implementation arrives behind this trait in M6.
+struct Shard {
+    keys: Mutex<std::collections::BTreeSet<u64>>,
+}
+
+impl MemFpSet {
+    /// `new MultiFPSet(config)` (`MultiFPSet.java:50-66`).
+    pub(crate) fn new(bits: u32) -> MemFpSet {
+        let shards = (0..1usize << bits).map(|_| Shard { keys: Mutex::new(Default::default()) }).collect();
+        MemFpSet { shards, bits }
+    }
+
+    /// `getFPSet(fp)`: the unsigned shift leaves the `bits` most significant bits.
+    fn shard(&self, fp: Fp) -> &Shard {
+        &self.shards[(fp.raw() >> (64 - self.bits)) as usize]
+    }
+}
+
 impl FpSet for MemFpSet {
-    fn put(&self, key: FpKey) -> Seen {
-        todo!()
+    fn put(&self, fp: Fp) -> Seen {
+        let key = FpKey::from(fp).raw();
+        if self.shard(fp).keys.lock().expect("fpset").insert(key) { Seen::New } else { Seen::Old }
     }
-    fn contains(&self, key: FpKey) -> bool {
-        todo!()
+    fn contains(&self, fp: Fp) -> bool {
+        self.shard(fp).keys.lock().expect("fpset").contains(&FpKey::from(fp).raw())
     }
+    /// `MultiFPSet.size()`: the sum over the sets.
     fn size(&self) -> u64 {
-        todo!()
+        self.shards.iter().map(|s| s.keys.lock().expect("fpset").len() as u64).sum()
     }
+    /// `MultiFPSet.checkFPs()`: the minimum over the sets of `DiskFPSet.checkFPs`, which is
+    /// the smallest gap between adjacent fingerprints of one sorted file
+    /// (`DiskFPSet.java:624-649`). Fewer than two leaves `dis` at `Long.MAX_VALUE`.
     fn min_distance(&self) -> Option<u64> {
-        todo!()
+        self.shards
+            .iter()
+            .filter_map(|s| {
+                let keys = s.keys.lock().expect("fpset");
+                keys.iter().zip(keys.iter().skip(1)).map(|(x, y)| y - x).min()
+            })
+            .min()
     }
 }
 
-impl FpSet for MultiFpSet {
-    fn put(&self, key: FpKey) -> Seen {
-        todo!()
-    }
-    fn contains(&self, key: FpKey) -> bool {
-        todo!()
-    }
-    fn size(&self) -> u64 {
-        todo!()
-    }
-    fn min_distance(&self) -> Option<u64> {
-        todo!()
-    }
-}
-
-/// `FPSetFactory`. A `DiskFpSet` (MSBDiskFPSet) arrives later behind the same trait.
-pub(crate) fn from_options(fp_bits: Option<u32>, fp_mem: Option<f64>) -> Box<dyn FpSet> {
-    todo!()
+/// `FPSetFactory.getFPSetInitialized`: `-fpbits n` sets the address bits, and a `DiskFPSet`
+/// raises 0 to 1, which is the default.
+pub(crate) fn from_options(fp_bits: Option<u32>, _fp_mem: Option<f64>) -> Box<dyn FpSet> {
+    Box::new(MemFpSet::new(fp_bits.unwrap_or(1).max(1)))
 }

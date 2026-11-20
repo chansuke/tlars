@@ -16,10 +16,11 @@ pub(crate) use bindings::{Bindings, DeclBinding, OpBinding, OpRcd};
 
 use crate::ctx::Ctx;
 use crate::error::EvalErrorKind;
+use crate::eval::expr::Builtin;
 use crate::eval::{EvalControl, WorkerLocals};
 use crate::globals::TlcGlobals;
 use crate::state::{StateRef, VarTable};
-use crate::tool::Tool;
+use crate::tool::{NamedCheck, Tool};
 use crate::value::Value;
 use tlars_msg::{Ec, Report};
 use tlars_sany::Atom;
@@ -120,7 +121,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         bodies: (0..graph.expr_count()).map(|_| None).collect(),
     };
     binder.bind(&config, &model_values)?;
-    let CfgBind { defns: _, decls, op_defs, bodies, .. } = binder;
+    let CfgBind { defns, decls, op_defs, bodies, .. } = binder;
     let mut tool = Tool {
         bindings: Bindings {
             op_defs: op_defs.into(),
@@ -146,8 +147,9 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         model_values,
         globals,
     };
-    fold_constant_defns(&mut tool, out)?;
-    process_config(&config, &tool)?;
+    let mut defns = defns;
+    fold_constant_defns(&mut tool, &mut defns, out)?;
+    process_config(&config, &mut tool, &defns, out)?;
     Ok(tool)
 }
 
@@ -600,17 +602,17 @@ fn numeral_value(image: &str) -> Option<i32> {
 /// `processConstantDefns` (`SpecProcessor.java:226-357`): 0-arity constant-level definitions
 /// are evaluated once and replaced by their value. Every failure is swallowed (`catch
 /// (Throwable swallow)`), so the error resurfaces where the definition is used.
-fn fold_constant_defns(tool: &mut Tool, out: &dyn Report) -> Result<(), SpecError> {
+fn fold_constant_defns(tool: &mut Tool, defns: &mut Defns, out: &dyn Report) -> Result<(), SpecError> {
     let graph = tool.graph.clone();
     for (_, m) in graph.modules() {
         if !m.is_instantiated || m.parameter_free {
-            fold_module(tool, &graph, m, out)?;
+            fold_module(tool, defns, &graph, m, out)?;
         }
     }
     Ok(())
 }
 
-fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn Report) -> Result<(), SpecError> {
+fn fold_module(tool: &mut Tool, defns: &mut Defns, graph: &SemanticGraph, m: &ModuleNode, out: &dyn Report) -> Result<(), SpecError> {
     fold_constant_decls(tool, graph, m, out)?;
     for &d in m.op_defs.iter() {
         let def = graph.op_def(d);
@@ -640,11 +642,18 @@ fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn
                 .and_then(|v| v.deep_normalize(&mut ev).map(|()| v))
         };
         if let Ok(v) = folded {
-            tool.bindings.op_defs[target.index()] = Some(OpBinding::Value(v));
+            tool.bindings.op_defs[target.index()] = Some(OpBinding::Value(v.clone()));
+            // `:367-370`: the name-keyed table takes the value too, but only where it still
+            // holds this very definition. That is why `INVARIANT Inv` on `Inv == TRUE`
+            // reaches `processConfigInvariants` as a boolean and warns (2149).
+            let name = graph.op_def(target).name;
+            if matches!(defns.get(&name), Some(Some(OpBinding::Replaced(d))) if *d == target) {
+                defns.insert(name, Some(OpBinding::Value(v)));
+            }
         }
     }
     for &inner in m.inner_modules.iter() {
-        fold_module(tool, graph, graph.module(inner), out)?;
+        fold_module(tool, defns, graph, graph.module(inner), out)?;
     }
     Ok(())
 }
@@ -673,7 +682,7 @@ fn fold_constant_decls(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, o
             }
             Some(DeclBinding::Op(op)) => fold_substituted_constant(tool, graph, d, op, out)?,
             // `MethodValue.initialize` skips the fingerprint and normalises nothing.
-            Some(DeclBinding::Native(_)) | Some(DeclBinding::Var(_)) | None => {}
+            Some(DeclBinding::Native(_)) | None => {}
         }
     }
     Ok(())
@@ -733,34 +742,520 @@ fn fold_substituted_constant(
     }
 }
 
+/// What `defns` holds after `CfgBind`: the name-keyed table every cfg identifier resolves
+/// against (`Defns`). A `None` entry is one TLC `put` with a `null` value.
+type Defns = std::collections::BTreeMap<Atom, Option<OpBinding>>;
+
+/// One predicate the cfg named: its expression, the context splitting it needs, and the
+/// definition it came from (absent for a conjunct of SPECIFICATION).
+struct Pred {
+    expr: ExprId,
+    ctx: Ctx,
+    op_def: Option<OpDefId>,
+}
+
 /// `processConfig` (`SpecProcessor.java:782-955`): INIT/NEXT/SPECIFICATION and the named
 /// checks. An empty cfg binds nothing, but a spec with variables still needs an INIT.
-fn process_config(config: &ModelConfig, tool: &Tool) -> Result<(), SpecError> {
-    // Processed before the INIT/NEXT checks (`:785-890`).
-    let checks_before = config.init.is_some()
-        || config.next.is_some()
-        || config.specification.is_some()
-        || !config.invariants.is_empty()
-        || !config.properties.is_empty();
-    if checks_before {
-        todo!("M3: INVARIANT, SPECIFICATION, INIT/NEXT and PROPERTY in processConfig");
+fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dyn Report) -> Result<(), SpecError> {
+    let graph = tool.graph.clone();
+    let mut pass = ConfigPass {
+        init_preds: Vec::new(),
+        next_pred: None,
+        invariants: Vec::new(),
+        temporals: Vec::new(),
+    };
+    pass.invariants(config, tool, defns, out)?;
+    match config.specification.as_deref().filter(|s| !s.is_empty()) {
+        None => pass.init_and_next(config, tool, defns)?,
+        Some(spec) => {
+            if config.init.as_deref().is_some_and(|s| !s.is_empty()) || config.next.as_deref().is_some_and(|s| !s.is_empty()) {
+                return Err(SpecError::Failure { ec: Ec::TLC_CONFIG_NOT_BOTH_SPEC_AND_INIT });
+            }
+            match defn_of(defns, &graph, spec) {
+                Some(OpBinding::Replaced(d)) => {
+                    if !graph.op_def(d).params.is_empty() {
+                        return Err(SpecError::Config { ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG, params: vec![spec.to_string()] });
+                    }
+                    let body = graph.op_def(d).body.expect("a user definition has a body");
+                    pass.config_spec(body, &Ctx::EMPTY, false, tool, out)?;
+                }
+                None => {
+                    return Err(SpecError::Config {
+                        ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
+                        params: vec!["name".to_string(), spec.to_string()],
+                    });
+                }
+                Some(other) => {
+                    let shown = binding_string(tool, &other, out)?;
+                    return Err(SpecError::Config {
+                        ec: Ec::TLC_CONFIG_ID_HAS_VALUE,
+                        params: vec!["value".to_string(), spec.to_string(), shown],
+                    });
+                }
+            }
+        }
     }
-    // `:891-896`: no init predicate, but variables to initialise.
-    if tool.var_count() != 0 {
+    if !config.properties.is_empty() {
+        return Err(unimplemented("PROPERTY (M4)"));
+    }
+    // `:891-902`: the two completeness checks, in TLC's order.
+    let has_checks = !pass.invariants.is_empty();
+    if pass.init_preds.is_empty() && (has_checks || tool.var_count() != 0) {
         return Err(SpecError::Failure { ec: Ec::TLC_CONFIG_MISSING_INIT });
     }
-    // Processed after them (`:944-952`), or later by the Tool and the checker.
-    let checks_after = !config.constraints.is_empty()
-        || !config.action_constraints.is_empty()
-        || config.rl_reward.is_some()
-        || config.periodic.is_some()
-        || !config.possible.is_empty()
-        || !config.postconditions.is_empty()
-        || config.view.is_some()
-        || config.symmetry.is_some()
-        || config.alias.is_some();
-    if checks_after {
-        todo!("M3: constraints, _RL_REWARD, _PERIODIC, _POSSIBLE, POSTCONDITION, VIEW, SYMMETRY and ALIAS");
+    if pass.next_pred.is_none() && has_checks {
+        return Err(SpecError::Failure { ec: Ec::TLC_CONFIG_MISSING_NEXT });
+    }
+    let model_constraints = named_checks(&config.constraints, tool, defns, out, "constraint")?;
+    let action_constraints = named_checks(&config.action_constraints, tool, defns, out, "action constraint")?;
+    if config.rl_reward.is_some() || config.periodic.is_some() || !config.possible.is_empty() || !config.postconditions.is_empty() {
+        return Err(unimplemented("_RL_REWARD, _PERIODIC, _POSSIBLE and POSTCONDITION (M3 unit 5)"));
+    }
+    if config.view.is_some() || config.symmetry.is_some() || config.alias.is_some() {
+        return Err(unimplemented("VIEW, SYMMETRY and ALIAS (M3 unit 5)"));
+    }
+
+    // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
+    tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
+    let ConfigPass { init_preds, next_pred, invariants, temporals } = pass;
+    tool.invariants = invariants
+        .into_iter()
+        .map(|(name, p)| NamedCheck { name, expr: p.expr, ctx: p.ctx })
+        .collect();
+    tool.model_constraints = model_constraints.into();
+    tool.action_constraints = action_constraints.into();
+    tool.temporal = crate::tool::Temporal {
+        fairness: temporals.into_iter().map(|p| (p.expr, p.ctx)).collect(),
+        properties: Box::new([]),
+    };
+    // The `Tool` constructor's splitting (`Tool.java:224-240`). Only the next-state
+    // relation is split; `getInitStateSpec()` hands the initial predicates over as they are,
+    // so an init predicate that is not a boolean fails during generation, not here.
+    let mut actions = Vec::new();
+    {
+        let mut locals = WorkerLocals::new(0, tool.globals.seed);
+        let mut ev = tool.ev(&mut locals, out);
+        if let Some(next) = &next_pred {
+            crate::actions::split_next(&mut ev, next.expr, &next.ctx, next.op_def, &mut actions).map_err(uncaught)?;
+        }
+    }
+    tool.init_actions = init_preds
+        .iter()
+        .enumerate()
+        .map(|(i, p)| crate::actions::init_action(i, p.expr, &p.ctx, p.op_def))
+        .collect();
+    tool.actions = actions.into();
+    Ok(())
+}
+
+/// What `processConfig` collects before the completeness checks.
+struct ConfigPass {
+    init_preds: Vec<Pred>,
+    next_pred: Option<Pred>,
+    invariants: Vec<(Atom, Pred)>,
+    temporals: Vec<Pred>,
+}
+
+impl ConfigPass {
+    /// `processConfigInvariants` (`SpecProcessor.java:1004-1045`).
+    fn invariants(&mut self, config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> Result<(), SpecError> {
+        let graph = tool.graph.clone();
+        for name in &config.invariants {
+            match defn_of(defns, &graph, name) {
+                Some(OpBinding::Replaced(d)) => {
+                    if !graph.op_def(d).params.is_empty() {
+                        return Err(SpecError::Config {
+                            ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG,
+                            params: vec!["invariant".to_string(), name.clone()],
+                        });
+                    }
+                    // An invariant must be a state predicate. TLC adds a note about its own
+                    // level-checking bug when the body has level parameters; the graph does
+                    // not carry `levelParams` yet, so the note is never added.
+                    if graph.op_level(d) >= Level::Action {
+                        let shown = graph.interner().text(graph.op_def(d).name).to_string();
+                        return Err(SpecError::Config { ec: Ec::TLC_INVARIANT_VIOLATED_LEVEL, params: vec![shown] });
+                    }
+                    let body = graph.op_def(d).body.expect("a user definition has a body");
+                    let atom = graph.interner().intern(name);
+                    self.invariants.push((atom, Pred { expr: body, ctx: Ctx::EMPTY, op_def: Some(d) }));
+                }
+                None => {
+                    return Err(SpecError::Config {
+                        ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
+                        params: vec!["invariant".to_string(), name.clone()],
+                    });
+                }
+                Some(OpBinding::Value(Value::Bool(true))) => {
+                    out.warning(Ec::TLC_INVARIANT_CONSTANT_LEVEL, &[name, "TRUE"]).map_err(warning_as_error)?;
+                }
+                Some(other) => {
+                    let shown = binding_string(tool, &other, out)?;
+                    return Err(SpecError::Config {
+                        ec: Ec::TLC_CONFIG_ID_HAS_VALUE,
+                        params: vec!["invariant".to_string(), name.clone(), shown],
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `processConfigInitAndNext` (`SpecProcessor.java:957-1002`).
+    fn init_and_next(&mut self, config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<(), SpecError> {
+        let graph = tool.graph.clone();
+        let one = |name: &str, what: &str| -> Result<Pred, SpecError> {
+            match defn_of(defns, &graph, name) {
+                None => Err(SpecError::Config {
+                    ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
+                    params: vec![what.to_string(), name.to_string()],
+                }),
+                Some(OpBinding::Replaced(d)) => {
+                    if !graph.op_def(d).params.is_empty() {
+                        return Err(SpecError::Config {
+                            ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG,
+                            params: vec![what.to_string(), name.to_string()],
+                        });
+                    }
+                    let body = graph.op_def(d).body.expect("a user definition has a body");
+                    Ok(Pred { expr: body, ctx: Ctx::EMPTY, op_def: Some(d) })
+                }
+                Some(_) => Err(SpecError::Config {
+                    ec: Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT,
+                    params: vec![what.to_string(), name.to_string()],
+                }),
+            }
+        };
+        if let Some(name) = config.init.as_deref().filter(|s| !s.is_empty()) {
+            self.init_preds.push(one(name, "initial predicate")?);
+        }
+        if let Some(name) = config.next.as_deref().filter(|s| !s.is_empty()) {
+            self.next_pred = Some(one(name, "next state action")?);
+        }
+        Ok(())
+    }
+
+    /// `processConfigSpec` (`SpecProcessor.java:1047-1394`): the structural decomposition of
+    /// SPECIFICATION into an initial predicate, one `[][Next]_v` and temporal formulas.
+    ///
+    /// A substitution is pushed onto the context here instead of wrapping the expression in
+    /// a fresh `SubstInNode` (`Specs.addSubsts`); the bindings it makes are the same ones
+    /// `getNextStates` would push at generation time, and they are not cachable either way.
+    fn config_spec(&mut self, pred: ExprId, c: &Ctx, substituted: bool, tool: &Tool, out: &dyn Report) -> Result<(), SpecError> {
+        let graph = tool.graph.clone();
+        match graph.expr(pred) {
+            ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
+                let body = *body;
+                let mut locals = WorkerLocals::new(0, tool.globals.seed);
+                let c1 = {
+                    let mut ev = tool.ev(&mut locals, out);
+                    ev.subst_context(substs, c)
+                };
+                // `subs.cons(pred1)`: from here on the formula is under a substitution.
+                return self.config_spec(body, &c1, true, tool, out);
+            }
+            ExprNode::LetIn { body, .. } => return self.config_spec(*body, c, substituted, tool, out),
+            ExprNode::OpAppl { .. } => {}
+            _ => {}
+        }
+        if let ExprNode::OpAppl { op, args, .. } = graph.expr(pred) {
+            let (op, args) = (*op, args.clone());
+            let mut locals = WorkerLocals::new(0, tool.globals.seed);
+            let (code, resolved) = {
+                let mut ev = tool.ev(&mut locals, out);
+                (ev.opcode(op), ev.lookup(op, c, StateRef::Empty, false))
+            };
+            if args.is_empty() {
+                return self.config_spec_name(pred, op, c, substituted, tool, out, resolved);
+            }
+            // Parameterised instantiation: `Spec == R(42)` where `R(c) == INSTANCE ...`.
+            // `subs.isEmpty()` (`SpecProcessor.java:1160`): TLC refuses to expand a
+            // parameterised operator inside a substitution rather than walk the body in a
+            // context that does not match it.
+            if let crate::eval::expr::Resolved::UserOp(d) | crate::eval::expr::Resolved::Binding(crate::ctx::Binding::OpDef(d)) = resolved
+                && graph.op_def(d).body.is_some()
+                && !graph.op_def(d).recursive
+                && graph.op_def(d).params.len() == args.len()
+                && !substituted
+            {
+                let body = graph.op_def(d).body.expect("just checked");
+                let mut locals = WorkerLocals::new(0, tool.globals.seed);
+                let c1 = {
+                    let mut ev = tool.ev(&mut locals, out);
+                    ev.op_context(d, &args, c, false)
+                };
+                return self.config_spec(body, &c1, substituted, tool, out);
+            }
+            match code {
+                Some(Builtin::TemporalExists | Builtin::TemporalForall) => {
+                    return Err(SpecError::Failure { ec: Ec::TLC_SPECIFICATION_FEATURES_TEMPORAL_QUANTIFIER });
+                }
+                Some(Builtin::ConjList | Builtin::Land) => {
+                    for a in args.iter() {
+                        self.config_spec(a.expect_expr(), c, substituted, tool, out)?;
+                    }
+                    return Ok(());
+                }
+                Some(Builtin::Box) => return self.config_spec_box(pred, &args, c, tool, out),
+                Some(Builtin::Nop) => return self.config_spec(args[0].expect_expr(), c, substituted, tool, out),
+                _ => {}
+            }
+        }
+        self.config_spec_level(pred, c, tool, out)
+    }
+
+    /// The `args.length == 0` branch: a name that stands for another formula.
+    fn config_spec_name(
+        &mut self,
+        pred: ExprId,
+        op: tlars_sany::graph::SymbolRef,
+        c: &Ctx,
+        substituted: bool,
+        tool: &Tool,
+        out: &dyn Report,
+        resolved: crate::eval::expr::Resolved,
+    ) -> Result<(), SpecError> {
+        use crate::eval::expr::Resolved;
+        let graph = tool.graph.clone();
+        let name = || {
+            let mut locals = WorkerLocals::new(0, tool.globals.seed);
+            tool.ev(&mut locals, out).symbol_name(op)
+        };
+        match resolved {
+            Resolved::UserOp(d) | Resolved::Binding(crate::ctx::Binding::OpDef(d)) => {
+                if !graph.op_def(d).params.is_empty() {
+                    return Err(SpecError::Config { ec: Ec::TLC_CONFIG_OP_NO_ARGS, params: vec![name()] });
+                }
+                let body = graph.op_def(d).body.expect("a user definition has a body");
+                let mut locals = WorkerLocals::new(0, tool.globals.seed);
+                let level = {
+                    let mut ev = tool.ev(&mut locals, out);
+                    ev.level_bound(body, c)
+                };
+                if level == 1 {
+                    self.init_preds.push(Pred { expr: body, ctx: c.clone(), op_def: Some(d) });
+                    return Ok(());
+                }
+                self.config_spec(body, c, substituted, tool, out)
+            }
+            Resolved::Binding(crate::ctx::Binding::Thunk(t)) => {
+                let (e, tc) = (t.expr, t.ctx.clone());
+                self.config_spec(e, &tc, substituted, tool, out)
+            }
+            Resolved::Value(Value::Bool(true)) | Resolved::Binding(crate::ctx::Binding::Value(Value::Bool(true))) => Ok(()),
+            Resolved::Value(Value::Bool(false)) | Resolved::Binding(crate::ctx::Binding::Value(Value::Bool(false))) => {
+                Err(SpecError::Config { ec: Ec::TLC_CONFIG_SPEC_IS_TRIVIAL, params: vec![name()] })
+            }
+            Resolved::Value(Value::Undef) | Resolved::Binding(crate::ctx::Binding::Value(Value::Undef)) => {
+                Err(SpecError::Config { ec: Ec::TLC_CONFIG_OP_NOT_IN_SPEC, params: vec![name()] })
+            }
+            Resolved::Value(v) | Resolved::Binding(crate::ctx::Binding::Value(v)) => {
+                let shown = value_string(tool, &v, out)?;
+                Err(SpecError::Config { ec: Ec::TLC_CONFIG_OP_IS_EQUAL, params: vec![name(), shown, "spec".to_string()] })
+            }
+            _ => {
+                let _ = pred;
+                Err(SpecError::Config { ec: Ec::TLC_CONFIG_OP_NOT_IN_SPEC, params: vec![name()] })
+            }
+        }
+    }
+
+    /// `[]A`: `[][Next]_v` is the next-state relation, anything else a temporal formula.
+    fn config_spec_box(
+        &mut self,
+        pred: ExprId,
+        args: &[ExprOrOpArg],
+        c: &Ctx,
+        tool: &Tool,
+        out: &dyn Report,
+    ) -> Result<(), SpecError> {
+        let graph = tool.graph.clone();
+        let box_arg = args[0].expect_expr();
+        let mut locals = WorkerLocals::new(0, tool.globals.seed);
+        if let ExprNode::OpAppl { op, args: inner, .. } = graph.expr(box_arg) {
+            let (op, inner) = (*op, inner.clone());
+            // TLC cannot handle `[]S` for a constant- or state-level formula.
+            if graph.level(box_arg) <= Level::State {
+                let shown = graph.expr_tlc_text(box_arg);
+                return Err(SpecError::Config { ec: Ec::TLC_LIVE_CANNOT_HANDLE_FORMULA, params: vec![shown] });
+            }
+            let code = tool.ev(&mut locals, out).opcode(op);
+            if code == Some(Builtin::SquareAct) {
+                let action = inner[0].expect_expr();
+                let subscript = inner[1].expect_expr();
+                check_subscript(tool, subscript, c, out)?;
+                if self.next_pred.is_some() {
+                    return Err(SpecError::Failure { ec: Ec::TLC_CANT_HANDLE_TOO_MANY_NEXT_STATE_RELS });
+                }
+                self.next_pred = Some(Pred { expr: action, ctx: c.clone(), op_def: None });
+                return Ok(());
+            }
+        }
+        self.temporals.push(Pred { expr: pred, ctx: c.clone(), op_def: None });
+        Ok(())
+    }
+
+    /// The level-based tail of `processConfigSpec`.
+    fn config_spec_level(&mut self, pred: ExprId, c: &Ctx, tool: &Tool, out: &dyn Report) -> Result<(), SpecError> {
+        let mut locals = WorkerLocals::new(0, tool.globals.seed);
+        let level = {
+            let mut ev = tool.ev(&mut locals, out);
+            ev.level_bound(pred, c)
+        };
+        match level {
+            0 | 1 => {
+                self.init_preds.push(Pred { expr: pred, ctx: c.clone(), op_def: None });
+                Ok(())
+            }
+            3 => {
+                self.temporals.push(Pred { expr: pred, ctx: c.clone(), op_def: None });
+                Ok(())
+            }
+            _ => {
+                let shown = tool.graph.expr_tlc_text(pred);
+                Err(SpecError::Config { ec: Ec::TLC_CANT_HANDLE_CONJUNCT, params: vec![shown] })
+            }
+        }
+    }
+}
+
+/// `SubscriptCollector` (`SpecProcessor.java:1180-1344`): the variables a `[][Next]_v`
+/// subscript mentions, and the warning per variable it leaves out.
+fn check_subscript(tool: &Tool, subscript: ExprId, c: &Ctx, out: &dyn Report) -> Result<(), SpecError> {
+    let mut found = Vec::new();
+    let mut locals = WorkerLocals::new(0, tool.globals.seed);
+    let collected = {
+        let mut ev = tool.ev(&mut locals, out);
+        collect_subscript(&mut ev, subscript, c, &mut found)
+    };
+    if collected.is_err() {
+        out.warning(Ec::TLC_COULD_NOT_DETERMINE_SUBSCRIPT, &[]).map_err(warning_as_error)?;
+        return Ok(());
+    }
+    for (i, &name) in tool.vars.names.iter().enumerate() {
+        if !found.contains(&tool.vars.slot(i)) {
+            let text = tool.graph.interner().text(name).to_string();
+            out.warning(Ec::TLC_SUBSCRIPT_CONTAIN_NO_STATE_VAR, &[&text]).map_err(warning_as_error)?;
+        }
     }
     Ok(())
+}
+
+/// `SubscriptCollector.enter`. The `Assert.fail(TLC_CANT_HANDLE_SUBSCRIPT, ...)` it raises on
+/// an expression it cannot walk is caught by the caller as "could not determine".
+fn collect_subscript(ev: &mut crate::eval::Ev<'_>, subscript: ExprId, c: &Ctx, found: &mut Vec<crate::state::VarSlot>) -> Result<(), ()> {
+    if let Some(slot) = ev.get_var(subscript, c, false) {
+        found.push(slot);
+        return Ok(());
+    }
+    let graph = ev.tool().graph.clone();
+    match graph.expr(subscript) {
+        ExprNode::OpAppl { op, args, .. } => {
+            let (op, args) = (*op, args.clone());
+            match ev.opcode(op) {
+                Some(Builtin::Tuple) => {
+                    for a in args.iter() {
+                        collect_subscript(ev, a.expect_expr(), c, found)?;
+                    }
+                    Ok(())
+                }
+                // Any other built-in operator is ignored.
+                Some(_) => Ok(()),
+                None => match ev.lookup(op, c, StateRef::Empty, false) {
+                    crate::eval::expr::Resolved::UserOp(d) | crate::eval::expr::Resolved::Binding(crate::ctx::Binding::OpDef(d)) => {
+                        let Some(body) = graph.op_def(d).body else { return Ok(()) };
+                        let c1 = ev.op_context(d, &args, c, false);
+                        collect_subscript(ev, body, &c1, found)
+                    }
+                    crate::eval::expr::Resolved::Binding(crate::ctx::Binding::Thunk(t)) => {
+                        let (e, tc) = (t.expr, t.ctx.clone());
+                        collect_subscript(ev, e, &tc, found)
+                    }
+                    // An overridden operator is ignored.
+                    _ => Ok(()),
+                },
+            }
+        }
+        ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
+            let body = *body;
+            let c1 = ev.subst_context(substs, c);
+            collect_subscript(ev, body, &c1, found)
+        }
+        ExprNode::LetIn { body, .. } | ExprNode::Label { body, .. } => collect_subscript(ev, *body, c, found),
+        _ => Err(()),
+    }
+}
+
+/// `processModelConstraints` / `processActionConstraints` (`SpecProcessor.java:2196-2260`):
+/// each name must be a 0-arity definition.
+fn named_checks(
+    names: &[String],
+    tool: &Tool,
+    defns: &Defns,
+    out: &dyn Report,
+    what: &str,
+) -> Result<Vec<NamedCheck>, SpecError> {
+    let graph = tool.graph.clone();
+    let mut checks = Vec::new();
+    for name in names {
+        match defn_of(defns, &graph, name) {
+            Some(OpBinding::Replaced(d)) => {
+                if !graph.op_def(d).params.is_empty() {
+                    return Err(SpecError::Config {
+                        ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG,
+                        params: vec![what.to_string(), name.clone()],
+                    });
+                }
+                let body = graph.op_def(d).body.expect("a user definition has a body");
+                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY });
+            }
+            None => {
+                return Err(SpecError::Config {
+                    ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
+                    params: vec![what.to_string(), name.clone()],
+                });
+            }
+            // A constraint that folded to TRUE is accepted and contributes nothing; any
+            // other value is rejected (`SpecProcessor.java:1684-1692`).
+            Some(OpBinding::Value(Value::Bool(true))) => {}
+            Some(other) => {
+                let shown = binding_string(tool, &other, out)?;
+                return Err(SpecError::Config {
+                    ec: Ec::TLC_CONFIG_ID_HAS_VALUE,
+                    params: vec![what.to_string(), name.clone(), shown],
+                });
+            }
+        }
+    }
+    Ok(checks)
+}
+
+/// `this.defns.get(name)`, which interns the cfg identifier.
+fn defn_of(defns: &Defns, graph: &SemanticGraph, name: &str) -> Option<OpBinding> {
+    defns.get(&graph.interner().intern(name)).cloned().flatten()
+}
+
+/// `val.toString()` of whatever `defns` held, as the `%3%` of `TLC_CONFIG_ID_HAS_VALUE`.
+fn binding_string(tool: &Tool, binding: &OpBinding, out: &dyn Report) -> Result<String, SpecError> {
+    match binding {
+        OpBinding::Value(v) => value_string(tool, v, out),
+        OpBinding::Table(lines) => {
+            let mut locals = WorkerLocals::new(0, tool.globals.seed);
+            let mut ev = tool.ev(&mut locals, out);
+            crate::value::print::op_rcd_string(&mut ev, lines).map_err(uncaught)
+        }
+        OpBinding::Native(id) => Ok(format!("<Java Method: {}>", id.op().signature)),
+        OpBinding::Replaced(_) | OpBinding::Unimplemented => Err(unimplemented("the printed form of this cfg binding")),
+    }
+}
+
+fn value_string(tool: &Tool, v: &Value, out: &dyn Report) -> Result<String, SpecError> {
+    let mut locals = WorkerLocals::new(0, tool.globals.seed);
+    let mut ev = tool.ev(&mut locals, out);
+    v.to_tlc_string(&mut ev).map_err(uncaught)
+}
+
+/// `-messagesAsErrors` turns a warning into `Assert.fail(code, params)`.
+fn warning_as_error(e: tlars_msg::WarningAsError) -> SpecError {
+    SpecError::Config { ec: e.ec, params: vec![e.message] }
 }

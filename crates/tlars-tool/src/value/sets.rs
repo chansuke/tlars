@@ -7,6 +7,7 @@
 //! that prints and enumerates symbolically.
 
 use super::enumerate::EnumOrder;
+use super::Source;
 use super::{SetBinValue, SetOfFcnsValue, SetOfRcdsValue, SetOfTuplesValue, SubsetValue, UnionValue, Value, ValueVec};
 use crate::error::{EvalError, EvalResult};
 use crate::eval::Ev;
@@ -48,6 +49,11 @@ impl Value {
     /// `Reducible.cup(other)` (`SetEnumValue.java:216-242`, `IntervalValue.java:189-213`):
     /// the receiver's elements in its own order, then the elements of `other` it lacks.
     pub(crate) fn cup(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Value> {
+        let r = self.cup_inner(ev, other);
+        self.fp(r)
+    }
+
+    fn cup_inner(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Value> {
         let elems = self.reducible(ev)?;
         if elems.len() == 0 {
             return Ok(other.clone());
@@ -71,11 +77,21 @@ impl Value {
     /// `Reducible.cap(other)`: the receiver's elements that `other` holds. An interval's
     /// result is normalised, a SetEnum's result is normalised exactly when the receiver is.
     pub(crate) fn cap(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Value> {
+        let r = self.cap_inner(ev, other);
+        self.fp(r)
+    }
+
+    fn cap_inner(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Value> {
         self.filter(ev, other, true)
     }
 
     /// `Reducible.diff(other)`: the receiver's elements that `other` lacks.
     pub(crate) fn diff(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Value> {
+        let r = self.diff_inner(ev, other);
+        self.fp(r)
+    }
+
+    fn diff_inner(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Value> {
         self.filter(ev, other, false)
     }
 
@@ -96,6 +112,11 @@ impl Value {
     /// `isSubsetEq(other)` (`EnumerableValue.java:44-60`), with the two overrides that
     /// answer without enumerating.
     pub(crate) fn is_subset_eq(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<bool> {
+        let r = self.is_subset_eq_inner(ev, other);
+        self.fp(r)
+    }
+
+    fn is_subset_eq_inner(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<bool> {
         if let (Value::Interval(a), Value::Interval(b)) = (self, other)
             && b.lo <= a.lo
             && b.hi >= a.hi
@@ -121,13 +142,15 @@ impl Value {
     /// `UnionValue.union(val)` (`UnionValue.java:215-239`): a set of sets that are all
     /// SetEnums is united at once, and the result's own elements are the duplicate check, so
     /// it stays unnormalised.
+    /// `UnionValue.union(Value)` is a static method, so a failure inside it is not wrapped
+    /// by the receiver's source the way the instance operators are.
     pub(crate) fn union(&self, ev: &mut Ev<'_>) -> EvalResult<Value> {
         let combinable = match self {
             Value::SetEnum(s) => s.snapshot().iter().all(|e| matches!(e, Value::SetEnum(_))),
             _ => false,
         };
         if !combinable {
-            return Ok(Value::Union(Arc::new(UnionValue { set: self.clone(), converted: OnceLock::new() })));
+            return Ok(Value::Union(Arc::new(UnionValue { set: self.clone(), converted: OnceLock::new(), source: Source::none() })));
         }
         let Value::SetEnum(outer) = self else { unreachable!("combinable implies a SetEnum") };
         let mut vals = ValueVec::new(ev);
@@ -154,32 +177,32 @@ impl Value {
 
 /// `new SetCupValue(set1, set2)`.
 pub(crate) fn lazy_cup(left: Value, right: Value) -> Value {
-    Value::SetCup(Arc::new(SetBinValue { left, right, converted: OnceLock::new() }))
+    Value::SetCup(Arc::new(SetBinValue { left, right, converted: OnceLock::new(), source: Source::none() }))
 }
 
 /// `new SetCapValue(set1, set2)`.
 pub(crate) fn lazy_cap(left: Value, right: Value) -> Value {
-    Value::SetCap(Arc::new(SetBinValue { left, right, converted: OnceLock::new() }))
+    Value::SetCap(Arc::new(SetBinValue { left, right, converted: OnceLock::new(), source: Source::none() }))
 }
 
 /// `new SetDiffValue(set1, set2)`.
 pub(crate) fn lazy_diff(left: Value, right: Value) -> Value {
-    Value::SetDiff(Arc::new(SetBinValue { left, right, converted: OnceLock::new() }))
+    Value::SetDiff(Arc::new(SetBinValue { left, right, converted: OnceLock::new(), source: Source::none() }))
 }
 
 /// `new SubsetValue(set)`: `SUBSET S` is never built eagerly.
 pub(crate) fn subset(base: Value) -> Value {
-    Value::Subset(Arc::new(SubsetValue { base, converted: OnceLock::new() }))
+    Value::Subset(Arc::new(SubsetValue { base, converted: OnceLock::new(), source: Source::none() }))
 }
 
 /// `new SetOfTuplesValue(sets)`.
 pub(crate) fn set_of_tuples(sets: Vec<Value>) -> Value {
-    Value::SetOfTuples(Arc::new(SetOfTuplesValue { sets: sets.into_boxed_slice(), converted: OnceLock::new() }))
+    Value::SetOfTuples(Arc::new(SetOfTuplesValue { sets: sets.into_boxed_slice(), converted: OnceLock::new(), source: Source::none() }))
 }
 
 /// `new SetOfFcnsValue(domain, range)`.
 pub(crate) fn set_of_fcns(domain: Value, range: Value) -> Value {
-    Value::SetOfFcns(Arc::new(SetOfFcnsValue { domain, range, converted: OnceLock::new() }))
+    Value::SetOfFcns(Arc::new(SetOfFcnsValue { domain, range, converted: OnceLock::new(), source: Source::none() }))
 }
 
 /// `new SetOfRcdsValue(names, values, false)`, whose constructor sorts the fields by name
@@ -224,5 +247,6 @@ pub(crate) fn set_of_rcds(ev: &mut Ev<'_>, names: Vec<Atom>, sets: Vec<Value>) -
         names: names.into_boxed_slice(),
         sets: sets.into_boxed_slice(),
         converted: OnceLock::new(),
+        source: Source::none(),
     })))
 }

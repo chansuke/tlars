@@ -30,19 +30,40 @@ struct WorkerTrace {
 
 impl TraceStores {
     pub(crate) fn new(workers: usize) -> Self {
-        todo!()
+        let per_worker =
+            (0..workers.max(1)).map(|_| WorkerTrace { records: Mutex::new(Vec::new()), max_level: Default::default() }).collect();
+        TraceStores { per_worker }
     }
     /// Initial states are written by the main thread into store 0.
     pub(crate) fn append(&self, worker: u16, pred: Option<TracePtr>, fp: Fp) -> TracePtr {
-        todo!()
+        let store = &self.per_worker[worker as usize];
+        let mut records = store.records.lock().expect("trace store");
+        records.push(TraceRecord { pred, fp });
+        TracePtr { worker, index: (records.len() - 1) as u32 }
+    }
+    /// `Worker.setMaxLevel`: the level of the deepest state this worker wrote.
+    pub(crate) fn record_level(&self, worker: u16, level: u32) {
+        let max = &self.per_worker[worker as usize].max_level;
+        max.fetch_max(level, std::sync::atomic::Ordering::Relaxed);
     }
     /// Follow `pred` links back to the initial record; returns fingerprints init-first.
     pub(crate) fn fingerprints_to(&self, end: TracePtr) -> Vec<Fp> {
-        todo!()
+        let mut fps = Vec::new();
+        let mut cur = Some(end);
+        while let Some(ptr) = cur {
+            let record = self.record(ptr);
+            fps.push(record.fp);
+            cur = record.pred;
+        }
+        fps.reverse();
+        fps
+    }
+    fn record(&self, ptr: TracePtr) -> TraceRecord {
+        self.per_worker[ptr.worker as usize].records.lock().expect("trace store")[ptr.index as usize]
     }
     /// `ConcurrentTLCTrace.getLevel`: max over workers, minimum 1.
     pub(crate) fn level(&self) -> u32 {
-        todo!()
+        self.per_worker.iter().map(|w| w.max_level.load(std::sync::atomic::Ordering::Relaxed)).max().unwrap_or(1).max(1)
     }
 }
 
