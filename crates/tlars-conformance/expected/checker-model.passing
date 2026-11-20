@@ -190,6 +190,7 @@ tlc/checker/init/fcn_apply_nonfunction
 tlc/checker/init/fcn_apply_nonfunction_fast_path
 tlc/checker/init/fcn_apply_out_of_domain
 tlc/checker/init/fcn_apply_true
+tlc/checker/init/first_of_duplicate_for_trace
 tlc/checker/init/forall_assigns_single
 tlc/checker/init/forall_empty_alone_partial
 tlc/checker/init/forall_empty_continues
@@ -273,6 +274,7 @@ tlc/checker/init/partial_first_disjunct
 tlc/checker/init/partial_no_assignment_guard
 tlc/checker/init/partial_second_disjunct
 tlc/checker/init/primed_variable_in_init
+tlc/checker/init/print_replays_on_trace
 tlc/checker/init/set_conjunct_unassigned
 tlc/checker/init/spec_init_after_box
 tlc/checker/init/spec_init_conjuncts
@@ -340,6 +342,7 @@ tlc/checker/next/eq_reads_earlier_prime
 tlc/checker/next/eq_reads_later_prime
 tlc/checker/next/eq_reversed_after_assign
 tlc/checker/next/eq_reversed_unassigned
+tlc/checker/next/eq_unprimed_var_tests
 tlc/checker/next/equiv_not_generator
 tlc/checker/next/error_in_guard_initial_state
 tlc/checker/next/error_in_guard_later_state
@@ -483,6 +486,7 @@ tlc/checker/trace/parameterized_action_labels
 tlc/checker/trace/single_variable_no_bullet
 tlc/checker/trace/terse_print
 tlc/checker/trace/trace_prefers_first_match
+tlc/checker/trace/trace_replays_print
 tlc/checker/trace/trace_stuttering_absent
 tlc/checker/trace/two_variables_bullets
 tlc/checker/trace/variables_print_across_declarations

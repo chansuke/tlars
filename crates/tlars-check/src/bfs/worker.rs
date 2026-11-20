@@ -83,6 +83,7 @@ impl<'a> Worker<'a> {
                 mc.out.error(tlars_msg::Ec::TLC_DEADLOCK_REACHED, &[]);
                 let mut ev = mc.tool.ev(&mut self.locals, mc.out);
                 mc.print_trace_and_stop(&mut ev, &cur, None);
+                mc.post_condition_trace(&mut ev, &cur, None, false);
             }
             if let (Some(live), Some(succs)) = (mc.live.as_ref(), self.sink.live_successors.take()) {
                 let mut ev = mc.tool.ev(&mut self.locals, mc.out);
@@ -172,9 +173,11 @@ impl<O: SeenOracle> WorkerSink<'_, O> {
             }
         }
         if unseen {
-            mc.check_invariants(ev, self.cur, succ)?;
+            mc.check_invariants(ev, self.cur, succ, new_ptr.is_some())?;
         }
-        mc.check_implied_actions(ev, self.cur, succ)?; // always, even for seen states
+        // `Worker.writeState` sets the successor's worker id, which is what tells
+        // `doPostCondition` whether the state has a trace record of its own.
+        mc.check_implied_actions(ev, self.cur, succ, new_ptr.is_some())?; // always, even for seen states
         if let Some(ptr) = new_ptr {
             // in_model && unseen && no violation: other workers may now explore it.
             mc.queue.enqueue(Queued { state: succ.clone(), fp: new_fp.expect("set with ptr"), ptr, level: self.cur.level + 1 });

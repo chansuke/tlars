@@ -305,7 +305,7 @@ impl<'a> ModelChecker<'a> {
     /// Invariants on a new (or out-of-model) successor, in cfg order. Violation: record,
     /// print trace later, and stop generation unless `-continue`. An evaluation failure is
     /// `TLC_INVARIANT_EVALUATION_FAILED` (exit 76), not a next-state failure.
-    fn check_invariants(&self, ev: &mut Ev<'_>, cur: &Queued, succ: &State) -> Flow {
+    fn check_invariants(&self, ev: &mut Ev<'_>, cur: &Queued, succ: &State, written: bool) -> Flow {
         for id in self.tool.invariants() {
             let name = self.tool.invariant_name(id);
             let name = ev.tool().graph().interner().text(name).to_string();
@@ -320,6 +320,7 @@ impl<'a> ModelChecker<'a> {
                     if self.set_err(ErrState::Invariant { id, pred: cur.clone(), state: succ.clone() }) {
                         self.out.error(Ec::TLC_INVARIANT_VIOLATED_BEHAVIOR, &[&name]);
                         self.print_trace_and_stop(ev, cur, Some(succ));
+                        self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written);
                     }
                     return Err(Halt::Stop);
                 }
@@ -339,7 +340,7 @@ impl<'a> ModelChecker<'a> {
     }
 
     /// Implied actions `[][A]_v`, for *every* successor, seen or not.
-    fn check_implied_actions(&self, ev: &mut Ev<'_>, cur: &Queued, succ: &State) -> Flow {
+    fn check_implied_actions(&self, ev: &mut Ev<'_>, cur: &Queued, succ: &State, written: bool) -> Flow {
         for id in self.tool.implied_actions() {
             let name = self.tool.implied_action_name(id);
             let name = ev.tool().graph().interner().text(name).to_string();
@@ -354,6 +355,7 @@ impl<'a> ModelChecker<'a> {
                     if self.set_err(ErrState::ImpliedAction { id, pred: cur.clone(), state: succ.clone() }) {
                         self.out.error(Ec::TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR, &[&name]);
                         self.print_trace_and_stop(ev, cur, Some(succ));
+                        self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written);
                     }
                     return Err(Halt::Stop);
                 }
@@ -418,6 +420,7 @@ impl<'a> ModelChecker<'a> {
             }
             self.print_trace(&mut ev, cur, Some(Succ::Partial(s1)));
             self.queue.finish_all();
+            self.post_condition_trace(&mut ev, cur, Some(Succ::Partial(s1)), false);
         }
         Halt::Stop
     }
@@ -535,6 +538,48 @@ impl<'a> ModelChecker<'a> {
         self.queue.finish_all();
     }
 
+    /// `Worker.doPostCondition` (`Worker.java:636-680`), which every `Worker.doNextSetErr`
+    /// runs after the counterexample has been printed. It rebuilds the trace even when the
+    /// spec has no POSTCONDITION, because only the final
+    /// `checkPostConditionWithCounterExample` is a no-op without one (`Tool.java:3671-3679`).
+    /// The rebuild regenerates states, so anything the initial predicate or the next-state
+    /// relation prints is printed again.
+    pub(crate) fn post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool) {
+        let fps = self.traces.fingerprints_to(cur.ptr);
+        let prefix_of_cur = |ev: &mut Ev<'_>| {
+            // `tlc.getTraceInfo(curState)` followed by `tool.getState(curState, last)`.
+            if let Ok(Some(steps)) = crate::trace::reconstruct(ev, &fps[..fps.len() - 1])
+                && let Some(last) = steps.last()
+            {
+                let (pred, pred_fp) = (last.state.clone(), fps[fps.len() - 2]);
+                let _ = ev.successor_from_fp(&pred, pred_fp, cur.fp);
+            }
+        };
+        match succ {
+            // `curState.isInitial() && succState == null`: the initial state alone.
+            None if fps.len() <= 1 => {
+                let _ = ev.state_from_fp(cur.fp);
+            }
+            None => prefix_of_cur(ev),
+            // An incomplete successor has no trace record, and `getTraceInfo` fails on it
+            // before anything is regenerated.
+            Some(Succ::Partial(_)) => {}
+            Some(Succ::Complete(state)) => {
+                let Ok(fp) = ev.fingerprint(state) else { return };
+                if written {
+                    // `getTraceInfo(succState)` is the trace up to and including `cur`.
+                    let _ = crate::trace::reconstruct(ev, &fps);
+                } else if fps.len() <= 1 {
+                    // Fully assigned but never written, from an initial state.
+                    let _ = ev.state_from_fp(cur.fp);
+                } else {
+                    prefix_of_cur(ev);
+                }
+                let _ = ev.successor_from_fp(&cur.state, cur.fp, fp);
+            }
+        }
+    }
+
     /// `ModelChecker.doNext` (`ModelChecker.java:416-480`), which the replay runs instead of
     /// `Worker.run`. It generates every successor of an action into a vector first and then
     /// runs the checks, so a failure in a CONSTRAINT or an invariant happens with no
@@ -554,9 +599,9 @@ impl<'a> ModelChecker<'a> {
                     unseen = self.fpset.put(fp) == crate::fpset::Seen::New;
                 }
                 if unseen {
-                    self.check_invariants(&mut ev, cur, succ)?;
+                    self.check_invariants(&mut ev, cur, succ, unseen)?;
                 }
-                self.check_implied_actions(&mut ev, cur, succ)?;
+                self.check_implied_actions(&mut ev, cur, succ, unseen)?;
             }
         }
         Ok(())
