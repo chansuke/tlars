@@ -112,6 +112,7 @@ impl<'t> Ev<'t> {
                 Some(crate::spec::DeclBinding::Value(v)) => Resolved::Value(v.clone()),
                 Some(crate::spec::DeclBinding::Table(lines)) => Resolved::OpRcd(lines.clone()),
                 Some(crate::spec::DeclBinding::Op(op)) => Resolved::UserOp(*op),
+                Some(crate::spec::DeclBinding::Native(id)) => Resolved::Native(*id),
                 Some(crate::spec::DeclBinding::Var(slot)) => Resolved::Var(*slot),
                 None => Resolved::Value(Value::Undef),
             },
@@ -161,6 +162,14 @@ impl<'t> Ev<'t> {
                     }
                 }
                 Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
+                    // A `MethodValue`'s method handle is invoked with exactly the Java
+                    // method's parameters, so a cfg override that gives it another arity
+                    // raises a `WrongMethodTypeException` whose text names the handle's
+                    // erased type. tlars has no table of those types.
+                    if args.len() != crate::modules::arity(id) {
+                        let name = self.symbol_name(op);
+                        return Err(EvalError::unimplemented(format!("the Java method behind {name} applied to {} arguments", args.len())));
+                    }
                     // `MethodValue.eval(tool, args, ...)`: the arguments are evaluated first,
                     // except where the Java method takes an operator and tlars has to see the
                     // argument node to resolve it.

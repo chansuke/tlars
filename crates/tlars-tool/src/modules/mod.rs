@@ -131,6 +131,11 @@ pub(crate) fn imp(id: NativeId) -> NativeImpl {
     id.op().imp
 }
 
+/// The Java method's parameter count.
+pub(crate) fn arity(id: NativeId) -> usize {
+    id.op().params.len()
+}
+
 /// `MethodValue.eval(args)`: the arguments are cast to the method's parameter types first.
 pub(crate) fn apply(ev: &mut Ev<'_>, id: NativeId, args: &[Value]) -> EvalResult<Value> {
     let op = id.op();

@@ -31,6 +31,8 @@ pub(crate) enum DeclBinding {
     Table(OpRcd),
     /// cfg `C <- Op`: evaluated on every use unless aggressiveConstantCaching (issue 648).
     Op(OpDefId),
+    /// cfg `C <- Op` where `Op` is a Java-module override (`MethodValue`).
+    Native(NativeId),
     Var(VarSlot),
 }
 

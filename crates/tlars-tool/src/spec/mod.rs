@@ -281,10 +281,8 @@ impl CfgBind<'_> {
                 OpBinding::Replaced(op) => DeclBinding::Op(*op),
                 OpBinding::Table(lines) => DeclBinding::Table(lines.clone()),
                 OpBinding::Value(v) => DeclBinding::Value(v.clone()),
-                // A Java method bound to a constant is applied like any other value.
-                OpBinding::Native(_) | OpBinding::Unimplemented => {
-                    return Err(unimplemented("a constant overridden with a Java method"));
-                }
+                OpBinding::Native(id) => DeclBinding::Native(*id),
+                OpBinding::Unimplemented => return Err(unimplemented("a constant overridden with an unimplemented Java method")),
             });
             self.defns.insert(lhs, Some(val));
             overridden.push(graph.interner().text(lhs).to_string());
@@ -659,7 +657,8 @@ fn fold_constant_decls(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, o
                 }
             }
             Some(DeclBinding::Op(op)) => fold_substituted_constant(tool, graph, d, op, out)?,
-            Some(DeclBinding::Var(_)) | None => {}
+            // `MethodValue.initialize` skips the fingerprint and normalises nothing.
+            Some(DeclBinding::Native(_)) | Some(DeclBinding::Var(_)) | None => {}
         }
     }
     Ok(())
