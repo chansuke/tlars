@@ -15,6 +15,7 @@ mod bindings;
 pub(crate) use bindings::{Bindings, DeclBinding, OpBinding, OpRcd};
 
 use crate::ctx::Ctx;
+use crate::error::EvalErrorKind;
 use crate::eval::{EvalControl, WorkerLocals};
 use crate::globals::TlcGlobals;
 use crate::state::{StateRef, VarTable};
@@ -23,7 +24,7 @@ use crate::value::Value;
 use tlars_msg::{Ec, Report};
 use tlars_sany::Atom;
 use tlars_sany::cfg::{CfgConstant, CfgValue, ModelConfig};
-use tlars_sany::graph::{ExprId, ExprNode, ExprOrOpArg, Level, ModuleNode, OpDefKind, SemanticGraph, SymbolRef};
+use tlars_sany::graph::{ExprId, ExprNode, ExprOrOpArg, Level, ModuleNode, OpDefId, OpDefKind, SemanticGraph, SymbolRef};
 
 /// Command-line additions that `ParameterizedSpecObj` folds into the spec.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -142,7 +143,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         model_values,
         globals,
     };
-    fold_constant_defns(&mut tool, out);
+    fold_constant_defns(&mut tool, out)?;
     process_config(&config, &tool)?;
     Ok(tool)
 }
@@ -586,17 +587,18 @@ fn numeral_value(image: &str) -> Option<i32> {
 /// `processConstantDefns` (`SpecProcessor.java:226-357`): 0-arity constant-level definitions
 /// are evaluated once and replaced by their value. Every failure is swallowed (`catch
 /// (Throwable swallow)`), so the error resurfaces where the definition is used.
-fn fold_constant_defns(tool: &mut Tool, out: &dyn Report) {
+fn fold_constant_defns(tool: &mut Tool, out: &dyn Report) -> Result<(), SpecError> {
     let graph = tool.graph.clone();
     for (_, m) in graph.modules() {
         if !m.is_instantiated || m.parameter_free {
-            fold_module(tool, &graph, m, out);
+            fold_module(tool, &graph, m, out)?;
         }
     }
+    Ok(())
 }
 
-fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn Report) {
-    // Constant declarations carry tool objects only once cfg constants are bound (M3).
+fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn Report) -> Result<(), SpecError> {
+    fold_constant_decls(tool, graph, m, out)?;
     for &d in m.op_defs.iter() {
         let def = graph.op_def(d);
         let home = graph.module(def.module);
@@ -629,7 +631,91 @@ fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn
         }
     }
     for &inner in m.inner_modules.iter() {
-        fold_module(tool, graph, graph.module(inner), out);
+        fold_module(tool, graph, graph.module(inner), out)?;
+    }
+    Ok(())
+}
+
+/// `processConstantDefns`' first loop (`SpecProcessor.java:261-341`): a cfg value bound to a
+/// constant declaration is fully initialised, and a definition bound to one must have the
+/// declaration's arity and, when it takes no argument, is evaluated once up front.
+fn fold_constant_decls(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn Report) -> Result<(), SpecError> {
+    for &d in m.constant_decls.iter() {
+        match tool.bindings.decls[d.index()].clone() {
+            // `IValue.initialize()`: deep normalisation plus a fingerprint whose only other
+            // effect is `convertAndCache` on a lazy class, which no cfg value can be.
+            Some(DeclBinding::Value(v)) => {
+                let mut locals = WorkerLocals::new(0, tool.globals.seed);
+                let mut ev = tool.ev(&mut locals, out);
+                v.deep_normalize(&mut ev).map_err(|_| unimplemented("a cfg constant whose value does not normalise"))?;
+            }
+            Some(DeclBinding::Table(lines)) => {
+                let mut locals = WorkerLocals::new(0, tool.globals.seed);
+                let mut ev = tool.ev(&mut locals, out);
+                for (args, value) in lines.iter() {
+                    for v in args.iter().chain(std::iter::once(value)) {
+                        v.deep_normalize(&mut ev).map_err(|_| unimplemented("a cfg constant whose value does not normalise"))?;
+                    }
+                }
+            }
+            Some(DeclBinding::Op(op)) => fold_substituted_constant(tool, graph, d, op, out)?,
+            Some(DeclBinding::Var(_)) | None => {}
+        }
+    }
+    Ok(())
+}
+
+/// The `C <- Op` half of that loop. TLC caches the value on `Op`, not on `C`, so a
+/// non-deterministic definition is re-evaluated at every use of `C` (issue 648).
+fn fold_substituted_constant(
+    tool: &mut Tool,
+    graph: &SemanticGraph,
+    decl: tlars_sany::graph::DeclId,
+    op: OpDefId,
+    out: &dyn Report,
+) -> Result<(), SpecError> {
+    let names = || {
+        let c = graph.interner().text(graph.decl(decl).name).to_string();
+        let o = graph.interner().text(graph.op_def(op).name).to_string();
+        (c, o)
+    };
+    if graph.op_def(op).params.len() as i32 != graph.decl(decl).arity {
+        let (c, o) = names();
+        return Err(SpecError::Config { ec: Ec::TLC_CONFIG_WRONG_SUBSTITUTION_NUMBER_OF_ARGS, params: vec![c, o] });
+    }
+    if !graph.op_def(op).params.is_empty() {
+        return Ok(());
+    }
+    let body = graph.op_def(op).body.expect("a user definition has a body");
+    let mut locals = WorkerLocals::new(0, tool.globals.seed);
+    let evaluated = {
+        let mut ev = tool.ev(&mut locals, out);
+        ev.eval(body, &Ctx::EMPTY, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR)
+            .and_then(|v| v.deep_normalize(&mut ev).map(|()| v))
+    };
+    match evaluated {
+        Ok(v) => {
+            tool.bindings.op_defs[op.index()] = Some(OpBinding::Value(v));
+            Ok(())
+        }
+        // `catch (Assert.TLCRuntimeException | EvalException e)`: only a genuinely
+        // non-constant definition is reported; any other failure resurfaces at the use site
+        // (issue 1109). The addendum is the exception's own message, which for
+        // `Assert.fail(ec, params)` is the framed message.
+        Err(e) => {
+            if !matches!(e.kind, EvalErrorKind::Runtime | EvalErrorKind::Eval) {
+                return Err(unimplemented(&format!("a constant substitution that fails with: {}", e.message)));
+            }
+            if graph.level(body) == Level::Constant {
+                return Ok(());
+            }
+            let addendum = match e.kind {
+                EvalErrorKind::Eval => String::new(),
+                _ => format!(" - specifically: {}", e.message),
+            };
+            let (c, o) = names();
+            Err(SpecError::Config { ec: Ec::TLC_CONFIG_SUBSTITUTION_NON_CONSTANT, params: vec![c, o, addendum] })
+        }
     }
 }
 
