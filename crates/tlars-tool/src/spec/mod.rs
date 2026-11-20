@@ -71,6 +71,8 @@ pub struct ToolInput<'a> {
     pub config: ModelConfig,
     pub globals: TlcGlobals,
     pub extras: CliSpecExtras,
+    /// `System.in`, which `TLCSet("pause", TRUE)` waits on.
+    pub stdin: Box<dyn std::io::Read + Send>,
     pub out: &'a dyn Report,
 }
 
@@ -93,7 +95,7 @@ pub enum SpecError {
 /// `SpecProcessor` from the root-module lookup on (`SpecProcessor.java:468`); the SANY
 /// checks and TLC_STARTING before it are the caller's.
 pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
-    let ToolInput { graph, config, globals, extras, out } = input;
+    let ToolInput { graph, config, globals, extras, stdin, out } = input;
     if extras != CliSpecExtras::default() {
         todo!("M3: ParameterizedSpecObj extras");
     }
@@ -150,6 +152,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         globals,
         registers: std::sync::Mutex::new(crate::effects::Registers::default()),
         set_properties: std::sync::Mutex::new(Vec::new()),
+        stdin: std::sync::Mutex::new(stdin),
         main_checker: std::sync::OnceLock::new(),
     };
     let mut defns = defns;

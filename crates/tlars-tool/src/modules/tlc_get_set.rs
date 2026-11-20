@@ -14,6 +14,7 @@ use crate::state::StateRef;
 use crate::tool::NamedCheck;
 use crate::value::Value;
 use tlars_msg::Ec;
+use std::io::Read;
 use tlars_sany::graph::{ExprOrOpArg, Loc, OpDefId, SymbolRef};
 use tlars_sany::{Atom, JavaClass};
 
@@ -478,9 +479,24 @@ pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
                 }
                 return Ok(Value::Bool(true));
             }
+            // `synchronized (mc.theStateQueue) { println; System.in.read(); }`: the prompt is
+            // a plain line, not an MP message, and the run goes on after one byte. Reading
+            // it under the `stdin` lock is what the Java monitor does, since nothing else
+              // touches the queue while a worker waits (`TLCGetSet.java:518-535`).
             "pause" => {
-                if asked {
-                    return Err(EvalError::unimplemented("TLCSet(\"pause\", TRUE), which waits on standard input (M3 unit 5)".into()));
+                // `mainChecker instanceof ModelChecker`: with no model checker, nothing
+                // prompts and nothing is read.
+                if asked && ev.tool().main_checker().is_some() {
+                    ev.out().raw("Press enter to resume model checking.\n");
+                    let mut stdin = ev.tool().stdin.lock().expect("stdin");
+                    let mut byte = [0u8; 1];
+                    // `catch (IOException e) { throw new EvalException(EC.GENERAL, e.getMessage()) }`;
+                    // end of file is `read() == -1`, not an exception, so the run resumes.
+                    if let Err(e) = stdin.read(&mut byte) {
+                        let message = e.to_string();
+                        drop(stdin);
+                        return Err(eval_exception(ev, Ec::GENERAL, &[&message]));
+                    }
                 }
                 return Ok(Value::Bool(true));
             }

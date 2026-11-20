@@ -107,6 +107,9 @@ pub struct Tool {
     pub(crate) set_properties: std::sync::Mutex<Vec<(String, String)>>,
     /// `TLCGlobals.mainChecker` as `TLCGet`/`TLCSet` use it, set once by the checker. Unset
     /// until then, which is TLC's `null`.
+    /// `System.in`: `TLCSet("pause", TRUE)` reads one byte from it under the lock TLC takes
+    /// on the state queue, so one paused worker at a time prompts and waits.
+    pub(crate) stdin: std::sync::Mutex<Box<dyn std::io::Read + Send>>,
     pub(crate) main_checker: std::sync::OnceLock<Arc<dyn crate::effects::MainChecker>>,
 }
 

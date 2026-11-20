@@ -128,7 +128,9 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
         Err(SanyFailed::Exit(_)) => return Err(Exit::Returned(print_failure(out, Ec::TLC_PARSING_FAILED))),
     };
     let globals = globals(session);
-    let tool = match tlars_tool::build_tool(ToolInput { graph, config, globals, extras: session.options.extras.clone(), out }) {
+    // Handed over once: the `Tool` outlives this scope, and nothing else reads `System.in`.
+    let stdin = session.stdin.lock().expect("stdin").take().unwrap_or_else(|| Box::new(std::io::empty()));
+    let tool = match tlars_tool::build_tool(ToolInput { graph, config, globals, extras: session.options.extras.clone(), stdin, out }) {
         Ok(tool) => tool,
         Err(SpecError::Config { ec, params }) => {
             let params = params.iter().map(String::as_str).collect::<Vec<_>>();

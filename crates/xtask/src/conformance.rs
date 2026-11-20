@@ -209,6 +209,8 @@ fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<(Outcome, boo
                 cwd: dir.clone(),
                 stdout: Box::new(SharedBuf(out.clone())),
                 stderr: Box::new(std::io::sink()),
+                // Hermetic: `System.in` at end of file, so a paused run resumes at once.
+                stdin: Box::new(std::io::empty()),
                 env: tlars_check::Env::hermetic(),
                 unimplemented: Some(flag.clone()),
             };

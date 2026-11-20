@@ -44,6 +44,7 @@ fn usage_errors_match_tlc() {
             cwd: std::env::temp_dir(),
             stdout: Box::new(out.clone()),
             stderr: Box::new(std::io::sink()),
+            stdin: Box::new(std::io::empty()),
             env: Env::hermetic(),
             unimplemented: None,
         };

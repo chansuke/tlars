@@ -12,6 +12,8 @@ pub(crate) struct Session<'a> {
     pub(crate) reporter: Reporter<'a>,
     /// `ToolIO.err`.
     pub(crate) stderr: Mutex<Box<dyn Write + Send + 'a>>,
+    /// `System.in`, handed to the `Tool` so `TLCSet("pause", TRUE)` can wait on it.
+    pub(crate) stdin: Mutex<Option<Box<dyn std::io::Read + Send>>>,
     /// Created before the cfg is parsed: cfg strings take the first tokens.
     pub(crate) interner: Arc<Interner>,
     pub(crate) options: Options,
@@ -50,6 +52,7 @@ impl<'a> Session<'a> {
         Session {
             reporter,
             stderr: Mutex::new(inv.stderr),
+            stdin: Mutex::new(Some(inv.stdin)),
             interner: Arc::new(Interner::new()),
             start_millis: inv.env.clock.now_millis(),
             options,

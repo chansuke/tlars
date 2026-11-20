@@ -33,6 +33,9 @@ pub struct Invocation<'a> {
     pub cwd: PathBuf,
     pub stdout: Box<dyn Write + Send + 'a>,
     pub stderr: Box<dyn Write + Send + 'a>,
+    /// What `System.in` reads. `TLCSet("pause", TRUE)` is its only reader: it takes one byte
+    /// and goes on, so a reader at end of file resumes the run at once.
+    pub stdin: Box<dyn std::io::Read + Send>,
     pub env: Env,
     /// Set by the run when a message reports a construct tlars does not implement. The
     /// conformance harness uses it to tell "blocked on a missing feature" from a real
@@ -49,6 +52,7 @@ impl Invocation<'static> {
             cwd: std::env::current_dir().unwrap_or_default(),
             stdout: Box::new(std::io::stdout()),
             stderr: Box::new(std::io::stderr()),
+            stdin: Box::new(std::io::stdin()),
             env: Env::process(),
             unimplemented: None,
         }

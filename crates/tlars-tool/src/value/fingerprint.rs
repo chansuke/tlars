@@ -229,6 +229,7 @@ mod tests {
                 config,
                 globals: globals(poly),
                 extras: Default::default(),
+                stdin: Box::new(std::io::empty()),
                 out: &out,
             })
             .expect("the fixture module builds a tool");
