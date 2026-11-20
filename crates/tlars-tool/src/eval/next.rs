@@ -75,7 +75,7 @@ impl<'t> Ev<'t> {
         s1: &mut PartialState,
         sink: &mut dyn NextSink,
     ) -> Flow {
-        self.enter_generator(pred);
+        self.enter_generator(pred)?;
         let r = self.next_impl_inner(a, pred, acts, c, s0, s1, sink);
         self.leave_generator(r.as_ref().err());
         r
@@ -513,7 +513,7 @@ impl<'t> Ev<'t> {
         s1: &mut PartialState,
         sink: &mut dyn NextSink,
     ) -> Flow {
-        self.enter_generator(expr);
+        self.enter_generator(expr)?;
         let r = self.process_unchanged_inner(a, expr, acts, c, s0, s1, sink);
         self.leave_generator(r.as_ref().err());
         r

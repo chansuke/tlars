@@ -37,7 +37,7 @@ impl<'t> Ev<'t> {
 
     /// `getInitStates(SemanticNode, ActionItemList, Context, TLCState, IStateFunctor)`.
     pub(crate) fn init_impl(&mut self, pred: ExprId, acts: Acts<'_>, c: &Ctx, ps: &mut PartialState, sink: &mut dyn InitSink) -> Flow {
-        self.enter_generator(pred);
+        self.enter_generator(pred)?;
         let r = self.init_impl_inner(pred, acts, c, ps, sink);
         self.leave_generator(r.as_ref().err());
         r

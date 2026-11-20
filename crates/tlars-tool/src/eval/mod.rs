@@ -484,12 +484,21 @@ impl<'t> Ev<'t> {
     }
 
     /// `callStack.push(node)` around a generator step, released the same way as `leave`.
-    pub(crate) fn enter_generator(&mut self, expr: ExprId) {
+    /// The depth counter is the same one `enter` uses, because TLC's generators and `eval`
+    /// recurse on one native stack: a `NEXT` that only recurses through the generator must
+    /// still end in `SYSTEM_STACK_OVERFLOW` and a counterexample, not in a crash.
+    pub(crate) fn enter_generator(&mut self, expr: ExprId) -> EvalResult<()> {
+        self.depth += 1;
+        if self.depth > MAX_EVAL_DEPTH {
+            return Err(self.stack_overflow());
+        }
         if let Some(cs) = self.locals.call_stack.as_mut() {
             cs.push(expr);
         }
+        Ok(())
     }
     pub(crate) fn leave_generator(&mut self, failure: Option<&crate::error::Halt>) {
+        self.depth -= 1;
         let Some(cs) = self.locals.call_stack.as_mut() else { return };
         match failure {
             Some(crate::error::Halt::Eval(e)) => freeze_for(cs, Some(&e.kind)),
