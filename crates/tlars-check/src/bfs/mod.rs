@@ -350,7 +350,14 @@ impl<'a> ModelChecker<'a> {
         let keep = !matches!(e.kind, tlars_tool::EvalErrorKind::StackOverflow | tlars_tool::EvalErrorKind::Assertion);
         if self.set_err_with(ErrState::Eval { pred: cur.clone(), succ: succ.cloned(), error: e.clone() }, ec, keep) {
             if !(ec == Ec::GENERAL && e.message.is_empty()) {
-                self.out.error(ec, &[&e.message]);
+                // `MP.printError(ec, e)` with the exception itself: under `EC.GENERAL` that
+                // is `ECGeneralMsg("", throwable)`, not the bare message.
+                if ec == Ec::GENERAL {
+                    let body = tlars_msg::unexpected_exception(java_class(&e), &e.message);
+                    self.out.error(Ec::GENERAL, &[&body]);
+                } else {
+                    self.out.error(ec, &[&e.message]);
+                }
             }
             let mut locals = WorkerLocals::new(0, self.seed);
             let mut ev = self.tool.ev(&mut locals, self.out);
@@ -633,6 +640,17 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
         }
         self.failed_state = None;
         Ok(())
+    }
+}
+
+/// The Java class `ECGeneralMsg` names. TLC disguises its own `Assert.TLCRuntimeException`
+/// as `java.lang.RuntimeException` (`MP.java:1754-1761`).
+fn java_class(e: &EvalError) -> &str {
+    use tlars_tool::EvalErrorKind;
+    match &e.kind {
+        EvalErrorKind::Jvm { class } => class,
+        EvalErrorKind::Eval => "tlc2.tool.EvalException",
+        _ => "java.lang.RuntimeException",
     }
 }
 
