@@ -500,11 +500,10 @@ impl<'a> ModelChecker<'a> {
     /// `modelCheckImpl`'s `keepCallStack` branch (`ModelChecker.java:299-318`): re-run the
     /// failing step with the call stack recorded and print `TLC_NESTED_EXPRESSION`.
     fn replay_next_call_stack(&self, pred: &Queued) -> Ec {
-        // TLC runs the replay on a worker of its own (`new Worker(4223, ...)`), which never
-        // writes to the trace because every fingerprint it meets is already in the FPSet.
-        let mut worker = worker::Worker::recording(0, self);
-        let flow = worker.expand(pred);
-        let stack = worker.take_call_stack().expect("recording was switched on");
+        let mut locals = WorkerLocals::new(0, self.seed);
+        locals.record_call_stack();
+        let flow = self.replay_do_next(&mut locals, pred);
+        let stack = locals.take_call_stack().expect("recording was switched on");
         let text = stack.to_tlc_string(self.tool);
         match flow {
             Err(Halt::Eval(e)) if matches!(e.kind, tlars_tool::EvalErrorKind::Fingerprint { .. }) => {
@@ -524,6 +523,33 @@ impl<'a> ModelChecker<'a> {
     fn print_trace_and_stop(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<&State>) {
         self.print_trace(ev, cur, succ);
         self.queue.finish_all();
+    }
+
+    /// `ModelChecker.doNext` (`ModelChecker.java:416-480`), which the replay runs instead of
+    /// `Worker.run`. It generates every successor of an action into a vector first and then
+    /// runs the checks, so a failure in a CONSTRAINT or an invariant happens with no
+    /// next-state generator frame on the nested-expression stack.
+    fn replay_do_next(&self, locals: &mut WorkerLocals, cur: &Queued) -> Flow {
+        let count = self.tool.actions().len();
+        for i in 0..count {
+            let id = self.tool.actions()[i].id();
+            let mut succs = Vec::new();
+            let mut ev = self.tool.ev(locals, self.out);
+            ev.next_states_of(&cur.state, id, &mut Collect { states: &mut succs })?;
+            for succ in succs.iter() {
+                let in_model = ev.is_in_model(succ)? && ev.is_in_actions(&cur.state, succ)?;
+                let mut unseen = true;
+                if in_model {
+                    let fp = ev.fingerprint(succ)?;
+                    unseen = self.fpset.put(fp.into()) == crate::fpset::Seen::New;
+                }
+                if unseen {
+                    self.check_invariants(&mut ev, cur, succ)?;
+                }
+                self.check_implied_actions(&mut ev, cur, succ)?;
+            }
+        }
+        Ok(())
     }
 
     /// `ConcurrentTLCTrace.printTrace(s1, s2)` (`TLCTrace.java:349-443`): 2121, then the
@@ -708,6 +734,20 @@ fn java_class(e: &EvalError) -> &str {
         EvalErrorKind::Jvm { class } => class,
         EvalErrorKind::Eval => "tlc2.tool.EvalException",
         _ => "java.lang.RuntimeException",
+    }
+}
+
+/// `StateVec`: the successors `doNext` collects before it checks any of them.
+struct Collect<'s> {
+    states: &'s mut Vec<State>,
+}
+
+impl tlars_tool::NextSink for Collect<'_> {
+    fn add_next(&mut self, ev: &mut Ev<'_>, _s0: &State, _action: ActionId, s1: &PartialState) -> Flow {
+        if let Some(state) = ev.complete(s1) {
+            self.states.push(state);
+        }
+        Ok(())
     }
 }
 
