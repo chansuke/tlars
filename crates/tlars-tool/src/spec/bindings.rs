@@ -5,22 +5,30 @@ use crate::state::VarSlot;
 use crate::value::Value;
 use tlars_sany::graph::{ExprId, OpDefId};
 
+#[derive(Clone)]
 pub(crate) enum OpBinding {
-    /// `processConstantDefns` result (deep-normalised).
-    Folded(Value),
+    /// A `Value` tool object: a cfg `Op = v` or a `processConstantDefns` result
+    /// (deep-normalised).
+    Value(Value),
     /// Java-module override (`MethodValue`), evaluation only.
     Native(NativeId),
     /// cfg `Op <- Other`.
     Replaced(OpDefId),
     /// cfg `Op(args) = v` (`OpRcdValue`).
-    Table(Box<[(Box<[Value]>, Value)]>),
+    Table(OpRcd),
     /// A definition TLC overrides with a Java class tlars does not implement yet.
     Unimplemented,
 }
 
+/// `OpRcdValue`: the cfg's `op(a, b) = v` lines for one name, in cfg order.
+pub(crate) type OpRcd = std::sync::Arc<[(Box<[Value]>, Value)]>;
+
+#[derive(Clone)]
 pub(crate) enum DeclBinding {
     /// cfg `C = v`.
     Value(Value),
+    /// cfg `C(args) = v` on a declared constant operator.
+    Table(OpRcd),
     /// cfg `C <- Op`: evaluated on every use unless aggressiveConstantCaching (issue 648).
     Op(OpDefId),
     Var(VarSlot),

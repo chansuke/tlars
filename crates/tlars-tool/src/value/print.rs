@@ -211,6 +211,26 @@ impl Value {
     }
 }
 
+/// `OpRcdValue.toString` (`OpRcdValue.java:246-275`): `{ <a, b, v>, <c, d, w>}`, with one
+/// space after the brace and none before the closing one.
+pub(crate) fn op_rcd_string(ev: &mut Ev<'_>, lines: &crate::spec::OpRcd) -> EvalResult<String> {
+    let mut out = String::from("{ ");
+    for (i, (args, value)) in lines.iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        out.push('<');
+        for a in args.iter() {
+            out.push_str(&a.to_tlc_string(ev)?);
+            out.push_str(", ");
+        }
+        out.push_str(&value.to_tlc_string(ev)?);
+        out.push('>');
+    }
+    out.push('}');
+    Ok(out)
+}
+
 /// The expanded form a lazy set prints under `TLCGlobals.expand`, or `None` when it stays
 /// symbolic. TLC swallows any `Throwable` from the expansion and falls back to the symbolic
 /// form; a construct tlars does not implement is not one of TLC's failures, so it surfaces.
