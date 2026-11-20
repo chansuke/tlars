@@ -1,7 +1,9 @@
 //! Compares tlars-java with JDK 21 output recorded by `tools/golden/JavaGolden.java`.
 
 use tlars_java::time::Pattern;
-use tlars_java::{Hashtable, JavaRandom, decimal_format_grouped, double_to_string, reciprocal_two_digits, string_hash_code};
+use tlars_java::{
+    Hashtable, JavaRandom, decimal_format_grouped, double_to_string, pretty_print, reciprocal_two_digits, string_hash_code,
+};
 
 fn golden(name: &str) -> String {
     let path = format!("{}/tests/golden/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -185,4 +187,35 @@ fn hashmap_order_matches_java() {
         let order: Vec<String> = m.iter().map(|(k, _)| k.to_string()).collect();
         assert_eq!(order.join(","), f[2], "{line}");
     }
+}
+
+#[test]
+fn pretty_print_matches_tlc() {
+    // "<width>\t<flat value>\t<expected>", the two texts escaped by `JavaGolden.esc`.
+    let unescape = |s: &str| -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut chars = s.chars();
+        while let Some(c) = chars.next() {
+            match (c, chars.clone().next()) {
+                ('\\', Some('n')) => out.push('\n'),
+                ('\\', Some('t')) => out.push('\t'),
+                ('\\', Some('r')) => out.push('\r'),
+                ('\\', Some('\\')) => out.push('\\'),
+                _ => {
+                    out.push(c);
+                    continue;
+                }
+            }
+            chars.next();
+        }
+        out
+    };
+    let mut cases = 0;
+    for line in golden("pprint.txt").lines() {
+        let f: Vec<&str> = line.split('\t').collect();
+        let (width, flat, expected) = (f[0].parse().unwrap(), unescape(f[1]), unescape(f[2]));
+        assert_eq!(pretty_print(&flat, width), expected, "width {width} of {flat:?}");
+        cases += 1;
+    }
+    assert_eq!(cases, 1243);
 }
