@@ -745,7 +745,10 @@ fn fold_substituted_constant(
             if !matches!(e.kind, EvalErrorKind::Runtime | EvalErrorKind::Eval) {
                 return Err(unimplemented(&format!("a constant substitution that fails with: {}", e.message)));
             }
-            if graph.level(body) == Level::Constant {
+            // `getLevelBound(body, Context.Empty)`, not SANY's own level (`:330`), for the same
+            // reason as `fold_module`: SANY's rule drops an argument the body never uses, so
+            // `PrintT(ENABLED A)` is constant to SANY while `getLevelBound` finds the ENABLED.
+            if { tool.ev(&mut locals, out).level_bound(body, &Ctx::EMPTY) } == 0 {
                 return Ok(());
             }
             let addendum = match e.kind {
