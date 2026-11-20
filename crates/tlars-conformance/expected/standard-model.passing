@@ -3,3 +3,6 @@ tlc/standard/internal/missing_deps_tlapluscounterexample
 tlc/standard/internal/missing_deps_tlcactiontrace
 tlc/standard/internal/missing_deps_tlctespec
 tlc/standard/internal/missing_deps_tlctraceplain
+tlc/standard/real_time/extends_declares_now
+tlc/standard/real_time/now_next_real_enumeration
+tlc/standard/real_time/rtbound_unused_is_harmless
