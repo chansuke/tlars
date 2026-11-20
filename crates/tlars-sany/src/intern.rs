@@ -132,3 +132,24 @@ impl Interner {
         self.len() == 0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A class initialiser runs once, leaves the token a string already had, and hands out the
+    /// rest in source order: that order is what sorts the fields of a `TLCGet("stats")` record.
+    #[test]
+    fn class_initialiser_runs_once_and_keeps_earlier_tokens() {
+        let interner = Interner::new();
+        let stats = interner.intern("stats");
+        interner.ensure(JavaClass::TlcRuntime);
+        let after = interner.len();
+        interner.ensure(JavaClass::TlcRuntime);
+        assert_eq!(interner.len(), after, "a second ensure interns nothing");
+        assert_eq!(interner.intern("stats"), stats, "a string interned before keeps its token");
+        let order = ["worker", "duration", "generated", "diameter", "distinct", "initial", "queue"];
+        let tokens: Vec<i32> = order.iter().map(|s| interner.intern(s).tok()).collect();
+        assert!(tokens.windows(2).all(|w| w[0] < w[1]), "TLCGetSet declaration order, got {tokens:?}");
+    }
+}
