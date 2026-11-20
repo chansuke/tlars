@@ -117,6 +117,27 @@ impl Case {
         self.metadata.flags.iter().any(|f| f == "exit-only")
     }
 
+    /// The later milestone a case needs, if any: CLI modes and options of M5, liveness
+    /// (`PROPERTY`) of M4, more than one worker of M6. These cases are recorded but not run.
+    pub fn deferred_to(&self) -> Option<&'static str> {
+        const M5_ARGS: &[&str] = &[
+            "-simulate", "-generate", "-dfid", "-continue", "-difftrace", "-dump", "-dumpTrace", "-coverage", "-inv",
+            "-invlevel", "-postCondition", "-loadTrace",
+        ];
+        let args = &self.metadata.args;
+        if args.iter().any(|a| M5_ARGS.contains(&a.as_str())) {
+            return Some("M5");
+        }
+        let config = self.metadata.config.as_deref().unwrap_or("");
+        if config.lines().any(|l| matches!(l.split_whitespace().next(), Some("PROPERTY" | "PROPERTIES"))) {
+            return Some("M4");
+        }
+        if args.windows(2).any(|w| w[0] == "-workers" && w[1] != "1") {
+            return Some("M6");
+        }
+        None
+    }
+
     /// `getContexts`.
     pub fn contexts(&self) -> Vec<Context> {
         if !self.is_expression() {
@@ -257,7 +278,16 @@ fn parse_header(text: &str) -> Metadata {
                 block.truncate(block.trim_end_matches('\n').len());
             }
         }
+        // A flow list (`[a, "b"]`) or, with nothing after the colon, a block list (`- a`).
         let list = || -> Vec<String> {
+            if value.is_empty() {
+                return block
+                    .lines()
+                    .filter_map(|l| l.trim().strip_prefix('-'))
+                    .map(|s| s.trim().trim_matches('"').to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
             value
                 .trim_start_matches('[')
                 .trim_end_matches(']')
@@ -328,6 +358,13 @@ impl Expectations {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn block_list_args() {
+        let m = parse_header("outcome: success\nargs:\n  - -simulate\n  - num=1\n  - -depth\n  - \"2\"\nconfig: |\n  INIT Init\n");
+        assert_eq!(m.args, ["-simulate", "num=1", "-depth", "2"]);
+        assert_eq!(m.config.as_deref(), Some("INIT Init\n"));
+    }
 
     #[test]
     fn header_and_contexts() {

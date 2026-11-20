@@ -231,7 +231,14 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
     let path = expected_path(root, args);
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}; run `xtask conformance record` first", path.display()))?;
     let expected = Arc::new(Expectations::parse(&text));
-    let cases: Vec<Case> = selected(args)?.into_iter().filter(|c| expected.0.contains_key(&(c.id.clone(), args.context))).collect();
+    let (deferred, cases): (Vec<Case>, Vec<Case>) = selected(args)?
+        .into_iter()
+        .filter(|c| expected.0.contains_key(&(c.id.clone(), args.context)))
+        .partition(|c| c.deferred_to().is_some());
+    let mut later: BTreeMap<&str, usize> = BTreeMap::new();
+    for c in &deferred {
+        *later.entry(c.deferred_to().expect("deferred")).or_default() += 1;
+    }
     // Panics are verdicts here; the default hook would print each one.
     std::panic::set_hook(Box::new(|_| {}));
     let context = args.context;
@@ -274,6 +281,9 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
         println!("  {c:<16} {p:>4}/{n}");
     }
     println!("{} {}: {}/{total} pass", args.suite, context.name(), passing.len());
+    if !later.is_empty() {
+        println!("  not run (later milestones): {}", later.iter().map(|(m, n)| format!("{m} {n}")).collect::<Vec<_>>().join(", "));
+    }
     for (m, n) in panics.iter().rev().take(5) {
         println!("  {n:>4} panics: {m}");
     }
