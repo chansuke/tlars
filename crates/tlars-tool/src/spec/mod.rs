@@ -147,6 +147,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         model_values,
         globals,
         registers: std::sync::Mutex::new(crate::effects::Registers::default()),
+        set_properties: std::sync::Mutex::new(Vec::new()),
     };
     let mut defns = defns;
     fold_constant_defns(&mut tool, &mut defns, out)?;
@@ -254,6 +255,10 @@ impl CfgBind<'_> {
     /// Methods tlars does not implement yet stay unimplemented natives.
     fn module_overrides(&mut self) {
         let graph = self.graph;
+        // `TLCBuiltInOverrides.get()`: the annotated classes are loaded here whatever the
+        // spec extends, so their static `UniqueString`s are interned now, after parsing. The
+        // tokens are what orders the fields of a `TLCGet("stats")`-style record.
+        graph.interner().ensure(tlars_sany::JavaClass::TlcRuntime);
         for (mid, m) in graph.modules() {
             let module = graph.interner().text(m.name);
             if !crate::modules::JAVA_MODULES.contains(&&*module) {

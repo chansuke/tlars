@@ -107,10 +107,20 @@ impl Interner {
         tlars_java::string_hash_code(&self.text(a))
     }
 
-    /// Run `class`'s static initialiser once: intern its static strings in source order.
+    /// Run `class`'s static initialiser once: intern its static strings in source order. A
+    /// string an earlier event already interned keeps the token it got then, exactly as
+    /// `uniqueStringOf` hands back the existing `UniqueString`.
     pub fn ensure(&self, class: JavaClass) {
-        let _strings: &[&str] = crate::fidelity::class_statics(class);
-        todo!()
+        {
+            let mut done = self.initialised.lock().expect("class initialisers");
+            if done[class as usize] {
+                return;
+            }
+            done[class as usize] = true;
+        }
+        for s in crate::fidelity::class_statics(class) {
+            self.intern(s);
+        }
     }
 
     /// Number of tokens handed out; runtime strings created during search come after this.
