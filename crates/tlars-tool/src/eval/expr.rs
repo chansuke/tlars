@@ -145,8 +145,11 @@ impl<'t> Ev<'t> {
                     None => Resolved::Value(Value::Undef),
                 },
             },
-            SymbolRef::Param(_) => unreachable!("SANY binds every parameter in the context"),
-            SymbolRef::Thm(_) | SymbolRef::Module(_) => Resolved::Value(Value::Undef),
+            // A formal parameter the context does not bind, which happens when TLC walks a
+            // definition body without expanding its parameters (`processConfigSpec`'s level
+            // check). `lookup` then returns the node itself, which resolves to nothing
+            // (`SymbolNodeValueLookupProvider.java:86-118`).
+            SymbolRef::Param(_) | SymbolRef::Thm(_) | SymbolRef::Module(_) => Resolved::Value(Value::Undef),
         }
     }
 

@@ -777,7 +777,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
                         return Err(SpecError::Config { ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG, params: vec![spec.to_string()] });
                     }
                     let body = graph.op_def(d).body.expect("a user definition has a body");
-                    pass.config_spec(body, &Ctx::EMPTY, tool, out)?;
+                    pass.config_spec(body, &Ctx::EMPTY, false, tool, out)?;
                 }
                 None => {
                     return Err(SpecError::Config {
@@ -941,7 +941,7 @@ impl ConfigPass {
     /// A substitution is pushed onto the context here instead of wrapping the expression in
     /// a fresh `SubstInNode` (`Specs.addSubsts`); the bindings it makes are the same ones
     /// `getNextStates` would push at generation time, and they are not cachable either way.
-    fn config_spec(&mut self, pred: ExprId, c: &Ctx, tool: &Tool, out: &dyn Report) -> Result<(), SpecError> {
+    fn config_spec(&mut self, pred: ExprId, c: &Ctx, substituted: bool, tool: &Tool, out: &dyn Report) -> Result<(), SpecError> {
         let graph = tool.graph.clone();
         match graph.expr(pred) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
@@ -951,9 +951,10 @@ impl ConfigPass {
                     let mut ev = tool.ev(&mut locals, out);
                     ev.subst_context(substs, c)
                 };
-                return self.config_spec(body, &c1, tool, out);
+                // `subs.cons(pred1)`: from here on the formula is under a substitution.
+                return self.config_spec(body, &c1, true, tool, out);
             }
-            ExprNode::LetIn { body, .. } => return self.config_spec(*body, c, tool, out),
+            ExprNode::LetIn { body, .. } => return self.config_spec(*body, c, substituted, tool, out),
             ExprNode::OpAppl { .. } => {}
             _ => {}
         }
@@ -965,13 +966,17 @@ impl ConfigPass {
                 (ev.opcode(op), ev.lookup(op, c, StateRef::Empty, false))
             };
             if args.is_empty() {
-                return self.config_spec_name(pred, op, c, tool, out, resolved);
+                return self.config_spec_name(pred, op, c, substituted, tool, out, resolved);
             }
             // Parameterised instantiation: `Spec == R(42)` where `R(c) == INSTANCE ...`.
+            // `subs.isEmpty()` (`SpecProcessor.java:1160`): TLC refuses to expand a
+            // parameterised operator inside a substitution rather than walk the body in a
+            // context that does not match it.
             if let crate::eval::expr::Resolved::UserOp(d) | crate::eval::expr::Resolved::Binding(crate::ctx::Binding::OpDef(d)) = resolved
                 && graph.op_def(d).body.is_some()
                 && !graph.op_def(d).recursive
                 && graph.op_def(d).params.len() == args.len()
+                && !substituted
             {
                 let body = graph.op_def(d).body.expect("just checked");
                 let mut locals = WorkerLocals::new(0, tool.globals.seed);
@@ -979,7 +984,7 @@ impl ConfigPass {
                     let mut ev = tool.ev(&mut locals, out);
                     ev.op_context(d, &args, c, false)
                 };
-                return self.config_spec(body, &c1, tool, out);
+                return self.config_spec(body, &c1, substituted, tool, out);
             }
             match code {
                 Some(Builtin::TemporalExists | Builtin::TemporalForall) => {
@@ -987,12 +992,12 @@ impl ConfigPass {
                 }
                 Some(Builtin::ConjList | Builtin::Land) => {
                     for a in args.iter() {
-                        self.config_spec(a.expect_expr(), c, tool, out)?;
+                        self.config_spec(a.expect_expr(), c, substituted, tool, out)?;
                     }
                     return Ok(());
                 }
                 Some(Builtin::Box) => return self.config_spec_box(pred, &args, c, tool, out),
-                Some(Builtin::Nop) => return self.config_spec(args[0].expect_expr(), c, tool, out),
+                Some(Builtin::Nop) => return self.config_spec(args[0].expect_expr(), c, substituted, tool, out),
                 _ => {}
             }
         }
@@ -1005,6 +1010,7 @@ impl ConfigPass {
         pred: ExprId,
         op: tlars_sany::graph::SymbolRef,
         c: &Ctx,
+        substituted: bool,
         tool: &Tool,
         out: &dyn Report,
         resolved: crate::eval::expr::Resolved,
@@ -1030,11 +1036,11 @@ impl ConfigPass {
                     self.init_preds.push(Pred { expr: body, ctx: c.clone(), op_def: Some(d) });
                     return Ok(());
                 }
-                self.config_spec(body, c, tool, out)
+                self.config_spec(body, c, substituted, tool, out)
             }
             Resolved::Binding(crate::ctx::Binding::Thunk(t)) => {
                 let (e, tc) = (t.expr, t.ctx.clone());
-                self.config_spec(e, &tc, tool, out)
+                self.config_spec(e, &tc, substituted, tool, out)
             }
             Resolved::Value(Value::Bool(true)) | Resolved::Binding(crate::ctx::Binding::Value(Value::Bool(true))) => Ok(()),
             Resolved::Value(Value::Bool(false)) | Resolved::Binding(crate::ctx::Binding::Value(Value::Bool(false))) => {
