@@ -13,6 +13,10 @@ pub(super) struct Worker<'a> {
     mc: &'a ModelChecker<'a>,
     locals: WorkerLocals,
     sink: SinkState,
+    /// Which `stats` slot this worker reports into. The call-stack replay runs on a worker
+    /// TLC never registers (`new Worker(4223, ...)`), so its counters stay out of the
+    /// statistics the summary prints.
+    stats: Option<usize>,
 }
 
 /// The part of the worker that `addElement` mutates.
@@ -30,7 +34,7 @@ struct SinkState {
 impl<'a> Worker<'a> {
     pub(super) fn new(id: u16, mc: &'a ModelChecker<'a>) -> Self {
         let locals = WorkerLocals::new(id, mc.seed);
-        Worker { id, mc, locals, sink: SinkState { generated: 0, unseen: 0, live_successors: None, live_multiplier: 1 } }
+        Worker { id, mc, locals, sink: SinkState { generated: 0, unseen: 0, live_successors: None, live_multiplier: 1 }, stats: Some(id as usize) }
     }
 
     /// A worker whose evaluation records the nested-expression stack, for the replay TLC
@@ -38,6 +42,7 @@ impl<'a> Worker<'a> {
     pub(super) fn recording(id: u16, mc: &'a ModelChecker<'a>) -> Self {
         let mut w = Worker::new(id, mc);
         w.locals.record_call_stack();
+        w.stats = None;
         w
     }
 
@@ -85,11 +90,13 @@ impl<'a> Worker<'a> {
                     mc.next_failed(&cur, None, e);
                 }
             }
-            mc.stats[self.id as usize].generated.store(self.sink.generated, Relaxed);
-            // `outDegree.addSample(unseenSuccessorStates)`, with 32 buckets and the last one
-            // holding the overflow.
-            let bucket = (self.sink.unseen as usize).min(31);
-            mc.stats[self.id as usize].out_degree.lock().expect("out degree")[bucket] += 1;
+            if let Some(slot) = self.stats {
+                mc.stats[slot].generated.store(self.sink.generated, Relaxed);
+                // `outDegree.addSample(unseenSuccessorStates)`, with 32 buckets and the last
+                // one holding the overflow.
+                let bucket = (self.sink.unseen as usize).min(31);
+                mc.stats[slot].out_degree.lock().expect("out degree")[bucket] += 1;
+            }
             self.sink.unseen = 0;
         }
         outcome

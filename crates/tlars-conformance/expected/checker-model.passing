@@ -121,6 +121,7 @@ tlc/checker/errors/error_nonboolean_next
 tlc/checker/errors/error_replay_print
 tlc/checker/errors/error_second_initial_state
 tlc/checker/errors/error_select_field
+tlc/checker/errors/error_trace_two_steps
 tlc/checker/errors/nonterminal_constant_recursion
 tlc/checker/errors/stack_overflow_assume
 tlc/checker/errors/stack_overflow_init
@@ -298,6 +299,7 @@ tlc/checker/next/all_assigned_print_nonbool_value
 tlc/checker/next/angle_action_unassigned
 tlc/checker/next/angle_filters_stutter
 tlc/checker/next/angle_tuple_filter
+tlc/checker/next/assert_in_next
 tlc/checker/next/assert_string_only_message
 tlc/checker/next/box_false_action_stutters
 tlc/checker/next/box_formula_in_next
@@ -305,6 +307,7 @@ tlc/checker/next/box_generates_action_and_stutter
 tlc/checker/next/case_first_true_only
 tlc/checker/next/case_guard_nonbool
 tlc/checker/next/case_no_true_guard
+tlc/checker/next/case_no_true_guard_later
 tlc/checker/next/case_other
 tlc/checker/next/eq_assigns
 tlc/checker/next/eq_primed_function_app_lhs
@@ -316,6 +319,7 @@ tlc/checker/next/eq_reversed_after_assign
 tlc/checker/next/eq_reversed_unassigned
 tlc/checker/next/equiv_not_generator
 tlc/checker/next/error_in_guard_initial_state
+tlc/checker/next/error_in_guard_later_state
 tlc/checker/next/error_rhs_assignment
 tlc/checker/next/error_second_action_after_first
 tlc/checker/next/exists_bound_reads_prime
@@ -420,6 +424,7 @@ tlc/checker/states/interval_vs_enumeration
 tlc/checker/states/lambda_with_state_read_in_state
 tlc/checker/states/lazy_function_vs_tuple
 tlc/checker/states/map_vs_enumeration
+tlc/checker/states/membership_across_kinds_fails
 tlc/checker/states/model_value_vs_integer_in_state_ok
 tlc/checker/states/model_values_distinct_states
 tlc/checker/states/nested_representation
