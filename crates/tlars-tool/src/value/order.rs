@@ -177,7 +177,7 @@ impl Value {
             let (a, b) = (self.ppr(ev)?, other.ppr(ev)?);
             return Err(EvalError::detailed(format!("Attempted to compare overridden value {a} with non-overridden value:\n{b}"), None));
         }
-        let (rank, name) = match **u {
+        let (rank, name) = match &**u {
             UserValue::Nat => (0, "Nat"),
             UserValue::Int => (1, "Int"),
             UserValue::String => {
@@ -190,6 +190,20 @@ impl Value {
                         Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["STRING", &shown]))
                     }
                 };
+            }
+            // `Sequences.compareTo`: another `Seq(T)` compares by `T`, since every `Seq` has
+            // the same unbounded length (`Sequences.java:369-390`).
+            UserValue::Seq(range) => {
+                if let Value::User(o) = other {
+                    if let UserValue::Seq(other_range) = &**o {
+                        return range.tlc_compare(ev, other_range);
+                    }
+                }
+                if matches!(other, Value::Model(_)) {
+                    return Ok(Ordering::Greater);
+                }
+                let (a, b) = (self.ppr(ev)?, other.ppr(ev)?);
+                return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[&a, &b]));
             }
             _ => return Err(EvalError::unimplemented("comparison of this special set (M2 unit 3)".into())),
         };
@@ -372,6 +386,21 @@ impl Value {
                     };
                     let shown = elem.ppr(ev)?;
                     Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&shown, set]))
+                }
+                // `Sequences.member`: a sequence whose elements are all in the range
+                // (`Sequences.java:392-412`).
+                (UserValue::Seq(range), _) => {
+                    let range = range.clone();
+                    let Some(seq) = elem.to_tuple(ev)? else {
+                        let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
+                        return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&e, &s]));
+                    };
+                    for e in seq.elems.to_vec() {
+                        if !range.member(ev, &e)? {
+                            return Ok(false);
+                        }
+                    }
+                    Ok(true)
                 }
                 _ => Err(EvalError::unimplemented("membership in this special set (M2 unit 5)".into())),
             },
