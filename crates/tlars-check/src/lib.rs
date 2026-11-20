@@ -67,6 +67,7 @@ pub struct Env {
     pub host: HostInfo,
 }
 
+#[derive(Clone, Copy)]
 pub enum Clock {
     System,
     Fixed { epoch_millis: i64, utc_offset_minutes: i32 },

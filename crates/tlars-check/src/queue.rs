@@ -94,4 +94,24 @@ impl StateQueue {
     pub(crate) fn is_empty(&self) -> bool {
         self.len() == 0
     }
+    /// `AbstractChecker.done`, which the main thread waits on (`this.wait(ms)`). `true` once
+    /// the search is over; `false` when the wait timed out first.
+    pub(crate) fn wait_finished(&self, timeout: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + timeout;
+        let mut inner = self.inner.lock().expect("queue");
+        // The condvar also carries "a state was enqueued", so the wait is resumed until the
+        // search is over or the deadline passes.
+        while !inner.finished {
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                return false;
+            }
+            let (guard, _) = self.avail.wait_timeout(inner, deadline - now).expect("queue");
+            inner = guard;
+        }
+        true
+    }
+    pub(crate) fn is_finished(&self) -> bool {
+        self.inner.lock().expect("queue").finished
+    }
 }

@@ -90,6 +90,12 @@ pub(crate) struct ModelChecker<'a> {
     seed: i64,
     /// `ModelChecker.numberOfInitialStates`.
     initial_states: AtomicU64,
+    /// `TLC.startTime` and the run's clock, for the throughput in the progress messages.
+    start_millis: i64,
+    clock: crate::Clock,
+    /// `ModelChecker.oldNumOfGenStates` / `oldFPSetSize`.
+    old_generated: AtomicU64,
+    old_distinct: AtomicU64,
 }
 
 impl<'a> ModelChecker<'a> {
@@ -117,6 +123,10 @@ impl<'a> ModelChecker<'a> {
             worker_stack_bytes: session.env.worker_stack_bytes,
             seed: session.seed,
             initial_states: AtomicU64::new(0),
+            start_millis: session.start_millis,
+            clock: session.env.clock.clone(),
+            old_generated: AtomicU64::new(0),
+            old_distinct: AtomicU64::new(0),
         }
     }
 
@@ -289,9 +299,43 @@ impl<'a> ModelChecker<'a> {
         });
     }
 
-    /// `runTLCContinueDoing` + `doPeriodicWork`. With no liveness and no checkpointing there
-    /// is nothing periodic to do, so the loop only waits for the workers.
-    fn periodic_loop(&self) {}
+    /// `AbstractChecker.runTLC`'s main-thread loop (`:446-478`): the first progress report
+    /// after 3 s, then one every `progressInterval`. A run that finishes inside the first
+    /// wait prints none, which is why the recordings hold no mid-run progress line.
+    /// `doPeriodicWork` has nothing to do without liveness or checkpointing.
+    fn periodic_loop(&self) {
+        if self.queue.wait_finished(std::time::Duration::from_millis(3000)) {
+            return;
+        }
+        while !self.queue.is_finished() {
+            self.print_progress();
+            if self.queue.wait_finished(std::time::Duration::from_millis(PROGRESS_INTERVAL_MILLIS)) {
+                return;
+            }
+        }
+    }
+
+    /// `printProgresStats(-1, false)` (`ModelChecker.java:1009-1035`): the rates are over one
+    /// progress interval, and the counters it compares against move on.
+    fn print_progress(&self) {
+        let generated = self.states_generated();
+        let distinct = self.fpset.size();
+        let factor = PROGRESS_INTERVAL_MILLIS as f64 / 60_000.0;
+        let spm = rate(generated, self.old_generated.swap(generated, Relaxed), factor);
+        let dspm = rate(distinct, self.old_distinct.swap(distinct, Relaxed), factor);
+        let fmt = tlars_java::decimal_format_grouped;
+        self.out.message(
+            Ec::TLC_PROGRESS_STATS,
+            &[
+                &self.traces.level().to_string(),
+                &fmt(generated as i64),
+                &fmt(distinct as i64),
+                &fmt(self.queue.len() as i64),
+                &fmt(spm),
+                &fmt(dspm),
+            ],
+        );
+    }
 
     /// `setErrState` with the error code and the call-stack flag the caller chose.
     pub(crate) fn set_err_with(&self, e: ErrState, ec: Ec, keep_call_stack: bool) -> bool {
@@ -474,13 +518,22 @@ impl<'a> ModelChecker<'a> {
         let distinct = self.fpset.size();
         let queued = self.queue.len();
         if self.tool.globals().tool_mode {
-            // `printProgresStats(startTime, true)`: states per minute over the whole run.
-            // The message is dropped by the conformance normaliser, so only its shape counts.
-            let level = self.traces.level();
+            // `printProgresStats(startTime, true)`: the rates are over the whole run, and the
+            // counters it compares against are reset to zero first.
+            let factor = (self.clock.now_millis() - self.start_millis) as f64 / 60_000.0;
+            let spm = rate(generated, 0, factor);
+            let dspm = rate(distinct, 0, factor);
             let fmt = tlars_java::decimal_format_grouped;
             self.out.message(
                 Ec::TLC_PROGRESS_STATS,
-                &[&level.to_string(), &fmt(generated as i64), &fmt(distinct as i64), &fmt(queued as i64), &fmt(0), &fmt(0)],
+                &[
+                    &self.traces.level().to_string(),
+                    &fmt(generated as i64),
+                    &fmt(distinct as i64),
+                    &fmt(queued as i64),
+                    &fmt(spm),
+                    &fmt(dspm),
+                ],
             );
         }
         self.out.message(Ec::TLC_STATS, &[&generated.to_string(), &distinct.to_string(), &queued.to_string()]);
@@ -880,6 +933,24 @@ fn java_class(e: &EvalError) -> &str {
 enum Succ<'a> {
     Complete(&'a State),
     Partial(&'a PartialState),
+}
+
+/// `TLCGlobals.progressInterval`.
+const PROGRESS_INTERVAL_MILLIS: u64 = 60_000;
+
+/// `(long) ((now - old) / factor)`: a `double` division, so a run whose elapsed time is zero
+/// gives `Long.MAX_VALUE` as the Java cast does.
+fn rate(now: u64, old: u64, factor: f64) -> i64 {
+    let value = (now as f64 - old as f64) / factor;
+    if value.is_nan() {
+        0
+    } else if value >= i64::MAX as f64 {
+        i64::MAX
+    } else if value <= i64::MIN as f64 {
+        i64::MIN
+    } else {
+        value as i64
+    }
 }
 
 /// `StateVec`: the successors `doNext` collects before it checks any of them.
