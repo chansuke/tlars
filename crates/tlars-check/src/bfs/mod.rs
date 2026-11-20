@@ -565,11 +565,11 @@ impl<'a> ModelChecker<'a> {
     /// `ConcurrentTLCTrace.printTrace(s1, s2)` (`TLCTrace.java:349-443`): 2121, then the
     /// reconstructed prefix, `s1` and `s2`, each printed as 2217.
     fn print_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>) {
-        self.out.error(Ec::TLC_BEHAVIOR_UP_TO_THIS_POINT, &[]);
         let fps = self.traces.fingerprints_to(cur.ptr);
         // An initial `s1` is printed as it stands, with no regeneration at all
         // (`TLCTrace.java:350-370`).
         if fps.len() <= 1 {
+            self.out.error(Ec::TLC_BEHAVIOR_UP_TO_THIS_POINT, &[]);
             let step = tlars_tool::StateInfo { state: cur.state.clone(), action: None };
             self.print_state(ev, &step, None, 1);
             if let Some(succ) = succ {
@@ -577,9 +577,12 @@ impl<'a> ModelChecker<'a> {
             }
             return;
         }
-        // `getTrace(s1)` reconstructs the prefix up to but excluding `s1` in one go, so
-        // everything those steps print comes before any state is printed.
-        let prefix = match crate::trace::reconstruct(ev, &fps[..fps.len() - 1]) {
+        // `getTrace(s1)` is the *argument* of the three-parameter `printTrace`
+        // (`ConcurrentTLCTrace.java:208-214`), so the prefix is reconstructed before 2121 is
+        // printed and everything those steps print comes first.
+        let reconstructed = crate::trace::reconstruct(ev, &fps[..fps.len() - 1]);
+        self.out.error(Ec::TLC_BEHAVIOR_UP_TO_THIS_POINT, &[]);
+        let prefix = match reconstructed {
             Ok(Some(steps)) => steps,
             Ok(None) => {
                 self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
