@@ -88,7 +88,7 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
     let out = &session.reporter;
     let (user_dir, main_file) = main_file(session);
     let library_paths = library_paths(session, &main_file);
-    let config = read_config(session, &user_dir, &library_paths)?;
+    let config = read_config(session, user_dir.as_deref(), &library_paths)?;
     if session.options.tool_mode {
         out.message(Ec::TLC_SANY_START, &[]);
     }
@@ -99,7 +99,8 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
     let loaded = tlars_sany::load(
         LoadRequest {
             root_file: &main_file,
-            user_dir: Some(&user_dir),
+            user_dir: user_dir.as_deref(),
+            working_dir: &session.cwd,
             library_paths: &library_paths,
             interner: session.interner.clone(),
             extra_root_extends: &[],
@@ -144,14 +145,19 @@ fn print_failure(out: &dyn Report, ec: Ec) -> Ec {
 }
 
 /// `TLC.main`'s resolver (`TLC.java:343-354`): a main file with a directory part searches
-/// that directory after the user directory, in place of `-DTLA-Library`.
+/// that directory after the user directory, in place of `-DTLA-Library`. Paths stay as
+/// written (`Path.of`), relative ones being relative to the working directory.
 fn library_paths(session: &Session<'_>, main_file: &str) -> Vec<PathBuf> {
+    let path_of = |s: &str| Path::new(s).components().collect::<PathBuf>();
     // `FileUtil.parseDirname`: everything up to the last separator.
     match main_file.rfind(std::path::MAIN_SEPARATOR) {
-        Some(i) => vec![session.cwd.join(&main_file[..=i])],
-        None => session.property("TLA-Library").map_or_else(Vec::new, |p| java_split(p, ':').map(|d| session.cwd.join(d)).collect()),
+        Some(i) => vec![path_of(&main_file[..=i])],
+        None => session.property("TLA-Library").map_or_else(Vec::new, |p| java_split(p, PATH_SEPARATOR).map(path_of).collect()),
     }
 }
+
+/// `File.pathSeparator`.
+const PATH_SEPARATOR: char = if cfg!(windows) { ';' } else { ':' };
 
 /// `String.split(sep)` (`SimpleFilenameToStream.parsePaths`): trailing empty entries are
 /// dropped, inner and leading ones kept (an empty path is the working directory).
@@ -166,22 +172,22 @@ fn java_split(s: &str, sep: char) -> impl Iterator<Item = &str> {
 }
 
 /// The end of `handleParameters` (`TLC.java:1236-1242`): an absolute spec path becomes the
-/// user directory and its file name the main file. Otherwise modules are found from the
-/// working directory, which is the invocation's, not this process's.
-fn main_file(session: &Session<'_>) -> (PathBuf, String) {
+/// user directory and its file name the main file. Otherwise no user directory is set and
+/// modules are found from the working directory (the invocation's, not this process's).
+fn main_file(session: &Session<'_>) -> (Option<PathBuf>, String) {
     let spec = Path::new(&session.options.spec);
     if spec.is_absolute() {
         let name = spec.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        (spec.parent().map_or_else(|| session.cwd.clone(), Path::to_path_buf), name)
+        (spec.parent().map(Path::to_path_buf), name)
     } else {
-        (session.cwd.clone(), session.options.spec.clone())
+        (None, session.options.spec.clone())
     }
 }
 
 /// `new ModelConfig(...).parse()` (`ModelConfig.java:171-180`): `resolver.resolve(name,
 /// false)` looks in the user directory, then the library paths. The standard-module
 /// locations it tries next hold no `.cfg`.
-fn read_config(session: &Session<'_>, user_dir: &Path, library_paths: &[PathBuf]) -> Result<tlars_sany::cfg::ModelConfig, Exit> {
+fn read_config(session: &Session<'_>, user_dir: Option<&Path>, library_paths: &[PathBuf]) -> Result<tlars_sany::cfg::ModelConfig, Exit> {
     let out = &session.reporter;
     // `configFile = mainFile` after an absolute main file was reduced to its name.
     let base = session.options.config.clone().unwrap_or_else(|| {
@@ -192,10 +198,17 @@ fn read_config(session: &Session<'_>, user_dir: &Path, library_paths: &[PathBuf]
         todo!("M5: a cfg embedded in a monolithic spec");
     }
     let name = format!("{base}.cfg");
-    let found = std::iter::once(user_dir).chain(library_paths.iter().map(PathBuf::as_path)).map(|d| d.join(&name)).find(|p| p.exists());
+    let dirs = std::iter::once(user_dir.unwrap_or(Path::new(""))).chain(library_paths.iter().map(PathBuf::as_path));
+    let found = dirs.map(|d| session.cwd.join(d).join(&name)).find(|p| p.exists());
     let text = match found.map(std::fs::read) {
         Some(Ok(text)) => text,
-        _ => {
+        // `FileUtil.newFIS` (`FileUtil.java:427-440`): the file exists but cannot be opened.
+        Some(Err(_)) => {
+            out.raw("***Internal error: Unable to create FileInputStream\n");
+            out.error(Ec::CFG_ERROR_READING_FILE, &[&name, "File not found."]);
+            return Err(Exit::System(Ec::CFG_ERROR_READING_FILE.exit_status()));
+        }
+        None => {
             out.error(Ec::CFG_ERROR_READING_FILE, &[&name, "File not found."]);
             return Err(Exit::System(Ec::CFG_ERROR_READING_FILE.exit_status()));
         }
