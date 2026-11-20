@@ -17,13 +17,15 @@ pub(crate) struct LoadJob {
     pub(crate) root_file: String,
     pub(crate) user_dir: Option<PathBuf>,
     pub(crate) library_paths: Vec<PathBuf>,
+    pub(crate) working_dir: PathBuf,
     pub(crate) interner: Arc<Interner>,
     pub(crate) suppressed_codes: Vec<SanyErrorCode>,
     pub(crate) messages_as_errors: Vec<SanyErrorCode>,
 }
 
-/// One `println` to TLC's `ToolIO.out` (where `SimpleSanyOutput` writes too) or `ToolIO.err`.
+/// One `println` by `SimpleSanyOutput`, or one to TLC's `ToolIO.out` or `ToolIO.err`.
 pub(crate) enum ConsoleLine {
+    Log(String),
     Out(String),
     Err(String),
 }
@@ -59,7 +61,7 @@ fn error_strings(errors: JArr<JStr>) -> Vec<String> {
 }
 
 fn run(job: &LoadJob) -> JResult<Result<graph::SemanticGraph, SanyFailed>> {
-    let resolver = FilenameToStream::new(job.user_dir.clone(), job.library_paths.clone());
+    let resolver = FilenameToStream::new(job.user_dir.clone(), job.library_paths.clone(), job.working_dir.clone());
     let spec = SpecObj::new_2(JStr::of(&job.root_file), resolver)?;
     let out = support::SanyOutput::new_0();
     // `SanySettings.forExternalCaller(suppressed, elevated)`.

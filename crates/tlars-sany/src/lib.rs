@@ -46,12 +46,16 @@ impl SanyErrorCode {
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// SANY's console output, line by line: what TLC's `SimpleSanyOutput` prints to
-/// `ToolIO.out` ("Parsing file ...", "Semantic processing of module X", warnings and errors)
-/// and what PlusCal and the module resolver print to `ToolIO.out`/`ToolIO.err`, in the
-/// order TLC prints them. A line may contain newlines (one `println`).
+/// SANY's console output, line by line, in the order TLC prints it. A line may contain
+/// newlines (one `println`). TLC sends the two kinds of `ToolIO.out` line to different
+/// streams when it holds SANY's log back (`DelayedPrintStream`), so they stay apart here.
 pub trait SanyOut {
+    /// What TLC's `SimpleSanyOutput` logs ("Parsing file ...", "Semantic processing of
+    /// module X", warnings and errors).
+    fn log_line(&mut self, text: &str);
+    /// What PlusCal and the module resolver print to `ToolIO.out` directly.
     fn line(&mut self, text: &str);
+    /// `ToolIO.err`.
     fn err_line(&mut self, text: &str);
 }
 
@@ -61,8 +65,12 @@ pub struct LoadRequest<'a> {
     /// `ToolIO.setUserDir`: TLC sets it to the spec's directory when `mainFile` is an
     /// absolute path; otherwise modules are found from the working directory.
     pub user_dir: Option<&'a Path>,
-    /// `-DTLA-Library` paths, searched after the user directory.
+    /// `-DTLA-Library` paths, searched after the user directory, as given: a relative one
+    /// is printed as written and opened relative to `working_dir`.
     pub library_paths: &'a [PathBuf],
+    /// The JVM's `user.dir`: the user directory when none is set, and the base of relative
+    /// paths.
+    pub working_dir: &'a Path,
     /// Session interner. The cfg was already parsed into it (cfg strings intern first).
     pub interner: Arc<Interner>,
     /// `ParameterizedSpecObj`: modules that `-inv`, `-postCondition`, ... force into the
@@ -98,6 +106,7 @@ pub fn load(req: LoadRequest<'_>, out: &mut dyn SanyOut) -> Result<graph::Semant
         root_file: req.root_file.to_string(),
         user_dir: req.user_dir.map(Path::to_path_buf),
         library_paths: req.library_paths.to_vec(),
+        working_dir: req.working_dir.to_path_buf(),
         interner: req.interner.clone(),
         suppressed_codes: req.suppressed_codes.to_vec(),
         messages_as_errors: req.messages_as_errors.to_vec(),
@@ -110,6 +119,7 @@ pub fn load(req: LoadRequest<'_>, out: &mut dyn SanyOut) -> Result<graph::Semant
         .expect("spawning the SANY thread");
     for line in rx {
         match line {
+            parser::ConsoleLine::Log(s) => out.log_line(&s),
             parser::ConsoleLine::Out(s) => out.line(&s),
             parser::ConsoleLine::Err(s) => out.err_line(&s),
         }

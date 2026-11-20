@@ -19,6 +19,10 @@ pub enum EvalErrorKind {
     StackOverflow,
     /// `AssertionError` → `TLC_BUG`.
     Assertion,
+    /// A construct tlars does not evaluate yet. It travels like TLC's exceptions, so code
+    /// that swallows failures (constant folding) swallows it too; anywhere else it surfaces
+    /// as an error whose text TLC never prints.
+    Unimplemented,
 }
 
 /// A failed evaluation. `message` is already TLC's text (`tlars_msg::render` at the throw
@@ -32,6 +36,12 @@ pub struct EvalError {
 }
 
 pub type EvalResult<T> = Result<T, EvalError>;
+
+impl EvalError {
+    pub(crate) fn unimplemented(what: String) -> EvalError {
+        EvalError { ec: Ec::GENERAL, message: format!("tlars does not implement {what} yet"), loc: None, kind: EvalErrorKind::Unimplemented }
+    }
+}
 
 /// Why state generation stopped early.
 #[derive(Debug)]

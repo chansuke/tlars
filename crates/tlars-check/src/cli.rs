@@ -141,7 +141,7 @@ const DUMP_TRACE_FORMATS: &[(&str, &str, &str, &str)] = &[
 ];
 
 /// `FP64.Polys.length - 1`.
-const MAX_FP_INDEX: usize = 130;
+pub(crate) const MAX_FP_INDEX: usize = 130;
 /// `MultiFPSet.MAX_FPBITS`.
 const MAX_FP_BITS: i32 = 30;
 

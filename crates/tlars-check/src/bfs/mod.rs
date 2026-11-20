@@ -16,7 +16,35 @@ use crate::trace::TraceStores;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, AtomicU64};
 use tlars_msg::{Ec, Report};
-use tlars_tool::{ActionId, CheckId, Ev, EvalError, Flow, ImpliedAction, Invariant, PartialState, State, Tool};
+use tlars_tool::{ActionId, CheckId, Ev, EvalError, Flow, ImpliedAction, Invariant, PartialState, State, Tool, WorkerLocals};
+
+/// `ModelChecker.modelCheck` up to the first successor (`ModelChecker.java:134-239`):
+/// assumptions, the initial states, and the empty-spec ending. Exploring states is M3.
+pub(crate) fn model_check(tool: &Tool, out: &dyn Report, seed: i64) -> Ec {
+    let mut locals = WorkerLocals::new(0, seed);
+    let result = tool.ev(&mut locals, out).check_assumptions();
+    if result != Ec::NO_ERROR {
+        return result;
+    }
+    out.message(Ec::TLC_COMPUTING_INIT, &[]);
+    if !tool.actions().is_empty() || tool.has_init_predicates() {
+        todo!("M3: doInit and runTLC over a real state space");
+    }
+    // No init predicate generates no state: 0 generated, 0 distinct.
+    out.message(Ec::TLC_INIT_GENERATED1, &["0", "s"]);
+    // `actions.length == 0` with an empty queue: `reportSuccess`, then `printSummary(true)`.
+    // With no state the optimistic collision probability is 0 (`ProbabilityToString` gives
+    // "0.0").
+    out.message(Ec::TLC_SUCCESS, &["val = 0.0"]);
+    if tool.globals().tool_mode {
+        // `printProgresStats(startTime, true)`: an empty trace reports level 1, and 0 / elapsed
+        // states per minute is 0.
+        out.message(Ec::TLC_PROGRESS_STATS, &["1", "0", "0", "0", "0", "0"]);
+    }
+    out.message(Ec::TLC_STATS, &["0", "0", "0"]);
+    out.message(Ec::TLC_SEARCH_DEPTH, &["0"]);
+    Ec::NO_ERROR
+}
 
 /// What went wrong first. One variant per `setErrState` cause.
 pub(crate) enum ErrState {

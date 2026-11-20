@@ -125,6 +125,36 @@ impl Env {
     }
 }
 
+impl Clock {
+    /// `System.currentTimeMillis()`.
+    fn now_millis(&self) -> i64 {
+        match self {
+            Clock::Fixed { epoch_millis, .. } => *epoch_millis,
+            Clock::System => std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_millis() as i64),
+        }
+    }
+}
+
+impl Entropy {
+    /// Seed for the `java.util.Random` TLC draws its defaults from.
+    fn seed(&self) -> i64 {
+        match self {
+            Entropy::Fixed(n) => *n as i64,
+            Entropy::Os => {
+                use std::hash::{BuildHasher, Hasher};
+                std::collections::hash_map::RandomState::new().build_hasher().finish() as i64
+            }
+        }
+    }
+}
+
+/// `Boolean.getBoolean(name)`: the property is set to `true`, ignoring case.
+fn property_is_true(properties: &[(String, String)], name: &str) -> bool {
+    properties.iter().rev().find(|(k, _)| k == name).is_some_and(|(_, v)| v.eq_ignore_ascii_case("true"))
+}
+
 impl HostInfo {
     /// Java's `os.name`, `os.version`, `os.arch` and `availableProcessors()` for this host.
     fn current() -> Self {
@@ -149,7 +179,7 @@ impl HostInfo {
 }
 
 /// `TLCGlobals.Version.get()` plus the revision tlars reproduces, as `printWelcome` prints it.
-const VERSION: &str = concat!("Version ", env!("CARGO_PKG_VERSION"), " of tlars (rev: bc1b506)");
+pub(crate) const VERSION: &str = concat!("Version ", env!("CARGO_PKG_VERSION"), " of tlars (rev: bc1b506)");
 
 /// Java system properties given as leading `-D<name>=<value>` arguments.
 fn split_system_properties(args: &[String]) -> (Vec<(String, String)>, &[String]) {
@@ -169,12 +199,14 @@ fn split_system_properties(args: &[String]) -> (Vec<(String, String)>, &[String]
 pub fn run(inv: Invocation<'_>) -> ExitStatus {
     let (mut properties, args) = split_system_properties(&inv.args);
     properties.extend(inv.system_properties.iter().cloned());
-    let no_timestamps = properties.iter().any(|(k, v)| k == "tlc2.output.MP.noTimestamps" && v == "true");
+    let no_timestamps = property_is_true(&properties, "tlc2.output.MP.noTimestamps");
     match cli::parse(args, inv.env.host.cores) {
         Ok(options) => {
             let session = session::Session::new(inv, options, properties);
-            let ec = driver::process(&session);
-            session.exit_status(ec)
+            match driver::process(&session) {
+                driver::Exit::Returned(ec) => session.exit_status(ec),
+                driver::Exit::System(status) => status,
+            }
         }
         Err(cli::CliExit::Usage { message, tool_mode }) => {
             // `printErrorMsg`: the welcome line, then 1102.

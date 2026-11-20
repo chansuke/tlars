@@ -60,8 +60,10 @@ fn with_tla_extension(name: &str) -> String {
 pub(crate) struct FilenameToStream {
     /// `ToolIO.getUserDir()`, or the working directory when it is unset.
     user_dir: PathBuf,
-    /// `-DTLA-Library` paths.
+    /// `-DTLA-Library` paths, as given.
     library_paths: Vec<PathBuf>,
+    /// The JVM's `user.dir`, against which relative paths are opened.
+    working_dir: PathBuf,
     /// `FilenameToStream.getTempDirectory()`, created on first use.
     tmp_dir: RefCell<Option<PathBuf>>,
 }
@@ -85,9 +87,9 @@ fn absolute(path: &Path) -> PathBuf {
 
 impl FilenameToStream {
     /// `new SimpleFilenameToStream(libraryPaths)` with `ToolIO.setUserDir(user_dir)`.
-    pub(crate) fn new(user_dir: Option<PathBuf>, library_paths: Vec<PathBuf>) -> J<FilenameToStream> {
-        let user_dir = user_dir.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-        J::new(FilenameToStream { user_dir, library_paths, tmp_dir: RefCell::new(None) })
+    pub(crate) fn new(user_dir: Option<PathBuf>, library_paths: Vec<PathBuf>, working_dir: PathBuf) -> J<FilenameToStream> {
+        let user_dir = user_dir.unwrap_or_else(|| working_dir.clone());
+        J::new(FilenameToStream { user_dir, library_paths, working_dir, tmp_dir: RefCell::new(None) })
     }
 
     /// `Files.createTempDirectory("tlc-")`.
@@ -114,7 +116,7 @@ impl FilenameToStream {
     /// file in the user directory that does not exist.
     fn locate(&self, name: &str) -> TlaFile {
         for dir in std::iter::once(&self.user_dir).chain(&self.library_paths) {
-            let p = absolute(&dir.join(name));
+            let p = absolute(&self.working_dir.join(dir).join(name));
             if p.exists() {
                 let library_uri = Some(file_uri(&p));
                 return TlaFile { path: p, is_library: false, library_uri };
@@ -129,7 +131,7 @@ impl FilenameToStream {
             let library_uri = Some(file_uri(&p));
             return TlaFile { path: p, is_library: true, library_uri };
         }
-        let p = absolute(&self.user_dir.join(name));
+        let p = absolute(&self.working_dir.join(&self.user_dir).join(name));
         let library_uri = p.exists().then(|| file_uri(&p));
         TlaFile { path: p, is_library: false, library_uri }
     }
@@ -389,6 +391,6 @@ impl ToolIO {
     /// `ToolIO.getDefaultResolver()`: a `SimpleFilenameToStream` over the working directory
     /// and the `TLA-Library` paths (unset: tlars has no system properties).
     pub(crate) fn getDefaultResolver() -> J<FilenameToStream> {
-        FilenameToStream::new(None, Vec::new())
+        FilenameToStream::new(None, Vec::new(), std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
     }
 }

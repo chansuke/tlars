@@ -9,7 +9,8 @@ use crate::ctx::{Binding, Ctx};
 use crate::error::{EvalError, EvalResult};
 use crate::state::StateRef;
 use crate::value::Value;
-use tlars_sany::graph::{BuiltinOp, ExprId, SymbolRef};
+use crate::spec::OpBinding;
+use tlars_sany::graph::{BuiltinOp, ExprId, ExprNode, OpDefKind, SymbolRef};
 
 /// What a name resolved to (`SymbolNodeValueLookupProvider.lookup`).
 pub(crate) enum Resolved {
@@ -30,10 +31,35 @@ impl<'t> Ev<'t> {
     }
 
     fn eval_impl(&mut self, expr: ExprId, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Value> {
-        // TODO: OpAppl -> eval_appl; LetIn -> cons cachable Thunks for 0-arity defs;
-        // SubstIn -> cons Thunks (cachable = true); Label -> body; Numeral/String -> the
-        // processConstants value; At -> EXCEPT_AT lookup.
-        todo!()
+        let graph = &self.tool().graph;
+        match graph.expr(expr) {
+            ExprNode::OpAppl { op, args, bound, .. } => {
+                if let SymbolRef::OpDef(id) = *op {
+                    if args.is_empty() && bound.is_none() {
+                        match self.tool().bindings.op_def(id) {
+                            Some(OpBinding::Folded(v)) => return Ok(v.clone()),
+                            None => {
+                                let def = graph.op_def(id);
+                                if def.kind == OpDefKind::User && def.params.is_empty() {
+                                    let body = def.body.expect("a user definition has a body");
+                                    return self.eval(body, c, s0, s1, control);
+                                }
+                            }
+                            Some(_) => {}
+                        }
+                    }
+                }
+                Err(EvalError::unimplemented(format!("evalAppl of {} (M2 unit 4)", graph.loc(expr).tlc_text(graph.interner()))))
+            }
+            ExprNode::Label { body, .. } => self.eval(*body, c, s0, s1, control),
+            ExprNode::Numeral { .. } | ExprNode::String { .. } => {
+                Ok(self.tool().bindings.literal(expr).expect("processConstants bound every literal").clone())
+            }
+            ExprNode::LetIn { .. } | ExprNode::SubstIn { .. } | ExprNode::APSubstIn { .. } | ExprNode::At { .. } => {
+                Err(EvalError::unimplemented(format!("eval of {} (M2 unit 4)", graph.loc(expr).tlc_text(graph.interner()))))
+            }
+            ExprNode::Decimal { .. } => unreachable!("processConstants rejects decimals"),
+        }
     }
 
     pub(crate) fn lookup(&mut self, sym: SymbolRef, c: &Ctx, s0: StateRef<'_>, cutoff: bool) -> Resolved {
