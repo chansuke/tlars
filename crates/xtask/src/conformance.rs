@@ -172,15 +172,16 @@ enum Verdict {
 }
 
 /// What `EvalError::unimplemented` and the remaining `todo!`s put in the output. A case that
-/// says this is blocked on a missing feature, not on wrong behaviour.
+/// says this is blocked on a missing feature, not on wrong behaviour. The raw output is what
+/// is searched, because an `exit-only` case keeps no transcript to compare.
 const UNIMPLEMENTED: &[&str] = &["tlars does not implement", "not yet implemented"];
 
-fn verdict(want: &Outcome, got: &Outcome) -> Verdict {
+fn verdict(want: &Outcome, got: &Outcome, unimplemented: bool) -> Verdict {
     if got == want {
         return Verdict::Pass;
     }
     let difference = first_difference(want, got);
-    if UNIMPLEMENTED.iter().any(|m| got.transcript.contains(m)) {
+    if unimplemented {
         return Verdict::Unimplemented(difference);
     }
     Verdict::Mismatch(difference)
@@ -188,7 +189,7 @@ fn verdict(want: &Outcome, got: &Outcome) -> Verdict {
 
 /// tlars on one case, in-process, on its own thread (fresh thread-local state, a stack as
 /// large as `-Xss`, and a timeout).
-fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<Outcome, Verdict> {
+fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<(Outcome, bool), Verdict> {
     let dir = scratch_dir(root, "tlars", case, context).map_err(Verdict::Panic)?;
     let args = case.materialize(context, &dir).map_err(|e| Verdict::Panic(e.to_string()))?;
     let keeps = context.keeps_state_space();
@@ -208,11 +209,15 @@ fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<Outcome, Verd
             };
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tlars_check::run(inv)));
             let text = String::from_utf8_lossy(&out.lock().expect("lock")).into_owned();
+            let unimplemented = UNIMPLEMENTED.iter().any(|m| text.contains(m));
             let _ = tx.send(match result {
-                Ok(status) => Ok(Outcome {
-                    exit: status as i32,
-                    transcript: if exit_only { String::new() } else { transcript::normalize(&text, &dir.display().to_string(), keeps) },
-                }),
+                Ok(status) => Ok((
+                    Outcome {
+                        exit: status as i32,
+                        transcript: if exit_only { String::new() } else { transcript::normalize(&text, &dir.display().to_string(), keeps) },
+                    },
+                    unimplemented,
+                )),
                 Err(p) => Err(Verdict::Panic(panic_message(&p))),
             });
         })
@@ -265,7 +270,7 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
     let verdicts = parallel(cases.clone(), args.jobs, move |case| {
         let want = &exp.0[&(case.id.clone(), context)];
         match run_tlars(&root_owned, case, context) {
-            Ok(got) => verdict(want, &got),
+            Ok((got, unimplemented)) => verdict(want, &got, unimplemented),
             Err(Verdict::Panic(m)) if UNIMPLEMENTED.iter().any(|u| m.contains(u)) => Verdict::Unimplemented(format!("panic: {m}")),
             Err(v) => v,
         }
