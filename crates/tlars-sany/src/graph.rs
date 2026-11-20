@@ -341,6 +341,16 @@ impl SemanticGraph {
     pub fn modules(&self) -> impl Iterator<Item = (ModuleId, &ModuleNode)> {
         self.modules.iter().enumerate().map(|(i, m)| (ModuleId::new(i as u32), m))
     }
+    /// Arena sizes, for tables indexed by id.
+    pub fn op_def_count(&self) -> usize {
+        self.op_defs.len()
+    }
+    pub fn decl_count(&self) -> usize {
+        self.decls.len()
+    }
+    pub fn expr_count(&self) -> usize {
+        self.exprs.len()
+    }
     pub fn op_def(&self, id: OpDefId) -> &OpDefNode {
         &self.op_defs[id.index()]
     }

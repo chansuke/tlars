@@ -258,7 +258,10 @@ impl Value {
 
     /// `deepNormalize()`: done before a state is fingerprinted / shared.
     pub(crate) fn deep_normalize(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
-        todo!()
+        match self {
+            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::Interval(_) => Ok(()),
+            _ => todo!("M2 unit 3: deepNormalize of compound values"),
+        }
     }
 
     /// `permute(MVPerm)`.

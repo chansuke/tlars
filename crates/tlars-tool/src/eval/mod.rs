@@ -21,7 +21,7 @@ use crate::error::{EvalError, EvalResult, Flow};
 use crate::fp64::Fp;
 use crate::state::{PartialState, State};
 use crate::tool::{CheckId, ImpliedAction, ImpliedInit, Invariant, Tool};
-use tlars_msg::Report;
+use tlars_msg::{Ec, Report};
 use tlars_sany::graph::ExprId;
 
 /// `EvalControl` bit flags (`Clear`, `KeepLazy`, `Primed`, `Enabled`, `Init`).
@@ -34,6 +34,7 @@ impl EvalControl {
     pub const PRIMED: Self = Self(2);
     pub const ENABLED: Self = Self(4);
     pub const INIT: Self = Self(8);
+    pub const CONST: Self = Self(16);
 
     pub fn with(self, other: Self) -> Self {
         Self(self.0 | other.0)
@@ -164,10 +165,6 @@ impl<'t> Ev<'t> {
     pub fn check_implied_init(&mut self, id: CheckId<ImpliedInit>, s: &State) -> EvalResult<bool> {
         todo!()
     }
-    /// `checkAssumptions`: non-AXIOM ASSUMEs of the root (incl. extended modules).
-    pub fn check_assumptions(&mut self) -> Result<(), (tlars_msg::Ec, Vec<String>)> {
-        todo!()
-    }
     pub fn check_postconditions(&mut self) -> Result<(), (tlars_msg::Ec, Vec<String>)> {
         todo!()
     }
@@ -197,6 +194,32 @@ impl<'t> Ev<'t> {
     pub(crate) fn begin_expansion(&mut self, s0_fp: Fp) {
         self.expansions += 1;
         self.locals.effects.current = Some((crate::effects::ExpansionId(self.expansions), s0_fp));
+    }
+
+    /// `Tool.checkAssumptions` (`Tool.java:3645-3663`): the root module's assumptions in
+    /// order; the first false one is 2104, the first that fails to evaluate 2105.
+    pub fn check_assumptions(&mut self) -> Ec {
+        let graph = self.tool.graph.clone();
+        for a in graph.module(graph.root()).assumptions.iter() {
+            if a.is_axiom {
+                continue;
+            }
+            let loc = graph.loc(a.expr).tlc_text(graph.interner());
+            match self.is_valid(a.expr) {
+                Ok(true) => {}
+                Ok(false) => return self.out.error(Ec::TLC_ASSUMPTION_FALSE, &[&loc]),
+                Err(e) => return self.out.error(Ec::TLC_ASSUMPTION_EVALUATION_ERROR, &[&loc, &e.message]),
+            }
+        }
+        Ec::NO_ERROR
+    }
+
+    /// `Tool.isValid(expr, Context.Empty)` (`:3626-3633`).
+    fn is_valid(&mut self, expr: ExprId) -> EvalResult<bool> {
+        match self.eval(expr, &crate::ctx::Ctx::EMPTY, crate::state::StateRef::Empty, crate::state::StateRef::Empty, EvalControl::CONST)? {
+            crate::value::Value::Bool(b) => Ok(b),
+            _ => todo!("M2 unit 5: TLC_EXPECTED_VALUE for a non-boolean assumption"),
+        }
     }
 
     pub(crate) fn enter(&mut self, expr: ExprId) -> EvalResult<()> {

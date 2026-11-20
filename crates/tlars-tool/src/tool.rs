@@ -96,6 +96,10 @@ impl Tool {
     pub(crate) fn vars(&self) -> &VarTable {
         &self.vars
     }
+    /// Whether INIT (or SPECIFICATION) gave any initial predicate.
+    pub fn has_init_predicates(&self) -> bool {
+        !self.init_actions.is_empty()
+    }
     pub fn var_count(&self) -> usize {
         self.vars.decls.len()
     }
