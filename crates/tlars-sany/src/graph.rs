@@ -17,6 +17,8 @@ macro_rules! id {
         pub struct $name(u32);
         impl $name {
             pub(crate) fn new(i: u32) -> Self { Self(i) }
+            /// Back from the index `index()` gave, for side tables that hold ids as `u32`.
+            pub fn from_index(i: u32) -> Self { Self(i) }
             pub fn index(self) -> usize { self.0 as usize }
         }
     )*};

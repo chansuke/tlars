@@ -84,6 +84,17 @@ impl WorkerLocals {
     }
 }
 
+/// The `catch` clauses of a `CallStackTool` override: a `TLCRuntimeException` or an
+/// `EvalException` freezes the stack, and a `FingerprintException` also appends the sources
+/// of the values it travelled through (`CallStack.freeze(FingerprintException)`).
+fn freeze_for(cs: &mut CallStack, failure: Option<&crate::error::EvalErrorKind>) {
+    match failure {
+        Some(crate::error::EvalErrorKind::Fingerprint { sources }) => cs.freeze_with(sources),
+        Some(crate::error::EvalErrorKind::Runtime | crate::error::EvalErrorKind::Eval) => cs.freeze(),
+        _ => {}
+    }
+}
+
 /// `CallStackTool`'s frames (`tlc2.tool.CallStack`). A failure freezes the stack, so the
 /// `pop`s that run while the Rust stack unwinds leave it as it was at the throw.
 #[derive(Default)]
@@ -103,6 +114,14 @@ impl CallStack {
     }
     fn freeze(&mut self) {
         self.frozen = true;
+    }
+    /// `freeze(FingerprintException)`: the first freeze also pushes the exception's trace.
+    fn freeze_with(&mut self, sources: &[ExprId]) {
+        if self.frozen {
+            return;
+        }
+        self.frozen = true;
+        self.frames.extend_from_slice(sources);
     }
     /// `CallStack.toString` (`CallStack.java:53-88`): one numbered line per frame, counted
     /// from zero, with consecutive repeats of the same node collapsed.
@@ -437,15 +456,19 @@ impl<'t> Ev<'t> {
     pub(crate) fn leave(&mut self, failure: Option<&crate::error::EvalErrorKind>) {
         self.depth -= 1;
         let Some(cs) = self.locals.call_stack.as_mut() else { return };
-        let freezes = matches!(
-            failure,
-            Some(crate::error::EvalErrorKind::Runtime | crate::error::EvalErrorKind::Eval | crate::error::EvalErrorKind::Fingerprint { .. })
-        );
-        if freezes {
-            cs.freeze();
-        }
+        freeze_for(cs, failure);
         cs.pop();
     }
+    /// `setSource(expr, value)` (`Tool.java:2859`): `FastTool` discards it and only
+    /// `CallStackTool` records it, so a value carries its creating expression exactly while
+    /// the nested-expression stack is being recorded.
+    pub(crate) fn set_source(&self, expr: ExprId, value: crate::value::Value) -> crate::value::Value {
+        if self.locals.call_stack.is_some() {
+            value.set_source(expr);
+        }
+        value
+    }
+
     /// `callStack.push(node)` around a generator step, released the same way as `leave`.
     pub(crate) fn enter_generator(&mut self, expr: ExprId) {
         if let Some(cs) = self.locals.call_stack.as_mut() {
@@ -454,13 +477,9 @@ impl<'t> Ev<'t> {
     }
     pub(crate) fn leave_generator(&mut self, failure: Option<&crate::error::Halt>) {
         let Some(cs) = self.locals.call_stack.as_mut() else { return };
-        let freezes = matches!(
-            failure,
-            Some(crate::error::Halt::Eval(e))
-                if matches!(e.kind, crate::error::EvalErrorKind::Runtime | crate::error::EvalErrorKind::Eval | crate::error::EvalErrorKind::Fingerprint { .. })
-        );
-        if freezes {
-            cs.freeze();
+        match failure {
+            Some(crate::error::Halt::Eval(e)) => freeze_for(cs, Some(&e.kind)),
+            _ => freeze_for(cs, None),
         }
         cs.pop();
     }

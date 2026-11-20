@@ -13,8 +13,9 @@ pub enum EvalErrorKind {
     Runtime,
     /// `EvalException` (has its own error code, e.g. `TLC_VALUE_ASSERT_FAILED`).
     Eval,
-    /// `FingerprintException`: a chain of value sources, printed as a nested-expression trace.
-    Fingerprint { sources: Vec<Loc> },
+    /// `FingerprintException`: the sources of the nested values whose method failed,
+    /// outermost first, as `FingerprintException.asTrace` returns them.
+    Fingerprint { sources: Vec<tlars_sany::graph::ExprId> },
     /// `StackOverflowError`: raised by `Ev`'s depth guard, never by the native stack.
     StackOverflow,
     /// `AssertionError` → `TLC_BUG`.

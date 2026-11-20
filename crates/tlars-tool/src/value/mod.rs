@@ -30,9 +30,35 @@ use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
 use crate::eval::{EvalControl, Ev};
 use crate::state::StateRef;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 use tlars_sany::Atom;
 use tlars_sany::graph::{ExprId, ParamId, SymbolRef};
+
+/// `Value.source` (`Value.java:120-135`): the expression that produced the value. Only
+/// `CallStackTool.setSource` writes it, so in an ordinary run every value is unsourced and
+/// a failing value method raises its exception unchanged. Held as the `ExprId`'s index so
+/// the field costs four bytes and `Value` stays two words.
+pub(crate) struct Source(AtomicU32);
+
+const NO_SOURCE: u32 = u32::MAX;
+
+impl Source {
+    pub(crate) fn none() -> Source {
+        Source(AtomicU32::new(NO_SOURCE))
+    }
+    fn get(&self) -> Option<ExprId> {
+        match self.0.load(Ordering::Relaxed) {
+            NO_SOURCE => None,
+            i => Some(ExprId::from_index(i)),
+        }
+    }
+    /// `setSource`, which overwrites: a value handed on by a second expression takes that
+    /// expression as its source.
+    fn set(&self, expr: ExprId) {
+        self.0.store(expr.index() as u32, Ordering::Relaxed);
+    }
+}
 
 /// `ValueConstants` kind bytes. The discriminants go into fingerprints.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -150,12 +176,13 @@ impl IntervalValue {
         let elems: Box<[Value]> = (i64::from(self.lo)..=i64::from(self.hi)).map(|n| Value::Int(n as i32)).collect();
         let norm = OnceLock::new();
         let _ = norm.set(elems.clone());
-        Arc::new(SetEnumValue { built: elems, norm })
+        Arc::new(SetEnumValue { built: elems, norm, source: Source::none() })
     }
 }
 
 pub struct TupleValue {
     pub(crate) elems: Box<[Value]>,
+    pub(crate) source: Source,
 }
 
 /// `SetEnumValue`: elements as constructed (possibly unsorted, with duplicates) plus the
@@ -164,6 +191,7 @@ pub struct TupleValue {
 pub struct SetEnumValue {
     pub(crate) built: Box<[Value]>,
     pub(crate) norm: OnceLock<Box<[Value]>>,
+    pub(crate) source: Source,
 }
 
 impl SetEnumValue {
@@ -183,6 +211,7 @@ pub struct RecordValue {
     pub(crate) names: Box<[Atom]>,
     pub(crate) values: Box<[Value]>,
     pub(crate) norm: OnceLock<(Box<[Atom]>, Box<[Value]>)>,
+    pub(crate) source: Source,
 }
 
 pub enum FcnDomain {
@@ -205,6 +234,7 @@ pub struct FcnRcdValue {
 pub struct SubsetValue {
     pub(crate) base: Value,
     pub(crate) converted: OnceLock<Arc<SetEnumValue>>,
+    pub(crate) source: Source,
 }
 
 pub struct KSubsetValue {
@@ -217,6 +247,7 @@ pub struct SetOfFcnsValue {
     pub(crate) domain: Value,
     pub(crate) range: Value,
     pub(crate) converted: OnceLock<Arc<SetEnumValue>>,
+    pub(crate) source: Source,
 }
 
 /// Field names sorted by token at construction (`SetOfRcdsValue(..., isNorm=false)`).
@@ -224,16 +255,19 @@ pub struct SetOfRcdsValue {
     pub(crate) names: Box<[Atom]>,
     pub(crate) sets: Box<[Value]>,
     pub(crate) converted: OnceLock<Arc<SetEnumValue>>,
+    pub(crate) source: Source,
 }
 
 pub struct SetOfTuplesValue {
     pub(crate) sets: Box<[Value]>,
     pub(crate) converted: OnceLock<Arc<SetEnumValue>>,
+    pub(crate) source: Source,
 }
 
 pub struct UnionValue {
     pub(crate) set: Value,
     pub(crate) converted: OnceLock<Arc<SetEnumValue>>,
+    pub(crate) source: Source,
 }
 
 /// SetCup / SetCap / SetDiff, built only when neither side is Reducible.
@@ -241,6 +275,7 @@ pub struct SetBinValue {
     pub(crate) left: Value,
     pub(crate) right: Value,
     pub(crate) converted: OnceLock<Arc<SetEnumValue>>,
+    pub(crate) source: Source,
 }
 
 /// A captured evaluation environment: TLC's `(tool, con, state, pstate, control)` minus the
@@ -293,6 +328,7 @@ pub struct SetPredValue {
     pub(crate) pred: ExprId,
     pub(crate) env: Closure,
     pub(crate) converted: OnceLock<Arc<SetEnumValue>>,
+    pub(crate) source: Source,
 }
 
 /// `[x \in S |-> e]` kept lazy (non-Reducible domain, or KeepLazy), incl. recursive
@@ -307,6 +343,7 @@ pub struct FcnLambdaValue {
     pub(crate) rec_name: Option<SymbolRef>,
     pub(crate) excepts: Box<[Except]>,
     pub(crate) converted: OnceLock<Arc<FcnRcdValue>>,
+    pub(crate) source: Source,
 }
 
 /// `UserValue(UserObj)`: the infinite / special sets TLC's Java modules provide.
@@ -320,6 +357,72 @@ pub enum UserValue {
 }
 
 impl Value {
+    /// `Value.getSource()`. The inline variants (Bool, Int, String, ModelValue, Interval,
+    /// Undef, the special constants) carry no source; TLC never sets one on them either,
+    /// except on the interval a `DOMAIN <<..>>` returns.
+    pub(crate) fn source(&self) -> Option<ExprId> {
+        match self {
+            Value::Tuple(v) => v.source.get(),
+            Value::Record(v) => v.source.get(),
+            Value::SetEnum(v) => v.source.get(),
+            Value::Subset(v) => v.source.get(),
+            Value::SetOfFcns(v) => v.source.get(),
+            Value::SetOfRcds(v) => v.source.get(),
+            Value::SetOfTuples(v) => v.source.get(),
+            Value::Union(v) => v.source.get(),
+            Value::SetCup(v) | Value::SetCap(v) | Value::SetDiff(v) => v.source.get(),
+            Value::SetPred(v) => v.source.get(),
+            Value::FcnLambda(v) => v.source.get(),
+            _ => None,
+        }
+    }
+
+    /// `CallStackTool.eval` hands back a *fresh* copy of a `FcnLambdaValue`, a
+    /// `SetPredValue` or an `OpLambdaValue`, and a fresh value has no source. So a lambda
+    /// carries its source only while `evalAppl` still holds it.
+    pub(crate) fn clear_source(&self) {
+        if let Value::FcnLambda(v) = self {
+            v.source.0.store(NO_SOURCE, Ordering::Relaxed);
+        }
+    }
+
+    /// `Value.setSource(node)`, which only `CallStackTool` calls.
+    pub(crate) fn set_source(&self, expr: ExprId) {
+        match self {
+            Value::Tuple(v) => v.source.set(expr),
+            Value::Record(v) => v.source.set(expr),
+            Value::SetEnum(v) => v.source.set(expr),
+            Value::Subset(v) => v.source.set(expr),
+            Value::SetOfFcns(v) => v.source.set(expr),
+            Value::SetOfRcds(v) => v.source.set(expr),
+            Value::SetOfTuples(v) => v.source.set(expr),
+            Value::Union(v) => v.source.set(expr),
+            Value::SetCup(v) | Value::SetCap(v) | Value::SetDiff(v) => v.source.set(expr),
+            Value::SetPred(v) => v.source.set(expr),
+            Value::FcnLambda(v) => v.source.set(expr),
+            _ => {}
+        }
+    }
+
+    /// The `catch (RuntimeException | OutOfMemoryError e) { if (hasSource()) { throw
+    /// FingerprintException.getNewHead(this, e); } else { throw e; } }` that every method of
+    /// every value class carries. The head of the chain is the outermost value, as
+    /// `prependNewHead` builds it.
+    pub(crate) fn fp<T>(&self, r: EvalResult<T>) -> EvalResult<T> {
+        let Err(e) = r else { return r };
+        let Some(source) = self.source() else { return Err(e) };
+        let sources = match e.kind {
+            crate::error::EvalErrorKind::Fingerprint { ref sources } => {
+                let mut chain = Vec::with_capacity(sources.len() + 1);
+                chain.push(source);
+                chain.extend_from_slice(sources);
+                chain
+            }
+            _ => vec![source],
+        };
+        Err(EvalError { kind: crate::error::EvalErrorKind::Fingerprint { sources }, ..e })
+    }
+
     pub(crate) fn kind(&self) -> ValueKind {
         match self {
             Value::Bool(_) => ValueKind::Bool,
@@ -408,7 +511,7 @@ impl Value {
     }
 
     pub(crate) fn tuple(elems: Vec<Value>) -> Value {
-        Value::Tuple(Arc::new(TupleValue { elems: elems.into_boxed_slice() }))
+        Value::Tuple(Arc::new(TupleValue { elems: elems.into_boxed_slice(), source: Source::none() }))
     }
 
     /// `new RecordValue(names, values, isNorm)`.
@@ -418,7 +521,7 @@ impl Value {
         if is_norm {
             let _ = norm.set((names.clone(), values.clone()));
         }
-        Arc::new(RecordValue { names, values, norm })
+        Arc::new(RecordValue { names, values, norm, source: Source::none() })
     }
 
     /// `new FcnRcdValue(domain, values, isNorm)`.
@@ -455,6 +558,11 @@ impl Value {
     /// cache when it has one, and otherwise enumerates itself *without* caching, as TLC's
     /// `toSetEnum` does; only `convertAndCache` publishes.
     pub(crate) fn to_set_enum(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<SetEnumValue>>> {
+        let r = self.to_set_enum_inner(ev);
+        self.fp(r)
+    }
+
+    fn to_set_enum_inner(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<SetEnumValue>>> {
         let cache = match self {
             Value::SetEnum(s) => return Ok(Some(s.clone())),
             Value::Interval(i) => return Ok(Some(i.to_set_enum_arc())),
@@ -504,6 +612,11 @@ impl Value {
     /// equality, cardinality and fingerprinting of a lazy set all go through it, which is
     /// why they leave the set in normalised order.
     pub(crate) fn convert_and_cache(&self, ev: &mut Ev<'_>) -> EvalResult<Arc<SetEnumValue>> {
+        let r = self.convert_and_cache_inner(ev);
+        self.fp(r)
+    }
+
+    fn convert_and_cache_inner(&self, ev: &mut Ev<'_>) -> EvalResult<Arc<SetEnumValue>> {
         let cache = match self {
             Value::Subset(s) => &s.converted,
             Value::KSubset(s) => &s.converted,
@@ -601,6 +714,11 @@ impl Value {
     /// `normalize()`: the in-place sort TLC runs before a value is compared or printed. Here
     /// it publishes the `OnceLock`, after which only the normalised form is read.
     pub(crate) fn normalize(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
+        let r = self.normalize_inner(ev);
+        self.fp(r)
+    }
+
+    fn normalize_inner(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
         match self {
             Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::Interval(_) | Value::User(_) | Value::Undef => Ok(()),
             Value::Tuple(_) => Ok(()),
@@ -630,6 +748,11 @@ impl Value {
 
     /// `deepNormalize()`: done before a state is fingerprinted / shared.
     pub(crate) fn deep_normalize(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
+        let r = self.deep_normalize_inner(ev);
+        self.fp(r)
+    }
+
+    fn deep_normalize_inner(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
         match self {
             Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::Interval(_) | Value::User(_) | Value::Undef => Ok(()),
             // Elements first, then the set itself (`SetEnumValue.java:307-319`).
@@ -698,6 +821,11 @@ impl Value {
 
     /// `permute(MVPerm)`.
     pub(crate) fn permute(&self, ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm) -> EvalResult<Value> {
+        let r = self.permute_inner(ev, perm);
+        self.fp(r)
+    }
+
+    fn permute_inner(&self, ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm) -> EvalResult<Value> {
         todo!()
     }
 }
@@ -709,7 +837,7 @@ pub(crate) fn set_enum_arc(elems: Vec<Value>, is_norm: bool) -> Arc<SetEnumValue
     if is_norm {
         let _ = norm.set(elems.clone());
     }
-    Arc::new(SetEnumValue { built: elems, norm })
+    Arc::new(SetEnumValue { built: elems, norm, source: Source::none() })
 }
 
 /// `normalize()` of a lazy set: the cached SetEnum if it has one, else the given operands.
@@ -745,11 +873,16 @@ impl ValueVec {
     pub(crate) fn push(&mut self, value: Value) -> EvalResult<()> {
         if self.elems.len() == self.capacity {
             if self.capacity >= self.bound {
+                // `ValueVec.ensureCapacity` throws a `WrongInvocationException`, which is
+                // not an `Assert.TLCRuntimeException`, so no `CallStackTool` catch freezes
+                // the nested-expression stack (`ValueVec.java:90-93`).
                 let bound = self.bound;
-                return Err(EvalError::runtime(
-                    tlars_msg::Ec::GENERAL,
-                    format!("Attempted to construct a set with too many elements (>{bound})."),
-                ));
+                return Err(EvalError {
+                    ec: tlars_msg::Ec::GENERAL,
+                    message: format!("Attempted to construct a set with too many elements (>{bound})."),
+                    loc: None,
+                    kind: crate::error::EvalErrorKind::Jvm { class: "util.WrongInvocationException" },
+                });
             }
             let doubled = (self.capacity as i64 * 2).min(i64::from(i32::MAX) - 8);
             self.capacity = doubled.max(self.elems.len() as i64 + 1).min(self.bound as i64) as usize;

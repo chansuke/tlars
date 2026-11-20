@@ -290,7 +290,11 @@ impl<'t> Ev<'t> {
             return self.init_continue(acts, ps, sink);
         };
         let rval = self.eval(args[1].expect_expr(), c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
-        let rval = if kind == Assign::Subseteq { crate::value::subset(rval) } else { rval };
+        let rval = if kind == Assign::Subseteq {
+            self.set_source(args[1].expect_expr(), crate::value::subset(rval))
+        } else {
+            rval
+        };
         let bound = ps.lookup(slot).cloned();
         match (kind, bound) {
             (Assign::Eq, None) => {

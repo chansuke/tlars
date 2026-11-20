@@ -310,6 +310,7 @@ tlc/standard/reals/empty_subseteq_real
 tlc/standard/reals/infinity_unbounded_choose
 tlc/standard/reals/infinity_unused_is_harmless
 tlc/standard/reals/integers_available
+tlc/standard/reals/nonempty_subseteq_real
 tlc/standard/reals/real_enumeration
 tlc/standard/reals/real_is_an_ordinary_string
 tlc/standard/reals/real_is_finite
@@ -439,6 +440,7 @@ tlc/standard/strings/nat_compared_with_string
 tlc/standard/strings/no_cardinality
 tlc/standard/strings/not_finite
 tlc/standard/strings/prints_name
+tlc/standard/strings/record_set_bad_field
 tlc/standard/strings/record_set_membership
 tlc/standard/strings/seq_of_string
 tlc/standard/strings/set_member
@@ -446,6 +448,7 @@ tlc/standard/strings/set_mixed_with_int
 tlc/standard/strings/set_of_string_dedup
 tlc/standard/strings/string_member
 tlc/standard/strings/subseteq
+tlc/standard/strings/subseteq_with_non_string
 tlc/standard/strings/to_string
 tlc/standard/strings/tuple_member
 tlc/standard/strings/typed_model_value_member
@@ -524,6 +527,7 @@ tlc/standard/tlc/printt_function_string_domain
 tlc/standard/tlc/printt_if_branch
 tlc/standard/tlc/printt_int
 tlc/standard/tlc/printt_interval
+tlc/standard/tlc/printt_lazy_function_error
 tlc/standard/tlc/printt_let_once
 tlc/standard/tlc/printt_long_record_wraps
 tlc/standard/tlc/printt_long_set_wraps
@@ -571,6 +575,7 @@ tlc/standard/tlc/to_string_string_quoted
 tlc/standard/tlc/to_string_tuple
 tlc/standard/tlc/to_string_usable_in_concat
 tlc/standard/tlc_eval/filter_over_nat_lazy_without_eval
+tlc/standard/toolbox/tetrace_not_enumerable
 tlc/standard/toolbox/tetrace_override
 tlc/standard/toolbox/unused_definitions_harmless
 tlc/standard/transitive_closure/chain

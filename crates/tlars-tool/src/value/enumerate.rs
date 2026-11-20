@@ -310,6 +310,11 @@ impl Value {
     /// `elements(ordering)`; `Ok(None)` if the value is not enumerable (caller reports
     /// `getNonEnumerableErrorMsg`).
     pub(crate) fn elements(&self, ev: &mut Ev<'_>, order: EnumOrder) -> EvalResult<Option<ValueEnumeration>> {
+        let r = self.elements_inner(ev, order);
+        self.fp(r)
+    }
+
+    fn elements_inner(&self, ev: &mut Ev<'_>, order: EnumOrder) -> EvalResult<Option<ValueEnumeration>> {
         if !self.is_enumerable() {
             return Ok(None);
         }
@@ -545,6 +550,11 @@ impl Value {
     /// `getNonEnumerableErrorMsg(domain)` (`Value.java:447-450`, `Naturals.java:275`,
     /// `Integers.java`).
     pub(crate) fn non_enumerable_message(&self, ev: &mut Ev<'_>, domain_text: &str) -> EvalResult<String> {
+        let r = self.non_enumerable_message_inner(ev, domain_text);
+        self.fp(r)
+    }
+
+    fn non_enumerable_message_inner(&self, ev: &mut Ev<'_>, domain_text: &str) -> EvalResult<String> {
         let shown = self.ppr(ev)?;
         let set = match self {
             Value::User(u) => match **u {

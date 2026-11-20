@@ -95,7 +95,9 @@ tlc/checker/errors/error_nonboolean_next
 tlc/checker/errors/error_replay_print
 tlc/checker/errors/error_second_initial_state
 tlc/checker/errors/error_select_field
+tlc/checker/errors/nonterminal_constant_recursion
 tlc/checker/errors/stack_overflow_assume
+tlc/checker/errors/stack_overflow_init
 tlc/checker/errors/stack_overflow_next
 tlc/checker/init/all_assigned_evaluates_rest
 tlc/checker/init/case_first_true_only
@@ -135,18 +137,21 @@ tlc/checker/init/exists_two_bound_order
 tlc/checker/init/exists_unbounded
 tlc/checker/init/false_after_assign
 tlc/checker/init/false_with_variable_level
+tlc/checker/init/fcn_apply_body_not_generator
 tlc/checker/init/fcn_apply_false
 tlc/checker/init/fcn_apply_fast_path
 tlc/checker/init/fcn_apply_nonbool
 tlc/checker/init/fcn_apply_nonbool_fast_path
 tlc/checker/init/fcn_apply_nonfunction
 tlc/checker/init/fcn_apply_nonfunction_fast_path
+tlc/checker/init/fcn_apply_out_of_domain
 tlc/checker/init/fcn_apply_true
 tlc/checker/init/forall_assigns_single
 tlc/checker/init/forall_empty_continues
 tlc/checker/init/forall_nat
 tlc/checker/init/forall_two_instances_conflict
 tlc/checker/init/forall_two_instances_same
+tlc/checker/init/generator_in_incomparable
 tlc/checker/init/generator_in_member
 tlc/checker/init/generator_in_nat_member
 tlc/checker/init/generator_in_not_member
@@ -228,6 +233,7 @@ tlc/checker/init/subseteq_after_assign
 tlc/checker/init/subseteq_after_assign_fails
 tlc/checker/init/subseteq_after_assign_nat
 tlc/checker/init/subseteq_enumerates
+tlc/checker/init/subseteq_nat_unassigned
 tlc/checker/init/subseteq_reversed_not_assignment
 tlc/checker/init/zero_arity_false
 tlc/checker/init/zero_arity_true
@@ -322,6 +328,7 @@ tlc/checker/next/subexpression_reference
 tlc/checker/next/subseteq_after_assign
 tlc/checker/next/subseteq_after_assign_drops
 tlc/checker/next/subseteq_enumerates
+tlc/checker/next/subseteq_nat
 tlc/checker/next/subseteq_nonvariable_lhs_false
 tlc/checker/next/unbound_operator_arg_prime
 tlc/checker/prime/constant_level_operator_constant_prime_cached
@@ -363,6 +370,7 @@ tlc/checker/states/function_merge_vs_tuple
 tlc/checker/states/function_set_vs_enumeration
 tlc/checker/states/intersection_vs_enumeration
 tlc/checker/states/interval_vs_enumeration
+tlc/checker/states/lambda_with_state_read_in_state
 tlc/checker/states/lazy_function_vs_tuple
 tlc/checker/states/map_vs_enumeration
 tlc/checker/states/model_value_vs_integer_in_state_ok

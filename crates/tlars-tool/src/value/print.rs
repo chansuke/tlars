@@ -16,12 +16,22 @@ impl Value {
     /// `toString()` (flat): a failure while expanding a lazy value is swallowed and the
     /// symbolic form printed instead.
     pub(crate) fn to_tlc_string(&self, ev: &mut Ev<'_>) -> EvalResult<String> {
+        let r = self.to_tlc_string_inner(ev);
+        self.fp(r)
+    }
+
+    fn to_tlc_string_inner(&self, ev: &mut Ev<'_>) -> EvalResult<String> {
         self.to_string_impl(ev, true)
     }
 
     /// `toStringUnchecked()`: the same, but such a failure surfaces. `TLC!Print`, `PrintT`
     /// and `ToString` print this way, while every message built with `Values.ppr` does not.
     pub(crate) fn to_tlc_string_unchecked(&self, ev: &mut Ev<'_>) -> EvalResult<String> {
+        let r = self.to_tlc_string_unchecked_inner(ev);
+        self.fp(r)
+    }
+
+    fn to_tlc_string_unchecked_inner(&self, ev: &mut Ev<'_>) -> EvalResult<String> {
         self.to_string_impl(ev, false)
     }
 
@@ -206,6 +216,11 @@ impl Value {
 
     /// `Values.ppr(v.toString())`: flat string re-parsed and wrapped at `TLCGlobals` width.
     pub(crate) fn ppr(&self, ev: &mut Ev<'_>) -> EvalResult<String> {
+        let r = self.ppr_inner(ev);
+        self.fp(r)
+    }
+
+    fn ppr_inner(&self, ev: &mut Ev<'_>) -> EvalResult<String> {
         let flat = self.to_tlc_string(ev)?;
         Ok(ppr(ev, &flat))
     }

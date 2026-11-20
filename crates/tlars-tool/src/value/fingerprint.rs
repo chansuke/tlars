@@ -18,6 +18,11 @@ use tlars_sany::Atom;
 
 impl Value {
     pub(crate) fn fingerprint(&self, ev: &mut Ev<'_>, fp: Fp) -> EvalResult<Fp> {
+        let r = self.fingerprint_inner(ev, fp);
+        self.fp(r)
+    }
+
+    fn fingerprint_inner(&self, ev: &mut Ev<'_>, fp: Fp) -> EvalResult<Fp> {
         let f = &ev.tool().fp64;
         match self {
             Value::Bool(b) => {

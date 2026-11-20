@@ -436,6 +436,8 @@ impl<'t> Ev<'t> {
                 let in_val = self.eval(list.domain, c, s0, s1, control)?;
                 let pred = arg(0);
                 if !in_val.is_reducible() {
+                    // `CallStackTool.eval` replaces a `SetPredValue` with a fresh copy that
+                    // carries no source, so sourcing it here would never be observed.
                     return Ok(Value::SetPred(Arc::new(crate::value::SetPredValue {
                         vars: list.vars.clone(),
                         tuple: list.tuple,
@@ -443,6 +445,7 @@ impl<'t> Ev<'t> {
                         pred,
                         env: Closure::capture(c, s0, s1, control)?,
                         converted: std::sync::OnceLock::new(),
+                        source: crate::value::Source::none(),
                     })));
                 }
                 let is_norm = in_val.is_normalized();
@@ -474,7 +477,7 @@ impl<'t> Ev<'t> {
                         vals.push(elem)?;
                     }
                 }
-                Ok(Value::set_enum_of(vals.into_vec(), is_norm))
+                Ok(self.set_source(expr, Value::set_enum_of(vals.into_vec(), is_norm)))
             }
             // `{e : x \in S}`: always eager, and the result keeps the order the body
             // produced (`Tool.java:2436-2449`).
@@ -487,7 +490,7 @@ impl<'t> Ev<'t> {
                     let v = self.eval(body, &c1, s0, s1, control)?;
                     vals.push(v)?;
                 }
-                Ok(Value::set_enum(vals.into_vec()))
+                Ok(self.set_source(expr, Value::set_enum(vals.into_vec())))
             }
             // The eager form is the receiver's, so TLC swaps the operands when only the
             // right one reduces: `SUBSET {} \cup {1}` is built from `{1}`
@@ -495,7 +498,7 @@ impl<'t> Ev<'t> {
             Builtin::Cup | Builtin::Cap | Builtin::Setdiff => {
                 let a1 = self.eval(arg(0), c, s0, s1, control)?;
                 let a2 = self.eval(arg(1), c, s0, s1, control)?;
-                match builtin {
+                let result = match builtin {
                     Builtin::Cup if a1.is_reducible() => a1.cup(self, &a2),
                     Builtin::Cup if a2.is_reducible() => a2.cup(self, &a1),
                     Builtin::Cup => Ok(crate::value::lazy_cup(a1, a2)),
@@ -505,7 +508,8 @@ impl<'t> Ev<'t> {
                     // Only the left side of `\` may reduce: the right one is not enumerated.
                     _ if a1.is_reducible() => a1.diff(self, &a2),
                     _ => Ok(crate::value::lazy_diff(a1, a2)),
-                }
+                };
+                result.map(|v| self.set_source(expr, v))
             }
             Builtin::Subseteq => {
                 let a1 = self.eval(arg(0), c, s0, s1, control)?;
@@ -521,23 +525,23 @@ impl<'t> Ev<'t> {
             }
             Builtin::Subset => {
                 let v = self.eval(arg(0), c, s0, s1, control)?;
-                Ok(crate::value::subset(v))
+                Ok(self.set_source(expr, crate::value::subset(v)))
             }
             Builtin::Union => {
                 let v = self.eval(arg(0), c, s0, s1, control)?;
-                v.union(self)
+                v.union(self).map(|u| self.set_source(expr, u))
             }
             Builtin::CartesianProd => {
                 let mut sets = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
                     sets.push(self.eval(arg(i), c, s0, s1, control)?);
                 }
-                Ok(crate::value::set_of_tuples(sets))
+                Ok(self.set_source(expr, crate::value::set_of_tuples(sets)))
             }
             Builtin::SetOfFcns => {
                 let domain = self.eval(arg(0), c, s0, s1, control)?;
                 let range = self.eval(arg(1), c, s0, s1, control)?;
-                Ok(crate::value::set_of_fcns(domain, range))
+                Ok(self.set_source(expr, crate::value::set_of_fcns(domain, range)))
             }
             Builtin::SetOfRcds => {
                 let mut names = Vec::with_capacity(args.len());
@@ -547,21 +551,21 @@ impl<'t> Ev<'t> {
                     names.push(self.field_name(name));
                     sets.push(self.eval(set, c, s0, s1, control)?);
                 }
-                crate::value::set_of_rcds(self, names, sets)
+                crate::value::set_of_rcds(self, names, sets).map(|v| self.set_source(expr, v))
             }
             Builtin::SetEnumerate => {
                 let mut elems = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
                     elems.push(self.eval(arg(i), c, s0, s1, control)?);
                 }
-                Ok(Value::set_enum(elems))
+                Ok(self.set_source(expr, Value::set_enum(elems)))
             }
             Builtin::Tuple => {
                 let mut elems = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
                     elems.push(self.eval(arg(i), c, s0, s1, control)?);
                 }
-                Ok(Value::tuple(elems))
+                Ok(self.set_source(expr, Value::tuple(elems)))
             }
             Builtin::RcdConstructor => {
                 let mut names = Vec::with_capacity(args.len());
@@ -571,7 +575,7 @@ impl<'t> Ev<'t> {
                     names.push(self.field_name(name));
                     vals.push(self.eval(value, c, s0, s1, control)?);
                 }
-                Ok(Value::Record(Value::record_arc(names, vals, false)))
+                Ok(self.set_source(expr, Value::Record(Value::record_arc(names, vals, false))))
             }
             Builtin::RcdSelect => {
                 let rval = self.eval(arg(0), c, s0, s1, control)?;
@@ -612,7 +616,7 @@ impl<'t> Ev<'t> {
                         format!("Attempted to apply the operator DOMAIN to a non-function\n({})\n{}", v.kind_string(), text(self, expr));
                     return Err(not_boolean(self, reason, expr));
                 }
-                v.get_domain(self)
+                v.get_domain(self).map(|d| self.set_source(expr, d))
             }
             Builtin::FcnConstructor | Builtin::RecursiveFcnSpec => {
                 let bound = bound.expect("a function constructor has bounds");
@@ -635,11 +639,19 @@ impl<'t> Ev<'t> {
                     rec_name,
                     excepts: Box::new([]),
                     converted: std::sync::OnceLock::new(),
+                    source: crate::value::Source::none(),
                 });
+                // The lambda carries its source while `evalAppl` still holds it, so the
+                // eager conversion below wraps a failure; `CallStackTool.eval` then hands
+                // back a fresh copy, which has none.
+                let value = self.set_source(expr, Value::FcnLambda(lambda.clone()));
                 if is_fcn_rcd && !recursive && !control.has(EvalControl::KEEP_LAZY) {
-                    return Ok(Value::FcnRcd(lambda.to_fcn_rcd(self)?));
+                    let converted = value.to_fcn_rcd(self);
+                    value.clear_source();
+                    return Ok(Value::FcnRcd(converted?.expect("a function lambda converts")));
                 }
-                Ok(Value::FcnLambda(lambda))
+                value.clear_source();
+                Ok(value)
             }
             Builtin::Except => {
                 let mut result = self.eval(arg(0), c, s0, s1, control)?;

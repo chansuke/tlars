@@ -195,6 +195,12 @@ impl<'a> ModelChecker<'a> {
                 // `modelCheckImpl`'s `catch (Throwable e)` around `doInit`: the state the
                 // functor was working on, if any, is printed with the message.
                 let ec = eval_error_code(&e);
+                // `getMessage()` of a `StackOverflowError` is null, so TLC substitutes its
+                // own explanation (`ModelChecker.java:182-190`).
+                let message = match e.kind {
+                    tlars_tool::EvalErrorKind::StackOverflow => STACK_OVERFLOW_MESSAGE.to_string(),
+                    _ => e.message.clone(),
+                };
                 // `doInit` carries the functor's state to the checker only for the
                 // exceptions it catches by name (`ModelChecker.java:390-402`): an
                 // `EvalException` passes straight through and leaves `errState` null, so the
@@ -206,10 +212,10 @@ impl<'a> ModelChecker<'a> {
                             let mut ev = self.tool.ev(&mut locals, self.out);
                             ev.print_state(&state, None)
                         };
-                        self.out.error(Ec::TLC_INITIAL_STATE, &[&e.message, &shown]);
+                        self.out.error(Ec::TLC_INITIAL_STATE, &[&message, &shown]);
                     }
                     None => {
-                        self.out.error(Ec::GENERAL, &[&e.message]);
+                        self.out.error(Ec::GENERAL, &[&message]);
                     }
                 }
                 return Err(self.replay_init_call_stack(ec));
@@ -234,8 +240,12 @@ impl<'a> ModelChecker<'a> {
             ev.init_states(&mut sink)
         };
         let stack = locals.take_call_stack().expect("recording was switched on");
+        let text = stack.to_tlc_string(self.tool);
         match flow {
-            Err(Halt::Eval(_)) => self.out.error(Ec::TLC_NESTED_EXPRESSION, &[&stack.to_tlc_string(self.tool)]),
+            Err(Halt::Eval(e)) if matches!(e.kind, tlars_tool::EvalErrorKind::Fingerprint { .. }) => {
+                self.out.error(Ec::TLC_FINGERPRINT_EXCEPTION, &[&text, &e.message])
+            }
+            Err(Halt::Eval(_)) => self.out.error(Ec::TLC_NESTED_EXPRESSION, &[&text]),
             _ => ec,
         }
     }
@@ -647,6 +657,9 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
         Ok(())
     }
 }
+
+/// What `modelCheckImpl` prints in place of a `StackOverflowError`'s null message.
+const STACK_OVERFLOW_MESSAGE: &str = "This was a Java StackOverflowError. It was probably the result\nof an incorrect recursive function definition that caused TLC to enter\nan infinite loop when trying to compute the function or its application\nto an element in its putative domain.";
 
 /// The Java class `ECGeneralMsg` names. TLC disguises its own `Assert.TLCRuntimeException`
 /// as `java.lang.RuntimeException` (`MP.java:1754-1761`).

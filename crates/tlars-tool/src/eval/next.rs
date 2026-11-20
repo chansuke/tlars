@@ -349,7 +349,11 @@ impl<'t> Ev<'t> {
             return self.next_continue(a, acts, s0, s1, sink);
         };
         let rval = self.eval(args[1].expect_expr(), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
-        let rval = if kind == Assign::Subseteq { crate::value::subset(rval) } else { rval };
+        let rval = if kind == Assign::Subseteq {
+            self.set_source(args[1].expect_expr(), crate::value::subset(rval))
+        } else {
+            rval
+        };
         let bound = s1.lookup(slot).cloned();
         match (kind, bound) {
             (Assign::Eq, None) => {
