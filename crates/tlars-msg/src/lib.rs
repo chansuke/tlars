@@ -130,6 +130,12 @@ pub trait Report: Sync {
     fn message(&self, ec: Ec, params: &[&str]);
     /// `printError`; returns `ec` as TLC does. Errors are never suppressed.
     fn error(&self, ec: Ec, params: &[&str]) -> Ec;
+    /// `printTLCRuntimeException` for an exception with parameters (`Assert.fail(ec, params)`):
+    /// an error, but one that `-suppressMessages` hides (`MP.java:1843`).
+    fn runtime_exception(&self, ec: Ec, params: &[&str]) -> Ec;
+    /// `MP.getMessage(ec, params)`: the class-0 message, framed in tool mode, as exception
+    /// texts carry it (`Assert.fail` builds its message this way).
+    fn text(&self, ec: Ec, params: &[&str]) -> String;
     /// `printWarning`.
     fn warning(&self, ec: Ec, params: &[&str]) -> Result<(), WarningAsError>;
     /// `printState`.
@@ -204,6 +210,15 @@ impl Report for Reporter<'_> {
         let text = self.message_text(MsgClass::Error, ec, params);
         Self::println(&mut self.inner.lock().expect("reporter lock"), &text);
         ec
+    }
+
+    fn runtime_exception(&self, ec: Ec, params: &[&str]) -> Ec {
+        self.print_unless_suppressed(MsgClass::Error, ec, params);
+        ec
+    }
+
+    fn text(&self, ec: Ec, params: &[&str]) -> String {
+        self.message_text(MsgClass::None, ec, params)
     }
 
     fn warning(&self, ec: Ec, params: &[&str]) -> Result<(), WarningAsError> {
@@ -296,6 +311,25 @@ mod tests {
         r.message(Ec::TLC_COMPUTING_INIT, &[]);
         r.error(Ec::TLC_DEADLOCK_REACHED, &[]);
         assert_eq!(out.text(), "@!@!@STARTMSG 2114:1 @!@!@\nDeadlock reached.\n@!@!@ENDMSG 2114 @!@!@\n");
+    }
+
+    #[test]
+    fn runtime_exceptions_are_suppressible_errors() {
+        let out = Captured::default();
+        let r = reporter(&out, true, vec![Ec::TLC_INTEGER_TOO_BIG], vec![]);
+        assert_eq!(r.runtime_exception(Ec::TLC_INTEGER_TOO_BIG, &["2147483648"]), Ec::TLC_INTEGER_TOO_BIG);
+        r.runtime_exception(Ec::TLC_PARSING_FAILED, &[]);
+        assert_eq!(out.text(), "@!@!@STARTMSG 3002:1 @!@!@\nParsing or semantic analysis failed.\n@!@!@ENDMSG 3002 @!@!@\n");
+    }
+
+    /// The nested part of TLC's 2105 output (`div_by_zero` in the conformance corpus).
+    #[test]
+    fn exception_text_is_framed_as_class_none() {
+        let out = Captured::default();
+        let r = reporter(&out, true, vec![], vec![]);
+        let text = r.text(Ec::TLC_MODULE_DIVISION_BY_ZERO, &[]);
+        assert_eq!(text, "@!@!@STARTMSG 2179:0 @!@!@\nThe second argument of \\div is 0.\n@!@!@ENDMSG 2179 @!@!@");
+        assert!(out.text().is_empty());
     }
 
     #[test]
