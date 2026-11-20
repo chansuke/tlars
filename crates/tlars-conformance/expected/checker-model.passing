@@ -137,9 +137,11 @@ tlc/checker/errors/error_select_field
 tlc/checker/errors/error_trace_two_steps
 tlc/checker/errors/exit_status_success_after_print
 tlc/checker/errors/nonterminal_constant_recursion
+tlc/checker/errors/stack_overflow_action_constraint
 tlc/checker/errors/stack_overflow_assume
 tlc/checker/errors/stack_overflow_constraint
 tlc/checker/errors/stack_overflow_init
+tlc/checker/errors/stack_overflow_invariant
 tlc/checker/errors/stack_overflow_next
 tlc/checker/init/all_assigned_evaluates_rest
 tlc/checker/init/case_first_true_only

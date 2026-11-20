@@ -913,7 +913,7 @@ const STACK_OVERFLOW_MESSAGE: &str = "This was a Java StackOverflowError. It was
 
 /// A `java.lang.Error` rather than an `Exception`, which the `catch (Exception e)` around
 /// the invariant and implied-action checks does not catch (`ModelChecker.java:520, 571`).
-fn is_java_error(e: &EvalError) -> bool {
+pub(crate) fn is_java_error(e: &EvalError) -> bool {
     matches!(e.kind, tlars_tool::EvalErrorKind::StackOverflow | tlars_tool::EvalErrorKind::Assertion)
 }
 

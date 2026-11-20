@@ -1,7 +1,7 @@
 //! `tlc2.tool.Worker`. The bodies here are real code, not pseudocode, because their line
 //! order *is* TLC's observable behaviour (`Worker.java:92-140, 418-470`).
 
-use super::{ErrState, ModelChecker};
+use super::{is_java_error, ErrState, ModelChecker};
 use crate::fpset::{FpSet, Seen};
 use crate::liveness::SetOfStates;
 use crate::queue::Queued;
@@ -140,9 +140,13 @@ impl<O: SeenOracle> NextSink for WorkerSink<'_, O> {
             return Err(self.mc.incomplete(self.cur, action, s1));
         };
         match self.examine(ev, s0, &succ) {
-            // `doNext`'s `catch (Throwable e) { doNextFailed(...); throw e; }`.
             Err(Halt::Eval(e)) => {
-                self.mc.next_failed(self.cur, Some(&succ), e.clone());
+                // `addElement`'s `catch (Exception e) { throw new WrappingRuntimeException(e,
+                // succState); }` (`Worker.java:483-490`) carries the successor up to
+                // `Worker.run`. A `java.lang.Error` is not caught there, so it arrives
+                // without one and the counterexample ends at the predecessor.
+                let carried = (!is_java_error(&e)).then_some(&succ);
+                self.mc.next_failed(self.cur, carried, e.clone());
                 Err(Halt::Eval(e))
             }
             other => other,
