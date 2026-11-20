@@ -204,7 +204,7 @@ impl<'t> Ev<'t> {
             if a.is_axiom {
                 continue;
             }
-            let loc = graph.loc(a.expr).tlc_text(graph.interner());
+            let loc = graph.expr_tlc_text(a.expr);
             match self.is_valid(a.expr) {
                 Ok(true) => {}
                 Ok(false) => return self.out.error(Ec::TLC_ASSUMPTION_FALSE, &[&loc]),
@@ -218,7 +218,14 @@ impl<'t> Ev<'t> {
     fn is_valid(&mut self, expr: ExprId) -> EvalResult<bool> {
         match self.eval(expr, &crate::ctx::Ctx::EMPTY, crate::state::StateRef::Empty, crate::state::StateRef::Empty, EvalControl::CONST)? {
             crate::value::Value::Bool(b) => Ok(b),
-            _ => todo!("M2 unit 5: TLC_EXPECTED_VALUE for a non-boolean assumption"),
+            _ => {
+                // `Assert.fail(TLC_EXPECTED_VALUE, {"boolean", expr.toString()}, expr)`: the
+                // message is `MP.getMessage(code, params)`.
+                let graph = &self.tool.graph;
+                let loc = graph.loc(expr);
+                let message = self.out.text(Ec::TLC_EXPECTED_VALUE, &["boolean", &graph.expr_tlc_text(expr)]);
+                Err(EvalError { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime })
+            }
         }
     }
 

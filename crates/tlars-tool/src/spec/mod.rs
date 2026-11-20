@@ -74,7 +74,11 @@ pub struct ToolInput<'a> {
 /// A config/binding failure: printed by the caller with `ec.exit_status()` (151 family).
 #[derive(Debug)]
 pub enum SpecError {
+    /// `Assert.fail(ec, params)`: printed by `printTLCRuntimeException`, suppressible.
     Config { ec: Ec, params: Vec<String> },
+    /// `Assert.fail(ec)`: no parameters, so `printTLCRuntimeException` falls back to
+    /// `printError(ec, exception)`, which `-suppressMessages` does not hide.
+    Failure { ec: Ec },
     /// User `<Mod>.class` override found; v1 warns and falls back (not an error), kept here
     /// for `-messagesAsErrors`.
     UnsupportedJavaOverride { module: String },
@@ -132,13 +136,12 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         globals,
     };
     fold_constant_defns(&mut tool, out);
-    process_config(&config);
+    process_config(&config, &tool)?;
     Ok(tool)
 }
 
 /// `processConstants` (`SpecProcessor.java:1950-2091`): literal values for numerals and
-/// strings, and the predefined `TRUE`/`FALSE`/`BOOLEAN`. Theorem bodies are not in the
-/// graph, so a bad literal inside a THEOREM goes unreported (TLC reports it).
+/// strings, and the predefined `TRUE`/`FALSE`/`BOOLEAN`.
 struct ConstantPass<'g> {
     graph: &'g SemanticGraph,
     op_defs: Vec<Option<OpBinding>>,
@@ -159,6 +162,9 @@ impl ConstantPass<'_> {
         }
         for a in m.assumptions.iter() {
             self.expr(a.expr)?;
+        }
+        for &t in m.theorems.iter() {
+            self.expr(t)?;
         }
         Ok(())
     }
@@ -309,9 +315,9 @@ fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn
     }
 }
 
-/// `processConfig` (`SpecProcessor.java:1180-`): INIT/NEXT/SPECIFICATION and the named
-/// checks. An empty cfg binds nothing.
-fn process_config(config: &ModelConfig) {
+/// `processConfig` (`SpecProcessor.java:735-955`): INIT/NEXT/SPECIFICATION and the named
+/// checks. An empty cfg binds nothing, but a spec with variables still needs an INIT.
+fn process_config(config: &ModelConfig, tool: &Tool) -> Result<(), SpecError> {
     let empty = config.init.is_none()
         && config.next.is_none()
         && config.specification.is_none()
@@ -323,8 +329,15 @@ fn process_config(config: &ModelConfig) {
         && config.possible.is_empty()
         && config.view.is_none()
         && config.symmetry.is_none()
-        && config.alias.is_none();
+        && config.alias.is_none()
+        && config.periodic.is_none()
+        && config.rl_reward.is_none();
     if !empty {
         todo!("M3: processConfig for a non-empty cfg");
     }
+    // `:891-896`: no init predicate, but variables to initialise.
+    if tool.var_count() != 0 {
+        return Err(SpecError::Failure { ec: Ec::TLC_CONFIG_MISSING_INIT });
+    }
+    Ok(())
 }

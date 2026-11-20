@@ -49,14 +49,14 @@ impl<'t> Ev<'t> {
                         }
                     }
                 }
-                todo!("M2 unit 4: evalAppl of {}", graph.loc(expr).tlc_text(graph.interner()))
+                Err(EvalError::unimplemented(format!("evalAppl of {} (M2 unit 4)", graph.loc(expr).tlc_text(graph.interner()))))
             }
             ExprNode::Label { body, .. } => self.eval(*body, c, s0, s1, control),
             ExprNode::Numeral { .. } | ExprNode::String { .. } => {
                 Ok(self.tool().bindings.literal(expr).expect("processConstants bound every literal").clone())
             }
             ExprNode::LetIn { .. } | ExprNode::SubstIn { .. } | ExprNode::APSubstIn { .. } | ExprNode::At { .. } => {
-                todo!("M2 unit 4: eval of {}", graph.loc(expr).tlc_text(graph.interner()))
+                Err(EvalError::unimplemented(format!("eval of {} (M2 unit 4)", graph.loc(expr).tlc_text(graph.interner()))))
             }
             ExprNode::Decimal { .. } => unreachable!("processConstants rejects decimals"),
         }
