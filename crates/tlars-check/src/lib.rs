@@ -34,6 +34,10 @@ pub struct Invocation<'a> {
     pub stdout: Box<dyn Write + Send + 'a>,
     pub stderr: Box<dyn Write + Send + 'a>,
     pub env: Env,
+    /// Set by the run when a message reports a construct tlars does not implement. The
+    /// conformance harness uses it to tell "blocked on a missing feature" from a real
+    /// mismatch without searching the output.
+    pub unimplemented: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
 impl Invocation<'static> {
@@ -46,6 +50,7 @@ impl Invocation<'static> {
             stdout: Box::new(std::io::stdout()),
             stderr: Box::new(std::io::stderr()),
             env: Env::process(),
+            unimplemented: None,
         }
     }
 }
@@ -232,6 +237,7 @@ pub fn run(inv: Invocation<'_>) -> ExitStatus {
                     as_errors: Vec::new(),
                     debug: false,
                     now: inv.env.now_formatter(no_timestamps),
+                    unimplemented: None,
                 },
             );
             use tlars_msg::Report;

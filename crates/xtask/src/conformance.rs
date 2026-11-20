@@ -171,20 +171,23 @@ enum Verdict {
     Timeout,
 }
 
-/// What `EvalError::unimplemented` and the remaining `todo!`s put in the output. A case that
-/// says this is blocked on a missing feature, not on wrong behaviour. The raw output is what
-/// is searched, because an `exit-only` case keeps no transcript to compare.
-const UNIMPLEMENTED: &[&str] = &["tlars does not implement", "not yet implemented"];
+/// What a `todo!` panic says. A panic message cannot come from the spec under test, so
+/// matching on it is unambiguous; `EvalError::unimplemented` is reported out of band instead
+/// (`Invocation::unimplemented`), because a spec's own `Print` could imitate its text.
+const UNIMPLEMENTED_PANIC: &str = "not yet implemented";
 
+/// A run that reported a construct tlars does not implement never counts as a pass, however
+/// its exit status compares: the agreement would be accidental, and an `exit-only` case has
+/// no transcript that would expose it.
 fn verdict(want: &Outcome, got: &Outcome, unimplemented: bool) -> Verdict {
+    if unimplemented {
+        let difference = if got == want { "exit and transcript agree, but the run stopped at an unimplemented construct".to_string() } else { first_difference(want, got) };
+        return Verdict::Unimplemented(difference);
+    }
     if got == want {
         return Verdict::Pass;
     }
-    let difference = first_difference(want, got);
-    if unimplemented {
-        return Verdict::Unimplemented(difference);
-    }
-    Verdict::Mismatch(difference)
+    Verdict::Mismatch(first_difference(want, got))
 }
 
 /// tlars on one case, in-process, on its own thread (fresh thread-local state, a stack as
@@ -199,6 +202,7 @@ fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<(Outcome, boo
         .stack_size(256 << 20)
         .spawn(move || {
             let out = Arc::new(Mutex::new(Vec::new()));
+            let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
             let inv = tlars_check::Invocation {
                 args,
                 system_properties: Vec::new(),
@@ -206,10 +210,11 @@ fn run_tlars(root: &Path, case: &Case, context: Context) -> Result<(Outcome, boo
                 stdout: Box::new(SharedBuf(out.clone())),
                 stderr: Box::new(std::io::sink()),
                 env: tlars_check::Env::hermetic(),
+                unimplemented: Some(flag.clone()),
             };
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tlars_check::run(inv)));
             let text = String::from_utf8_lossy(&out.lock().expect("lock")).into_owned();
-            let unimplemented = UNIMPLEMENTED.iter().any(|m| text.contains(m));
+            let unimplemented = flag.load(std::sync::atomic::Ordering::Relaxed);
             let _ = tx.send(match result {
                 Ok(status) => Ok((
                     Outcome {
@@ -271,7 +276,7 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
         let want = &exp.0[&(case.id.clone(), context)];
         match run_tlars(&root_owned, case, context) {
             Ok((got, unimplemented)) => verdict(want, &got, unimplemented),
-            Err(Verdict::Panic(m)) if UNIMPLEMENTED.iter().any(|u| m.contains(u)) => Verdict::Unimplemented(format!("panic: {m}")),
+            Err(Verdict::Panic(m)) if m.contains(UNIMPLEMENTED_PANIC) => Verdict::Unimplemented(format!("panic: {m}")),
             Err(v) => v,
         }
     });

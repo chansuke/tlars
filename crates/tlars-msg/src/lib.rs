@@ -160,6 +160,10 @@ pub trait Report: Sync {
 /// Formats the current time for `MP.now()`.
 pub type Now = Box<dyn Fn() -> String + Send + Sync>;
 
+/// Text that marks a construct tlars does not implement. `Report::raw` never checks it, so a
+/// spec's own `Print` of the same words cannot forge the signal.
+pub const UNIMPLEMENTED_MARKER: &str = "tlars does not implement";
+
 pub struct ReporterConfig {
     pub tool_mode: bool,
     /// `!-nowarning` (`TLCGlobals.warn`).
@@ -170,6 +174,9 @@ pub struct ReporterConfig {
     pub as_errors: Vec<Ec>,
     pub debug: bool,
     pub now: Now,
+    /// Set when a framed message carries [`UNIMPLEMENTED_MARKER`]. The conformance harness
+    /// reads it instead of searching the output, which a spec could imitate.
+    pub unimplemented: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
 /// The one [`Report`] implementation and the only writer of TLC's stdout.
@@ -191,7 +198,13 @@ impl<'w> Reporter<'w> {
 
     fn message_text(&self, class: MsgClass, ec: Ec, params: &[&str]) -> String {
         let cx = RenderCx { class, tool_mode: self.cfg.tool_mode, now: (self.cfg.now)(), debug: self.cfg.debug };
-        frame(class, ec, &render(ec, params, &cx), self.cfg.tool_mode)
+        let body = render(ec, params, &cx);
+        if let Some(flag) = self.cfg.unimplemented.as_ref()
+            && body.contains(UNIMPLEMENTED_MARKER)
+        {
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        frame(class, ec, &body, self.cfg.tool_mode)
     }
 
     fn is_suppressed(&self, ec: Ec) -> bool {
@@ -299,6 +312,7 @@ mod tests {
             as_errors,
             debug: false,
             now: Box::new(|| "NOW".into()),
+            unimplemented: None,
         };
         Reporter::new(Box::new(out.clone()), cfg)
     }

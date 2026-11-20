@@ -39,6 +39,7 @@ impl<'a> Session<'a> {
                 as_errors: options.messages_as_errors.clone(),
                 debug: property_is_true(&system_properties, "tlc2.output.MP.noDebug"),
                 now: inv.env.now_formatter(no_timestamps),
+                unimplemented: inv.unimplemented.clone(),
             },
         );
         let mut rng = tlars_java::JavaRandom::new(inv.env.entropy.seed());
