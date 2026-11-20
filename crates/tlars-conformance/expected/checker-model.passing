@@ -252,6 +252,7 @@ tlc/checker/next/all_assigned_print_nonbool_value
 tlc/checker/next/angle_action_unassigned
 tlc/checker/next/angle_filters_stutter
 tlc/checker/next/angle_tuple_filter
+tlc/checker/next/assert_string_only_message
 tlc/checker/next/box_false_action_stutters
 tlc/checker/next/box_formula_in_next
 tlc/checker/next/box_generates_action_and_stutter

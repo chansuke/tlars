@@ -370,8 +370,15 @@ impl<'a> ModelChecker<'a> {
                 if ec == Ec::GENERAL {
                     let body = tlars_msg::unexpected_exception(java_class(&e), &e.message);
                     self.out.error(Ec::GENERAL, &[&body]);
-                } else {
+                } else if e.params.is_empty() {
+                    // `MP.printError(ec, e)`: the exception's own message as the parameter.
                     self.out.error(ec, &[&e.message]);
+                } else {
+                    // `MP.printError(ec, ((EvalException) e).getParameters(), e)`: the
+                    // template is rendered from the parameters, not from the pretty-printed
+                    // message the exception already built.
+                    let params: Vec<&str> = e.params.iter().map(String::as_str).collect();
+                    self.out.error(ec, &params);
                 }
             }
             let mut locals = WorkerLocals::new(0, self.seed);

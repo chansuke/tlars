@@ -37,41 +37,45 @@ pub struct EvalError {
     pub message: String,
     pub loc: Option<Loc>,
     pub kind: EvalErrorKind,
+    /// `EvalException.getParameters()`: what `Assert.fail(ec, params)` was given, which the
+    /// checker passes on so `MP.printError(ec, params, e)` renders the template itself
+    /// (`ModelChecker.java:671-678`). Empty where TLC has no parameters to hand over.
+    pub params: Vec<String>,
 }
 
 pub type EvalResult<T> = Result<T, EvalError>;
 
 impl EvalError {
     /// `new EvalException(ec, params)`; `message` is `MP.getMessage(ec, params)`.
-    pub(crate) fn eval(ec: Ec, message: String) -> EvalError {
-        EvalError { ec, message, loc: None, kind: EvalErrorKind::Eval }
+    pub(crate) fn eval(ec: Ec, message: String, params: Vec<String>) -> EvalError {
+        EvalError { ec, message, loc: None, kind: EvalErrorKind::Eval, params }
     }
 
     /// `Assert.fail(ec, params)`; `message` is `MP.getMessage(ec, params)`.
     pub(crate) fn runtime(ec: Ec, message: String) -> EvalError {
-        EvalError { ec, message, loc: None, kind: EvalErrorKind::Runtime }
+        EvalError { ec, message, loc: None, kind: EvalErrorKind::Runtime, params: Vec::new() }
     }
 
     /// `Assert.fail(reason, expr, ctxt)`: a `TLCDetailedRuntimeException` with
     /// `EC.GENERAL` and the reason as its message.
     pub(crate) fn detailed(reason: String, loc: Option<Loc>) -> EvalError {
-        EvalError { ec: Ec::GENERAL, message: reason, loc, kind: EvalErrorKind::Runtime }
+        EvalError { ec: Ec::GENERAL, message: reason, loc, kind: EvalErrorKind::Runtime, params: Vec::new() }
     }
 
     /// `(T) v` on a value of another class, as TLC's value classes cast without checking.
     pub(crate) fn class_cast(from: &str, to: &str) -> EvalError {
         let message = tlars_java::class_cast(&format!("tlc2.value.impl.{from}"), &format!("tlc2.value.impl.{to}"));
-        EvalError { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ClassCastException" } }
+        EvalError { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ClassCastException" }, params: Vec::new() }
     }
 
     /// `a[i]` past the end, as TLC's value classes index without checking.
     pub(crate) fn index_out_of_bounds(index: usize, length: usize) -> EvalError {
         let message = tlars_java::index_out_of_bounds(index as i64, length);
-        EvalError { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ArrayIndexOutOfBoundsException" } }
+        EvalError { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ArrayIndexOutOfBoundsException" }, params: Vec::new() }
     }
 
     pub(crate) fn unimplemented(what: String) -> EvalError {
-        EvalError { ec: Ec::GENERAL, message: format!("tlars does not implement {what} yet"), loc: None, kind: EvalErrorKind::Unimplemented }
+        EvalError { ec: Ec::GENERAL, message: format!("tlars does not implement {what} yet"), loc: None, kind: EvalErrorKind::Unimplemented, params: Vec::new() }
     }
 }
 

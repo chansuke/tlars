@@ -882,6 +882,7 @@ impl ValueVec {
                     message: format!("Attempted to construct a set with too many elements (>{bound})."),
                     loc: None,
                     kind: crate::error::EvalErrorKind::Jvm { class: "util.WrongInvocationException" },
+                    params: Vec::new(),
                 });
             }
             let doubled = (self.capacity as i64 * 2).min(i64::from(i32::MAX) - 8);

@@ -77,6 +77,7 @@ fn not_an_op_def(op: SymbolRef) -> crate::error::EvalError {
         message,
         loc: None,
         kind: crate::error::EvalErrorKind::Jvm { class: "java.lang.ClassCastException" },
+        params: Vec::new(),
     }
 }
 

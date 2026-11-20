@@ -290,7 +290,7 @@ impl<'t> Ev<'t> {
                 let graph = &self.tool.graph;
                 let loc = graph.loc(expr);
                 let message = self.out.text(Ec::TLC_EXPECTED_VALUE, &["boolean", &graph.expr_tlc_text(expr)]);
-                Err(EvalError { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime })
+                Err(EvalError { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime, params: Vec::new() })
             }
         }
     }
@@ -435,7 +435,7 @@ impl<'t> Ev<'t> {
                 let graph = &self.tool.graph;
                 let loc = graph.loc(expr);
                 let message = self.out.text(Ec::TLC_EXPECTED_VALUE, &["boolean", &graph.expr_tlc_text(expr)]);
-                Err(EvalError { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime })
+                Err(EvalError { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime, params: Vec::new() })
             }
         }
     }
@@ -486,6 +486,6 @@ impl<'t> Ev<'t> {
     /// What the JVM's `StackOverflowError` becomes. It is an `Error`, so the `catch
     /// (Exception)` blocks TLC evaluates under (assumptions, invariants) let it through.
     fn stack_overflow(&self) -> EvalError {
-        EvalError { ec: Ec::SYSTEM_STACK_OVERFLOW, message: String::new(), loc: None, kind: crate::error::EvalErrorKind::StackOverflow }
+        EvalError { ec: Ec::SYSTEM_STACK_OVERFLOW, message: String::new(), loc: None, kind: crate::error::EvalErrorKind::StackOverflow, params: Vec::new() }
     }
 }
