@@ -20,7 +20,7 @@ pub(crate) mod enumerate;
 mod fingerprint;
 mod function;
 mod order;
-mod print;
+pub(crate) mod print;
 mod sets;
 
 pub(crate) use function::{Except, warn};

@@ -178,7 +178,7 @@ pub(crate) fn select_seq(
         return Ok(Value::tuple(Vec::new()));
     }
     let Some(test) = test else {
-        let shown = ev.op_arg_text(args[1])?;
+        let shown = ev.op_arg_text(args[1], None)?;
         return Err(eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["second", "SelectSeq", "operator", &shown]));
     };
     let mut kept = Vec::new();
@@ -189,7 +189,7 @@ pub(crate) fn select_seq(
             Value::Bool(true) => kept.push(elem),
             Value::Bool(false) => {}
             _ => {
-                let shown = ev.op_arg_text(args[1])?;
+                let shown = ev.op_arg_text(args[1], Some(&test))?;
                 return Err(eval_exception(
                     ev,
                     Ec::TLC_MODULE_ARGUMENT_ERROR,

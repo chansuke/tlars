@@ -669,9 +669,13 @@ impl<'t> Ev<'t> {
         })
     }
 
-    /// `Values.ppr(op.toString())` of an operator argument: `OpLambdaValue.toString` is
-    /// `<Operator name>`, and the definition SANY builds for a LAMBDA is named `LAMBDA`.
-    pub(crate) fn op_arg_text(&mut self, arg: ExprOrOpArg) -> EvalResult<String> {
+    /// `Values.ppr(op.toString())` of an operator argument: `<Operator name>` for a
+    /// definition, which for a LAMBDA is named `LAMBDA`, and the Java signature for an
+    /// override (`OpLambdaValue.java:189-193`, `MethodValue.java:249-252`).
+    pub(crate) fn op_arg_text(&mut self, arg: ExprOrOpArg, op: Option<&OpArgValue>) -> EvalResult<String> {
+        if let Some(OpArgValue::Native(id)) = op {
+            return Ok(format!("<Java Method: {}>", id.op().signature));
+        }
         let ExprOrOpArg::OpArg(sym) = arg else {
             return Err(EvalError::unimplemented("the printed form of a non-operator module argument".into()));
         };
