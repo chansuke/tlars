@@ -191,6 +191,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 - 約 21 の値 variant と受け手側の型からの dispatch を受け入れる。引き換えに、印字、列挙順、エラー文が正確になる。
 - v1 では `-workers N` で違反が出たとき、TLC と同程度に非決定的になることを受け入れる。成功時の数は一致する。M6 で `-workers 1` と完全に一致させる。
 - FPSet、queue、trace、liveness graph は M6 まで in-memory で持つ。disk 版は同じ型の背後に後から差し込む。
+- 版の表示 (2262) と起動時の表示 (2187) のうち JVM を表す欄は、TLC の値をまねず tlars 自身の値を出す。2262 は `Version <tlars の版> of tlars (rev: bc1b506)`、2187 の JVM のベンダー、版、アーキテクチャは `tlars`、tlars の版、`64bit`、ヒープとヒープ外のメモリは `0` である。どの実装の出力かを利用者が取り違えないためで、どちらのメッセージも照合の正規化で落ちる。FPSet とキューの名前は、TLC と同じシステムプロパティ (`tlc2.tool.fp.FPSet.impl`、`tlc2.tool.queue.IStateQueue`) とその既定値に従う。
 
 ## Alternatives considered
 
