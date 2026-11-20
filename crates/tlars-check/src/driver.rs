@@ -77,7 +77,7 @@ fn banner_parameters(session: &Session<'_>) -> Vec<String> {
 fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
     let out = &session.reporter;
     let (user_dir, main_file) = main_file(session);
-    let config = read_config(session, user_dir.as_deref())?;
+    let config = read_config(session, &user_dir)?;
     if session.options.tool_mode {
         out.message(Ec::TLC_SANY_START, &[]);
     }
@@ -86,7 +86,7 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
     let loaded = tlars_sany::load(
         LoadRequest {
             root_file: &main_file,
-            user_dir: user_dir.as_deref(),
+            user_dir: Some(&user_dir),
             library_paths: &library_paths,
             interner: session.interner.clone(),
             extra_root_extends: &[],
@@ -121,31 +121,32 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
 }
 
 /// The end of `handleParameters` (`TLC.java:1236-1242`): an absolute spec path becomes the
-/// user directory and its file name the main file.
-fn main_file(session: &Session<'_>) -> (Option<PathBuf>, String) {
+/// user directory and its file name the main file. Otherwise modules are found from the
+/// working directory, which is the invocation's, not this process's.
+fn main_file(session: &Session<'_>) -> (PathBuf, String) {
     let spec = Path::new(&session.options.spec);
     if spec.is_absolute() {
         let name = spec.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        (spec.parent().map(Path::to_path_buf), name)
+        (spec.parent().map_or_else(|| session.cwd.clone(), Path::to_path_buf), name)
     } else {
-        (None, session.options.spec.clone())
+        (session.cwd.clone(), session.options.spec.clone())
     }
 }
 
 /// `new ModelConfig(...).parse()` (`ModelConfig.java:171-180`): the file is resolved like a
 /// module, without the library fallback mattering for a `.cfg`.
-fn read_config(session: &Session<'_>, user_dir: Option<&Path>) -> Result<tlars_sany::cfg::ModelConfig, Exit> {
+fn read_config(session: &Session<'_>, user_dir: &Path) -> Result<tlars_sany::cfg::ModelConfig, Exit> {
     let out = &session.reporter;
+    // `configFile = mainFile` after an absolute main file was reduced to its name.
     let base = session.options.config.clone().unwrap_or_else(|| {
-        let spec = &session.options.spec;
-        if user_dir.is_some() { Path::new(spec).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() } else { spec.clone() }
+        let spec = Path::new(&session.options.spec);
+        if spec.is_absolute() { spec.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() } else { session.options.spec.clone() }
     });
     if base.ends_with(".tla") {
         todo!("M5: a cfg embedded in a monolithic spec");
     }
     let name = format!("{base}.cfg");
-    let dir = user_dir.map_or_else(|| session.cwd.clone(), Path::to_path_buf);
-    let text = match std::fs::read(dir.join(&name)) {
+    let text = match std::fs::read(user_dir.join(&name)) {
         Ok(text) => text,
         Err(_) => {
             out.error(Ec::CFG_ERROR_READING_FILE, &[&name, "File not found."]);
@@ -192,7 +193,7 @@ struct SanyLines<'s, 'a> {
 
 impl SanyOut for SanyLines<'_, '_> {
     fn line(&mut self, text: &str) {
-        self.out.raw(text);
+        self.out.raw(&format!("{text}\n"));
     }
     fn err_line(&mut self, text: &str) {
         use std::io::Write;
