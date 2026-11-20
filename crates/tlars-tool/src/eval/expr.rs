@@ -22,6 +22,8 @@ pub(crate) enum Resolved {
     Value(Value),
     UserOp(tlars_sany::graph::OpDefId),
     Native(crate::modules::NativeId),
+    /// cfg `op(a, b) = v` (`OpRcdValue`, an `OpValue`).
+    OpRcd(crate::spec::OpRcd),
     Var(crate::state::VarSlot),
 }
 
@@ -79,6 +81,7 @@ impl<'t> Ev<'t> {
                 Resolved::Value(v) => Binding::Value(v),
                 Resolved::UserOp(d) => Binding::OpDef(d),
                 Resolved::Native(id) => Binding::Native(id),
+                Resolved::OpRcd(lines) => Binding::OpRcd(lines),
                 Resolved::Var(_) => Binding::Value(Value::Undef),
             },
             ExprOrOpArg::Absent => unreachable!("only CASE's OTHER guard is absent"),
@@ -107,7 +110,9 @@ impl<'t> Ev<'t> {
             }
             SymbolRef::Decl(d) => match tool.bindings.decls[d.index()].as_ref() {
                 Some(crate::spec::DeclBinding::Value(v)) => Resolved::Value(v.clone()),
+                Some(crate::spec::DeclBinding::Table(lines)) => Resolved::OpRcd(lines.clone()),
                 Some(crate::spec::DeclBinding::Op(op)) => Resolved::UserOp(*op),
+                Some(crate::spec::DeclBinding::Native(id)) => Resolved::Native(*id),
                 Some(crate::spec::DeclBinding::Var(slot)) => Resolved::Var(*slot),
                 None => Resolved::Value(Value::Undef),
             },
@@ -157,6 +162,14 @@ impl<'t> Ev<'t> {
                     }
                 }
                 Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
+                    // A `MethodValue`'s method handle is invoked with exactly the Java
+                    // method's parameters, so a cfg override that gives it another arity
+                    // raises a `WrongMethodTypeException` whose text names the handle's
+                    // erased type. tlars has no table of those types.
+                    if args.len() != crate::modules::arity(id) {
+                        let name = self.symbol_name(op);
+                        return Err(EvalError::unimplemented(format!("the Java method behind {name} applied to {} arguments", args.len())));
+                    }
                     // `MethodValue.eval(tool, args, ...)`: the arguments are evaluated first,
                     // except where the Java method takes an operator and tlars has to see the
                     // argument node to resolve it.
@@ -170,6 +183,14 @@ impl<'t> Ev<'t> {
                             crate::modules::apply(self, id, &vals)
                         }
                     };
+                }
+                // `OpValue.eval(tool, args, ...)`: evaluate the arguments, then match a line.
+                Resolved::OpRcd(lines) | Resolved::Binding(Binding::OpRcd(lines)) => {
+                    let mut vals = Vec::with_capacity(args.len());
+                    for &a in args {
+                        vals.push(self.eval(a.expect_expr(), c, s0, s1, control)?);
+                    }
+                    return self.apply_op_rcd(&lines, &vals);
                 }
                 Resolved::Binding(Binding::Lambda(_) | Binding::ExceptAt(_)) => {
                     return Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()));
@@ -638,6 +659,39 @@ impl<'t> Ev<'t> {
         }
     }
 
+    /// `OpRcdValue.eval(args, control)` (`OpRcdValue.java:130-162`): the first line all of
+    /// whose arguments are equal to the actual ones, compared with the *line's* value as the
+    /// receiver.
+    fn apply_op_rcd(&mut self, lines: &crate::spec::OpRcd, args: &[Value]) -> EvalResult<Value> {
+        for (params, value) in lines.iter() {
+            if params.len() != args.len() {
+                let flat = crate::value::print::op_rcd_string(self, lines)?;
+                let shown = crate::value::print::ppr(self, &flat);
+                return Err(EvalError::detailed(format!("Attempted to apply the operator {shown}\nwith wrong number of arguments."), None));
+            }
+            let mut matched = true;
+            for (p, a) in params.iter().zip(args) {
+                matched = p.tlc_equals(self, a)?;
+                if !matched {
+                    break;
+                }
+            }
+            if matched {
+                return Ok(value.clone());
+            }
+        }
+        let flat = crate::value::print::op_rcd_string(self, lines)?;
+        let shown = crate::value::print::ppr(self, &flat);
+        let mut args_text = String::new();
+        for (i, a) in args.iter().enumerate() {
+            if i > 0 {
+                args_text.push_str(", ");
+            }
+            args_text.push_str(&a.to_tlc_string(self)?);
+        }
+        Err(EvalError::detailed(format!("Attempted to apply operator:\n{shown}\nto arguments ({args_text}), which is undefined."), None))
+    }
+
     fn body_binding(&self, d: OpDefId) -> Option<&'t OpBinding> {
         let tool = self.tool();
         tool.graph.op_def(d).body.and_then(|b| tool.bindings.body_chain(&tool.graph, b))
@@ -776,7 +830,7 @@ fn pair(graph: &tlars_sany::graph::SemanticGraph, e: ExprId) -> (ExprId, ExprId)
 
 fn resolved(b: &OpBinding, d: OpDefId) -> Resolved {
     match b {
-        OpBinding::Folded(v) => Resolved::Value(v.clone()),
+        OpBinding::Value(v) => Resolved::Value(v.clone()),
         OpBinding::Native(id) => Resolved::Native(*id),
         OpBinding::Replaced(r) => Resolved::UserOp(*r),
         OpBinding::Table(_) | OpBinding::Unimplemented => {

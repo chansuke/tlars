@@ -97,6 +97,17 @@ pub fn render(ec: Ec, params: &[&str], cx: &RenderCx) -> String {
     body
 }
 
+/// `MP.ECGeneralMsg("", throwable)` (`MP.java:1744-1779`): the one parameter
+/// `printError(EC.GENERAL, cause)` passes for an exception nobody meant to raise. TLC
+/// disguises its own `Assert.TLCRuntimeException` as `java.lang.RuntimeException`, so the
+/// caller names the class it wants printed.
+pub fn unexpected_exception(class: &str, message: &str) -> String {
+    format!(
+        "TLC threw an unexpected exception.\nThis was probably caused by an error in the spec or model.\n\
+         See the User Output or TLC Console for clues to what happened.\nThe exception was a {class}\n: {message}"
+    )
+}
+
 /// `MP.getMessage(class, code, params)`: [`render`] plus tool-mode framing or the
 /// non-tool class prefix. The first-warning hint is added by [`Reporter`], which owns the
 /// warning history it depends on.

@@ -104,6 +104,18 @@ pub struct ModelValue {
     pub(crate) ty: Option<u8>,
 }
 
+impl ModelValue {
+    /// `new ModelValue(val)` (`ModelValue.java:84-95`): `index` is the creation counter and
+    /// the type is `val.charAt(0)` when `val.length() > 2 && val.charAt(1) == '_'`. So `t_`
+    /// and `ab_1` are untyped while `t_1` has type `t`. TLA+ identifiers are ASCII, so
+    /// counting bytes is counting `char`s.
+    pub(crate) fn new(name: Atom, index: u16, text: &str) -> ModelValue {
+        let b = text.as_bytes();
+        let ty = (b.len() > 2 && b[1] == b'_').then(|| b[0]);
+        ModelValue { name, index, ty }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct IntervalValue {
     pub(crate) lo: i32,

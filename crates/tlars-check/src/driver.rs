@@ -135,6 +135,10 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
             return Err(Exit::Returned(out.runtime_exception(ec, &params)));
         }
         Err(SpecError::Failure { ec }) => return Err(Exit::Returned(print_failure(out, ec))),
+        Err(SpecError::Unexpected { class, message }) => {
+            let body = tlars_msg::unexpected_exception(class, &message);
+            return Err(Exit::Returned(out.error(Ec::GENERAL, &[&body])));
+        }
         Err(SpecError::UnsupportedJavaOverride { .. }) => todo!("M5: user Java overrides"),
     };
     Ok(crate::bfs::model_check(&tool, out, session.seed))

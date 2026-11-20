@@ -39,6 +39,8 @@ pub(crate) enum Binding {
     OpDef(OpDefId),
     /// Operator argument bound to a Java override (`MethodValue`).
     Native(crate::modules::NativeId),
+    /// Operator argument bound to a cfg `op(a, b) = v` constant (`OpRcdValue`).
+    OpRcd(crate::spec::OpRcd),
     Lambda(Arc<OpLambda>),
     /// The `@` of an EXCEPT component.
     ExceptAt(Value),

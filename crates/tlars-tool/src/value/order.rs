@@ -13,7 +13,7 @@
 //! answer through `Canon` and panics on disagreement, so "fast path agrees" is a structural
 //! check, not a promise.
 
-use super::{FcnRcdValue, IntervalValue, RecordValue, SetEnumValue, UserValue, Value};
+use super::{FcnRcdValue, IntervalValue, ModelValue, RecordValue, SetEnumValue, UserValue, Value};
 use crate::error::{EvalError, EvalResult};
 use crate::eval::Ev;
 use crate::value::enumerate::EnumOrder;
@@ -22,12 +22,79 @@ use std::sync::Arc;
 use tlars_msg::Ec;
 use tlars_sany::Atom;
 
+impl ModelValue {
+    /// `modelValueEquals(obj)` (`ModelValue.java:235-250`): the answer another class's
+    /// `equals` returns once its own conversion of this model value failed. An untyped model
+    /// value is simply unequal; a typed one is an error.
+    fn non_model_equals(&self, ev: &mut Ev<'_>, obj: &Value) -> EvalResult<bool> {
+        if self.ty.is_none() {
+            return Ok(false);
+        }
+        let (a, b) = (Value::Model(*self).ppr(ev)?, obj.ppr(ev)?);
+        Err(EvalError::detailed(format!("Attempted to check equality of the typed model value {a} and the non-model value\n{b}"), None))
+    }
+
+    /// `modelValueCompareTo(obj)` (`ModelValue.java:212-226`): the answer another class's
+    /// `compareTo` returns, so `Greater` says the non-model value sorts above.
+    fn non_model_compare(&self, ev: &mut Ev<'_>, obj: &Value) -> EvalResult<Ordering> {
+        if self.ty.is_none() {
+            return Ok(Ordering::Greater);
+        }
+        let (a, b) = (Value::Model(*self).ppr(ev)?, obj.ppr(ev)?);
+        Err(EvalError::detailed(format!("Attempted to compare the typed model value {a} and the non-model value\n{b}"), None))
+    }
+
+    /// `modelValueMember(obj)` (`ModelValue.java:252-266`): the answer `obj.member(this)`
+    /// returns once `obj` could not read this model value as one of its elements.
+    fn non_model_member(&self, ev: &mut Ev<'_>, obj: &Value) -> EvalResult<bool> {
+        if self.ty.is_none() {
+            return Ok(false);
+        }
+        let (a, b) = (Value::Model(*self).ppr(ev)?, obj.ppr(ev)?);
+        Err(EvalError::detailed(format!("Attempted to check if the typed model value {a} is an element of\n{b}"), None))
+    }
+
+    /// The common half of `ModelValue.equals` and `ModelValue.compareTo`: an untyped model
+    /// value compares with any model value, a typed one only with its own type and the
+    /// untyped ones. `None` means `obj` is not a model value at all.
+    fn comparable(&self, ev: &mut Ev<'_>, obj: &Value, verb: &str) -> EvalResult<Option<Ordering>> {
+        let Value::Model(m) = obj else { return Ok(None) };
+        if self.ty.is_none() || m.ty.is_none() || m.ty == self.ty {
+            return Ok(Some(self.name.tok().cmp(&m.name.tok())));
+        }
+        let (a, b) = (Value::Model(*self).ppr(ev)?, obj.ppr(ev)?);
+        Err(EvalError::detailed(format!("Attempted to {verb} the differently-typed model values {a} and {b}"), None))
+    }
+
+    /// `ModelValue.equals` (`ModelValue.java:188-210`).
+    fn equals(&self, ev: &mut Ev<'_>, obj: &Value) -> EvalResult<bool> {
+        match self.comparable(ev, obj, "check equality of")? {
+            Some(c) => Ok(c == Ordering::Equal),
+            None if self.ty.is_none() => Ok(false),
+            None => {
+                let (a, b) = (Value::Model(*self).ppr(ev)?, obj.ppr(ev)?);
+                Err(EvalError::detailed(format!("Attempted to check equality of typed model value {a} and non-model value\n{b}"), None))
+            }
+        }
+    }
+
+    /// `ModelValue.compareTo` (`ModelValue.java:155-186`): an untyped model value sorts
+    /// below every non-model value, whatever its class.
+    fn compare(&self, ev: &mut Ev<'_>, obj: &Value) -> EvalResult<Ordering> {
+        match self.comparable(ev, obj, "compare")? {
+            Some(c) => Ok(c),
+            None if self.ty.is_none() => Ok(Ordering::Less),
+            None => {
+                let (a, b) = (Value::Model(*self).ppr(ev)?, obj.ppr(ev)?);
+                Err(EvalError::detailed(format!("Attempted to compare the typed model value {a} and non-model value\n{b}"), None))
+            }
+        }
+    }
+}
+
 impl Value {
     /// `IValue.equals`. The evaluator calls `lhs.tlc_equals(ev, rhs)` for `lhs = rhs`.
     pub(crate) fn tlc_equals(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<bool> {
-        if matches!(other, Value::Model(_)) {
-            return Err(EvalError::unimplemented("ModelValue.modelValueEquals (M3)".into()));
-        }
         // The scalar classes accept their own class and model values, and fail otherwise
         // naming the receiver (`BoolValue.java`, `IntValue.java`, `StringValue.java`).
         let mismatch = |ev: &mut Ev<'_>, verb: &str, noun: &str| -> EvalResult<bool> {
@@ -35,6 +102,8 @@ impl Value {
             Err(EvalError::detailed(format!("Attempted to {verb} equality of {noun} {a} with non-{noun}:\n{b}"), None))
         };
         match (self, other) {
+            (Value::Model(a), _) => a.equals(ev, other),
+            (Value::Bool(_) | Value::Int(_) | Value::Str(_), Value::Model(m)) => m.non_model_equals(ev, self),
             (Value::Bool(a), Value::Bool(b)) => Ok(a == b),
             (Value::Bool(_), _) => mismatch(ev, "compare", "boolean"),
             (Value::Int(a), Value::Int(b)) => Ok(a == b),
@@ -45,6 +114,9 @@ impl Value {
             (Value::Interval(a), _) => Value::SetEnum(a.to_set_enum_arc()).tlc_equals(ev, other),
             (Value::SetEnum(a), _) => {
                 let Some(b) = other.to_set_enum(ev)? else {
+                    if let Value::Model(m) = other {
+                        return m.non_model_equals(ev, self);
+                    }
                     let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to check equality of the set {x} with the value:\n{y}"), None));
                 };
@@ -80,6 +152,9 @@ impl Value {
             },
             (Value::Record(a), _) => {
                 let Some(b) = other.to_rcd(ev)? else {
+                    if let Value::Model(m) = other {
+                        return m.non_model_equals(ev, self);
+                    }
                     let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to check equality of record:\n{x}\nwith non-record\n{y}"), None));
                 };
@@ -97,6 +172,9 @@ impl Value {
             }
             (Value::FcnRcd(a), _) => {
                 let Some(b) = other.to_fcn_rcd(ev)? else {
+                    if let Value::Model(m) = other {
+                        return m.non_model_equals(ev, self);
+                    }
                     let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to check equality of the function {x} with the value:\n{y}"), None));
                 };
@@ -220,14 +298,13 @@ impl Value {
 
     /// `IValue.compareTo`.
     pub(crate) fn tlc_compare(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Ordering> {
-        if matches!(other, Value::Model(_)) {
-            return Err(EvalError::unimplemented("ModelValue.modelValueCompareTo (M3)".into()));
-        }
         let mismatch = |ev: &mut Ev<'_>, noun: &str| -> EvalResult<Ordering> {
             let (a, b) = (self.ppr(ev)?, other.ppr(ev)?);
             Err(EvalError::detailed(format!("Attempted to compare {noun} {a} with non-{noun}:\n{b}"), None))
         };
         match (self, other) {
+            (Value::Model(a), _) => a.compare(ev, other),
+            (Value::Bool(_) | Value::Int(_) | Value::Str(_), Value::Model(m)) => m.non_model_compare(ev, self),
             (Value::Bool(a), Value::Bool(b)) => Ok(a.cmp(b)),
             (Value::Bool(_), _) => mismatch(ev, "boolean"),
             (Value::Int(a), Value::Int(b)) => Ok(a.cmp(b)),
@@ -242,6 +319,9 @@ impl Value {
             (Value::Interval(a), _) => Value::SetEnum(a.to_set_enum_arc()).tlc_compare(ev, other),
             (Value::SetEnum(a), _) => {
                 let Some(b) = other.to_set_enum(ev)? else {
+                    if let Value::Model(m) = other {
+                        return m.non_model_compare(ev, self);
+                    }
                     let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to compare the set {x} with the value:\n{y}"), None));
                 };
@@ -279,6 +359,9 @@ impl Value {
             },
             (Value::Record(a), _) => {
                 let Some(b) = other.to_rcd(ev)? else {
+                    if let Value::Model(m) = other {
+                        return m.non_model_compare(ev, self);
+                    }
                     let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to compare record:\n{x}\nwith non-record\n{y}"), None));
                 };
@@ -303,6 +386,9 @@ impl Value {
             }
             (Value::FcnRcd(a), _) => {
                 let Some(b) = other.to_fcn_rcd(ev)? else {
+                    if let Value::Model(m) = other {
+                        return m.non_model_compare(ev, self);
+                    }
                     let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to compare the function {x} with the value:\n{y}"), None));
                 };
@@ -326,9 +412,6 @@ impl Value {
 
     /// `member(elem)`: `elem \in self`.
     pub(crate) fn member(&self, ev: &mut Ev<'_>, elem: &Value) -> EvalResult<bool> {
-        if matches!(elem, Value::Model(_)) {
-            return Err(EvalError::unimplemented("membership of a model value (M3)".into()));
-        }
         let not_a_set = |ev: &mut Ev<'_>, what: &str| -> EvalResult<bool> {
             let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
             Err(EvalError::detailed(format!("Attempted to check if the value:\n{e}\nis an element of the {what} {s}"), None))
@@ -343,9 +426,11 @@ impl Value {
                 let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
                 Err(EvalError::detailed(format!("Attempted to check if the value:\n{e}\nis an element {s}"), None))
             }
+            // An untyped model value is simply not in the interval; a typed one gets the
+            // interval's own text, not `modelValueMember`'s (`IntervalValue.java:74-93`).
             Value::Interval(i) => match elem {
                 Value::Int(x) => Ok(*x >= i.lo && *x <= i.hi),
-                _ if i.lo <= i.hi => {
+                _ if i.lo <= i.hi && !matches!(elem, Value::Model(m) if m.ty.is_none()) => {
                     let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
                     Err(EvalError::detailed(format!("Attempted to check if the value:\n{e}\nis in the integer interval {s}"), None))
                 }
@@ -378,6 +463,9 @@ impl Value {
                 (UserValue::Nat, Value::Int(x)) => Ok(*x >= 0),
                 (UserValue::Int, Value::Int(_)) => Ok(true),
                 (UserValue::String, Value::Str(_)) => Ok(true),
+                // `Naturals.member` / `Integers.member` / `Strings.member` pass the `UserObj`
+                // itself, whose `toString` is the same `Nat` / `Int` / `STRING`.
+                (UserValue::Nat | UserValue::Int | UserValue::String, Value::Model(m)) => m.non_model_member(ev, self),
                 (UserValue::Nat | UserValue::Int | UserValue::String, _) => {
                     let set = match **u {
                         UserValue::Nat => "Nat",
@@ -392,6 +480,9 @@ impl Value {
                 (UserValue::Seq(range), _) => {
                     let range = range.clone();
                     let Some(seq) = elem.to_tuple(ev)? else {
+                        if let Value::Model(m) = elem {
+                            return m.non_model_member(ev, self);
+                        }
                         let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
                         return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&e, &s]));
                     };
@@ -472,6 +563,9 @@ impl Value {
             // (`SetOfFcnsValue.java:113-143`).
             Value::SetOfFcns(s) => {
                 let Some(fcn) = elem.to_fcn_rcd(ev)? else {
+                    if let Value::Model(m) = elem {
+                        return m.non_model_member(ev, self);
+                    }
                     let (e, p) = (elem.to_tlc_string(ev)?, self.ppr(ev)?);
                     return Err(EvalError::detailed(
                         format!("Attempted to check if \n{e}\nwhich is not a TLC function value, is in the set of functions:\n{p}"),
@@ -498,6 +592,9 @@ impl Value {
             }
             Value::SetOfRcds(s) => {
                 let Some(rcd) = elem.to_rcd(ev)? else {
+                    if let Value::Model(m) = elem {
+                        return m.non_model_member(ev, self);
+                    }
                     let (e, p) = (elem.to_tlc_string(ev)?, self.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to check if non-record\n{e}\nis in the set of records:\n{p}"), None));
                 };
@@ -518,6 +615,9 @@ impl Value {
                     // A function whose domain is not all integers cannot be a tuple, and TLC
                     // reports it as a non-tuple (`SetOfTuplesValue.java:128-145`).
                     let Some(fcn) = elem.to_fcn_rcd(ev)? else {
+                        if let Value::Model(m) = elem {
+                            return m.non_model_member(ev, self);
+                        }
                         let (e, p) = (elem.to_tlc_string(ev)?, self.ppr(ev)?);
                         return Err(EvalError::detailed(
                             format!("Attempted to check if non-tuple\n{e}\nis in the set of tuples:\n{p}"),
