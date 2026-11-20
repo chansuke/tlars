@@ -84,6 +84,9 @@ pub enum SpecError {
     /// User `<Mod>.class` override found; v1 warns and falls back (not an error), kept here
     /// for `-messagesAsErrors`.
     UnsupportedJavaOverride { module: String },
+    /// `TLC.process`'s `catch (Throwable)` (`TLC.java:1424-1445`): an exception nobody meant
+    /// to raise, printed by `MP.printError(EC.GENERAL, cause)` and never suppressed.
+    Unexpected { class: &'static str, message: String },
 }
 
 /// `SpecProcessor` from the root-module lookup on (`SpecProcessor.java:468`); the SANY
@@ -445,6 +448,18 @@ fn java_hash(s: &str) -> i32 {
     tlars_java::string_hash_code(s)
 }
 
+/// A failure nothing in `processSpec` catches, so `TLC.process`'s `catch (Throwable)` sees
+/// it. `Assert.fail(reason)` builds a `TLCRuntimeException` without parameters, which TLC
+/// reports under its parent class.
+fn uncaught(e: crate::error::EvalError) -> SpecError {
+    match e.kind {
+        EvalErrorKind::Runtime if e.ec == Ec::GENERAL => SpecError::Unexpected { class: "java.lang.RuntimeException", message: e.message },
+        EvalErrorKind::Eval => SpecError::Unexpected { class: "tlc2.tool.EvalException", message: e.message },
+        EvalErrorKind::Jvm { class } => SpecError::Unexpected { class, message: e.message },
+        _ => unimplemented(&format!("a cfg constant whose value fails to normalise with: {}", e.message)),
+    }
+}
+
 /// A spec-processing path tlars does not mirror yet. It travels as `Assert.fail`'s generic
 /// code so the caller prints it and stops, instead of guessing TLC's output.
 fn unimplemented(what: &str) -> SpecError {
@@ -645,14 +660,14 @@ fn fold_constant_decls(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, o
             Some(DeclBinding::Value(v)) => {
                 let mut locals = WorkerLocals::new(0, tool.globals.seed);
                 let mut ev = tool.ev(&mut locals, out);
-                v.deep_normalize(&mut ev).map_err(|_| unimplemented("a cfg constant whose value does not normalise"))?;
+                v.deep_normalize(&mut ev).map_err(uncaught)?;
             }
             Some(DeclBinding::Table(lines)) => {
                 let mut locals = WorkerLocals::new(0, tool.globals.seed);
                 let mut ev = tool.ev(&mut locals, out);
                 for (args, value) in lines.iter() {
                     for v in args.iter().chain(std::iter::once(value)) {
-                        v.deep_normalize(&mut ev).map_err(|_| unimplemented("a cfg constant whose value does not normalise"))?;
+                        v.deep_normalize(&mut ev).map_err(uncaught)?;
                     }
                 }
             }
