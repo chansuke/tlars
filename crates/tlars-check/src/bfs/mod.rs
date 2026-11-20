@@ -196,12 +196,17 @@ impl<'a> ModelChecker<'a> {
     /// liveCheck.addInitState; if new *or* out of model: invariants, then implied inits.
     fn do_init(&mut self) -> Result<(), (Ec, bool)> {
         let mut locals = WorkerLocals::new(0, self.seed);
-        let mut sink = InitSink { mc: self, result: Ec::NO_ERROR, stopped: false, force_checks: false, failed_state: None };
+        let mut sink = InitSink { mc: self, result: Ec::NO_ERROR, stopped: false, force_checks: false, failed_state: None, kept: None };
         let flow = {
             let mut ev = self.tool.ev(&mut locals, self.out);
             ev.init_states(&mut sink)
         };
         let (result, errored) = (sink.result, sink.failed_state);
+        // `doInit`: an exception the functor kept is rethrown once generation has finished.
+        let flow = match (flow, sink.kept) {
+            (Ok(()) | Err(Halt::Stop), Some(e)) => Err(Halt::Eval(e)),
+            (flow, _) => flow,
+        };
         match flow {
             Ok(()) | Err(Halt::Stop) => {}
             Err(Halt::Eval(e)) => {
@@ -247,10 +252,15 @@ impl<'a> ModelChecker<'a> {
         self.initial_states.store(0, Relaxed);
         let mut locals = WorkerLocals::new(0, self.seed);
         locals.record_call_stack();
-        let mut sink = InitSink { mc: self, result: Ec::NO_ERROR, stopped: false, force_checks: true, failed_state: None };
+        let mut sink = InitSink { mc: self, result: Ec::NO_ERROR, stopped: false, force_checks: true, failed_state: None, kept: None };
         let flow = {
             let mut ev = self.tool.ev(&mut locals, self.out);
             ev.init_states(&mut sink)
+        };
+        // As in `doInit`, an exception the functor kept surfaces after generation.
+        let flow = match (flow, sink.kept) {
+            (Ok(()) | Err(Halt::Stop), Some(e)) => Err(Halt::Eval(e)),
+            (flow, _) => flow,
         };
         let stack = locals.take_call_stack().expect("recording was switched on");
         let text = stack.to_tlc_string(self.tool);
@@ -759,10 +769,29 @@ struct InitSink<'s, 'a> {
     force_checks: bool,
     /// `DoInitFunctor.errState`: the state the functor was working on when it threw.
     failed_state: Option<State>,
+    /// `DoInitFunctor.e`: an exception the functor kept instead of rethrowing, so that
+    /// generation runs to the end (`ModelChecker.java:1241-1257`).
+    kept: Option<EvalError>,
 }
 
 impl tlars_tool::InitSink for InitSink<'_, '_> {
+    /// `DoInitFunctor.addElement`. Only the exceptions TLC names in its first `catch` leave
+    /// the functor; every other `Throwable` is recorded and generation carries on, so the
+    /// remaining initial states are still generated and counted.
     fn add_init(&mut self, ev: &mut Ev<'_>, s: &PartialState) -> Flow {
+        match self.add_init_impl(ev, s) {
+            Err(Halt::Eval(e)) if !matches!(e.kind, tlars_tool::EvalErrorKind::Runtime | tlars_tool::EvalErrorKind::Eval) => {
+                self.stopped = true;
+                self.kept = Some(e);
+                Ok(())
+            }
+            other => other,
+        }
+    }
+}
+
+impl InitSink<'_, '_> {
+    fn add_init_impl(&mut self, ev: &mut Ev<'_>, s: &PartialState) -> Flow {
         let mc = self.mc;
         let n = mc.initial_states.fetch_add(1, Relaxed);
         if n.count_ones() == 1 && n > 1 {

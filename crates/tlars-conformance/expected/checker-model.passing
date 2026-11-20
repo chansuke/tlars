@@ -315,6 +315,7 @@ tlc/checker/invariants/non_boolean_on_initial
 tlc/checker/invariants/non_boolean_on_successor
 tlc/checker/invariants/parameterized
 tlc/checker/invariants/plural_keyword
+tlc/checker/invariants/stack_overflow_in_invariant_records_error
 tlc/checker/invariants/stops_at_first_violation
 tlc/checker/invariants/subscript_constant_operator_in_invariant
 tlc/checker/invariants/successor_seen_not_rechecked
