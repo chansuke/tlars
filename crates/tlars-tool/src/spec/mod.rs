@@ -264,6 +264,9 @@ impl CfgBind<'_> {
         // `TLCBuiltInOverrides.get()`: the annotated classes are loaded here whatever the
         // spec extends, so their static `UniqueString`s are interned now, after parsing. The
         // tokens are what orders the fields of a `TLCGet("stats")`-style record.
+        // `tlc2.tool.Action` loads just ahead of them (measured against TLC, see
+        // `fidelity::class_statics`), and tlars has no earlier step that builds an action.
+        graph.interner().ensure(tlars_sany::JavaClass::Action);
         graph.interner().ensure(tlars_sany::JavaClass::TlcRuntime);
         for (mid, m) in graph.modules() {
             let module = graph.interner().text(m.name);
@@ -842,7 +845,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     let ConfigPass { init_preds, next_pred, invariants, temporals } = pass;
     tool.invariants = invariants
         .into_iter()
-        .map(|(name, p)| NamedCheck { name, expr: p.expr, ctx: p.ctx })
+        .map(|(name, p)| NamedCheck { name, expr: p.expr, ctx: p.ctx, op_def: p.op_def })
         .collect();
     tool.model_constraints = model_constraints.into();
     tool.action_constraints = action_constraints.into();
@@ -870,7 +873,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     tool.init_actions = init_preds
         .iter()
         .enumerate()
-        .map(|(i, p)| crate::actions::init_action(i, p.expr, &p.ctx, p.op_def))
+        .map(|(i, p)| crate::actions::init_action(&graph, i, p.expr, &p.ctx, p.op_def))
         .collect();
     tool.actions = actions.into();
     Ok(())
@@ -1235,7 +1238,7 @@ fn named_checks(
                     });
                 }
                 let body = graph.op_def(d).body.expect("a user definition has a body");
-                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY });
+                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) });
             }
             None => {
                 return Err(SpecError::Config {
@@ -1333,7 +1336,7 @@ fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: 
                     return (Box::new([]), fail(Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG));
                 }
                 let body = graph.op_def(d).body.expect("a user definition has a body");
-                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY });
+                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) });
             }
             // `processModuleOverrides` puts a `defns` entry only for a definition that has a
             // matching Java method; tlars binds every definition of a `tlc2.module` class,
@@ -1496,7 +1499,7 @@ fn config_view(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<Optio
                 });
             }
             let body = graph.op_def(d).body.expect("a user definition has a body");
-            Ok(Some(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY }))
+            Ok(Some(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) }))
         }
         Some(_) => Err(SpecError::Config {
             ec: Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT,

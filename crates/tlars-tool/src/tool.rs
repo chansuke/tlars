@@ -14,7 +14,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use tlars_msg::Report;
 use tlars_sany::Atom;
-use tlars_sany::graph::{ExprId, SemanticGraph};
+use tlars_sany::graph::{ExprId, OpDefId, SemanticGraph};
 
 /// Kinds of named checks; an id of one kind cannot be passed where another is expected.
 #[derive(Clone, Copy, Debug)]
@@ -45,6 +45,10 @@ pub(crate) struct NamedCheck {
     pub(crate) name: Atom,
     pub(crate) expr: ExprId,
     pub(crate) ctx: Ctx,
+    /// The definition the cfg named, when there was one. `TLCGet("spec")` reports a
+    /// constraint as its `OpDefNode`, so it prints the whole definition's location rather
+    /// than the body's (`TLCGetSet.constraint2Value`).
+    pub(crate) op_def: Option<OpDefId>,
 }
 
 /// The cfg ALIAS: the definition body `getAliasSpec()` returns, or the framed message of

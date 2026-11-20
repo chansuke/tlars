@@ -39,12 +39,16 @@ pub enum JavaClass {
     SyntaxTreeConstants,
     /// `Location.unknown`.
     Location,
-    /// TLC-side statics read at runtime (`TLCGetSet` keys, `Action.UNNAMED_ACTION`, ...).
+    /// `Action.UNNAMED_ACTION`.
+    Action,
+    /// TLC-side statics read at runtime (`TLCGetSet` keys).
     TlcRuntime,
+    /// `RecordValue`'s field-name statics, built by `TLCGet("spec")` and friends.
+    RecordValue,
 }
 
 impl JavaClass {
-    pub const COUNT: usize = 7;
+    pub const COUNT: usize = 9;
 }
 
 /// Session intern table. `Sync`: workers intern runtime strings (`\o`, `ToString`, JSON).

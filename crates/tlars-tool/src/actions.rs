@@ -58,9 +58,12 @@ pub(crate) fn split_next(ev: &mut Ev<'_>, next: ExprId, c: &Ctx, op_def: Option<
     split(ev, next, c, op_def, out, false)
 }
 
-/// `getInitStateSpec()`: one action per initial predicate, unsplit.
-pub(crate) fn init_action(index: usize, pred: ExprId, c: &Ctx, op_def: Option<OpDefId>) -> Action {
-    Action { id: ActionId(index as u32), pred, ctx: c.clone(), name: None, op_def, is_init: true, is_internal: false }
+/// `getInitStateSpec()`: one action per initial predicate, unsplit. `new Action(pred, con,
+/// opDef, ...)` names it after the definition the cfg's INIT gave, which `TLCGet("spec")`
+/// reports; a conjunct of SPECIFICATION has no definition and stays unnamed.
+pub(crate) fn init_action(graph: &tlars_sany::graph::SemanticGraph, index: usize, pred: ExprId, c: &Ctx, op_def: Option<OpDefId>) -> Action {
+    let name = op_def.map(|d| graph.op_def(d).name);
+    Action { id: ActionId(index as u32), pred, ctx: c.clone(), name, op_def, is_init: true, is_internal: false }
 }
 
 /// `(OpDefNode) opNode` on a symbol that is not a definition.

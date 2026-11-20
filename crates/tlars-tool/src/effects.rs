@@ -113,6 +113,14 @@ impl Registers {
     pub(crate) fn get_named(&self, name: tlars_sany::Atom) -> Option<Value> {
         self.named.iter().find(|(n, _)| *n == name).map(|(_, v)| v.clone())
     }
+    /// `IdThread.getLocalValues()`, which `getAllValues` walks to find the written indices.
+    pub(crate) fn indexed(&self) -> &[Option<Value>] {
+        &self.indexed
+    }
+    /// `IdThread.getNamedRegisters()`, whose key set `getAllNamedRegisterValues` walks.
+    pub(crate) fn named(&self) -> &[(tlars_sany::Atom, Value)] {
+        &self.named
+    }
 }
 
 /// Per-worker effect state: what TLC keeps in `IdThread` locals and statics.

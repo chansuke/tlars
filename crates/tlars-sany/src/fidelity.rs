@@ -15,10 +15,14 @@ pub(crate) fn class_statics(class: JavaClass) -> &'static [&'static str] {
         JavaClass::Operators => &[/* generated */],
         JavaClass::SyntaxTreeConstants => &[/* generated from SyntaxTreeConstants.java:151 */],
         JavaClass::Location => &["--unknown--"],
+        // `tlc2.tool.Action.UNNAMED_ACTION` (`Action.java:35`), the name every action without
+        // a definition reports. TLC runs this initialiser before `TLCGetSet`'s: a run that
+        // prints `{TLCGet("action").name} \cup DOMAIN TLCGet("revision")` puts
+        // `"UnnamedAction"` ahead of `"timestamp"`.
+        JavaClass::Action => &["UnnamedAction"],
         // `tlc2.module.TLCGetSet`'s `UniqueString` fields, in declaration order. Their tokens
         // are what orders a `TLCGet("stats")` / `"config"` / `"revision"` / `"spec"` record's
-        // fields, and `DOMAIN` of one prints them in that order. The other TLC-side runtime
-        // statics (`Action.UNNAMED_ACTION`, ...) belong here too, each at its own trigger.
+        // fields, and `DOMAIN` of one prints them in that order.
         JavaClass::TlcRuntime => &[
             "exit",
             "pause",
@@ -68,6 +72,24 @@ pub(crate) fn class_statics(class: JavaClass) -> &'static [&'static str] {
             "distinctvalues",
             "levelmean",
             "levelvariance",
+        ],
+        // `tlc2.value.impl.RecordValue`'s field-name statics, in declaration order
+        // (`RecordValue.java:44-53`). The class loads the first time a `RecordValue` is
+        // built, which is after `TLCGetSet`'s initialiser because module overrides are
+        // registered before anything is evaluated. Names a parsed module or the cfg already
+        // interned keep their earlier token, which is why `"name"` and `"location"` normally
+        // sort ahead of every key here.
+        JavaClass::RecordValue => &[
+            "beginLine",
+            "beginColumn",
+            "endLine",
+            "endColumn",
+            "module",
+            "name",
+            "location",
+            "context",
+            "parameters",
+            "_action",
         ],
     }
 }
