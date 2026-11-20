@@ -589,8 +589,8 @@ impl Value {
             Value::SetCup(s) => cached_or(ev, s.converted.get(), &[]),
             Value::Union(u) => cached_or(ev, u.converted.get(), &[]),
             Value::SetCap(s) | Value::SetDiff(s) => cached_or(ev, s.converted.get(), &[s.left.clone(), s.right.clone()]),
-            Value::Subset(s) => cached_or(ev, s.converted.get(), &[s.base.clone()]),
-            Value::KSubset(s) => cached_or(ev, s.converted.get(), &[s.base.clone()]),
+            Value::Subset(s) => cached_or(ev, s.converted.get(), std::slice::from_ref(&s.base)),
+            Value::KSubset(s) => cached_or(ev, s.converted.get(), std::slice::from_ref(&s.base)),
             Value::SetOfFcns(s) => cached_or(ev, s.converted.get(), &[s.domain.clone(), s.range.clone()]),
             Value::SetOfRcds(s) => cached_or(ev, s.converted.get(), &s.sets),
             Value::SetOfTuples(s) => cached_or(ev, s.converted.get(), &s.sets),
@@ -735,7 +735,8 @@ impl ValueVec {
         self.elems
     }
 
-    pub(crate) fn len(&self) -> usize {
+    /// `size()`.
+    pub(crate) fn size(&self) -> usize {
         self.elems.len()
     }
 

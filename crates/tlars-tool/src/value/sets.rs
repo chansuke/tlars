@@ -96,17 +96,18 @@ impl Value {
     /// `isSubsetEq(other)` (`EnumerableValue.java:44-60`), with the two overrides that
     /// answer without enumerating.
     pub(crate) fn is_subset_eq(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<bool> {
-        if let (Value::Interval(a), Value::Interval(b)) = (self, other) {
-            if b.lo <= a.lo && b.hi >= a.hi {
-                return Ok(true);
-            }
+        if let (Value::Interval(a), Value::Interval(b)) = (self, other)
+            && b.lo <= a.lo
+            && b.hi >= a.hi
+        {
+            return Ok(true);
         }
         // `SUBSET S \subseteq SUBSET T` reduces to `S \subseteq T`, but not for a k-subset
         // on either side (`SubsetValue.java:118-137`).
-        if let (Value::Subset(a), Value::Subset(b)) = (self, other) {
-            if a.base.is_enumerable() {
-                return a.base.is_subset_eq(ev, &b.base);
-            }
+        if let (Value::Subset(a), Value::Subset(b)) = (self, other)
+            && a.base.is_enumerable()
+        {
+            return a.base.is_subset_eq(ev, &b.base);
         }
         let mut elems = self.elements(ev, EnumOrder::Native)?.expect("an enumerable value enumerates");
         while let Some(e) = elems.next(ev)? {
@@ -136,7 +137,7 @@ impl Value {
                 // The result's own `member` is the duplicate check, and it searches the
                 // array being filled, which is unnormalised, so the scan uses `equals`.
                 let mut found = false;
-                for i in 0..vals.len() {
+                for i in 0..vals.size() {
                     if vals.get(i).tlc_equals(ev, &elem)? {
                         found = true;
                         break;

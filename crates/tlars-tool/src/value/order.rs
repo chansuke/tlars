@@ -194,10 +194,10 @@ impl Value {
             // `Sequences.compareTo`: another `Seq(T)` compares by `T`, since every `Seq` has
             // the same unbounded length (`Sequences.java:369-390`).
             UserValue::Seq(range) => {
-                if let Value::User(o) = other {
-                    if let UserValue::Seq(other_range) = &**o {
-                        return range.tlc_compare(ev, other_range);
-                    }
+                if let Value::User(o) = other
+                    && let UserValue::Seq(other_range) = &**o
+                {
+                    return range.tlc_compare(ev, other_range);
                 }
                 if matches!(other, Value::Model(_)) {
                     return Ok(Ordering::Greater);
@@ -395,8 +395,8 @@ impl Value {
                         let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
                         return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&e, &s]));
                     };
-                    for e in seq.elems.to_vec() {
-                        if !range.member(ev, &e)? {
+                    for e in seq.elems.iter() {
+                        if !range.member(ev, e)? {
                             return Ok(false);
                         }
                     }
@@ -489,8 +489,8 @@ impl Value {
                 if !same_domain {
                     return Ok(false);
                 }
-                for v in fcn.values.to_vec() {
-                    if !s.range.member(ev, &v)? {
+                for v in fcn.values.iter() {
+                    if !s.range.member(ev, v)? {
                         return Ok(false);
                     }
                 }

@@ -182,11 +182,11 @@ pub(crate) fn select_seq(
         return Err(eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["second", "SelectSeq", "operator", &shown]));
     };
     let mut kept = Vec::new();
-    for elem in seq.elems.to_vec() {
+    for elem in seq.elems.iter() {
         // `ftest.eval(args, EvalControl.Clear)`: the test runs with a cleared control
         // whatever the caller's was.
-        match ev.apply_operator(&test, &[elem.clone()], EvalControl::CLEAR)? {
-            Value::Bool(true) => kept.push(elem),
+        match ev.apply_operator(&test, std::slice::from_ref(elem), EvalControl::CLEAR)? {
+            Value::Bool(true) => kept.push(elem.clone()),
             Value::Bool(false) => {}
             _ => {
                 let shown = ev.op_arg_text(args[1], Some(&test))?;
