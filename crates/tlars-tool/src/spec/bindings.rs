@@ -54,11 +54,19 @@ impl Bindings {
     }
     /// The tool object `lookup` finds on a definition's body, following INSTANCE
     /// substitutions down to the instantiated body (`SymbolNodeValueLookupProvider.java:99-111`).
-    pub(crate) fn body_chain(&self, graph: &tlars_sany::graph::SemanticGraph, body: ExprId) -> Option<&OpBinding> {
+    ///
+    /// TLC has one tool-object slot per node, so this finds either a Java override
+    /// (`processModuleOverrides`) or the literal `processConstants` left on a numeral or
+    /// string body. That is why `SelectSeq(<<1>>, LAMBDA e : 1)` reaches the module with the
+    /// value `1` instead of the operator.
+    pub(crate) fn body_chain(&self, graph: &tlars_sany::graph::SemanticGraph, body: ExprId) -> Option<OpBinding> {
         let mut e = body;
         loop {
             if let Some(b) = self.body(e) {
-                return Some(b);
+                return Some(b.clone());
+            }
+            if let Some(v) = self.literal(e) {
+                return Some(OpBinding::Value(v.clone()));
             }
             match graph.expr(e) {
                 tlars_sany::graph::ExprNode::SubstIn { body, .. } => e = *body,

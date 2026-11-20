@@ -105,7 +105,7 @@ impl<'t> Ev<'t> {
                 }
                 if tool.graph.op_def(d).kind == OpDefKind::User {
                     if let Some(b) = tool.graph.op_def(d).body.and_then(|e| tool.bindings.body_chain(&tool.graph, e)) {
-                        return resolved(b, d);
+                        return resolved(&b, d);
                     }
                 }
                 Resolved::UserOp(d)
@@ -214,7 +214,7 @@ impl<'t> Ev<'t> {
                         let message = self.out().text(Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_LIVE, &[&name, &text]);
                         return Err(EvalError::runtime(Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_LIVE, message));
                     }
-                    if matches!(op, SymbolRef::OpDef(d) if matches!(self.tool().bindings.op_def(d).or_else(|| self.body_binding(d)), Some(OpBinding::Unimplemented))) {
+                    if matches!(op, SymbolRef::OpDef(d) if matches!(self.tool().bindings.op_def(d).cloned().or_else(|| self.body_binding(d)), Some(OpBinding::Unimplemented))) {
                         let name = self.symbol_name(op);
                         return Err(EvalError::unimplemented(format!("the Java implementation of {name}")));
                     }
@@ -757,7 +757,7 @@ impl<'t> Ev<'t> {
         Err(EvalError::detailed(format!("Attempted to apply operator:\n{shown}\nto arguments ({args_text}), which is undefined."), None))
     }
 
-    fn body_binding(&self, d: OpDefId) -> Option<&'t OpBinding> {
+    fn body_binding(&self, d: OpDefId) -> Option<OpBinding> {
         let tool = self.tool();
         tool.graph.op_def(d).body.and_then(|b| tool.bindings.body_chain(&tool.graph, b))
     }
@@ -784,6 +784,19 @@ impl<'t> Ev<'t> {
                 Some(OpArgValue::Op { def: d, ctx: c.clone(), control })
             }
             Resolved::Binding(Binding::Native(id)) | Resolved::Native(id) => Some(OpArgValue::Native(id)),
+            _ => None,
+        })
+    }
+
+    /// `evalImplOpArgKind`'s `return (Value) val` (`Tool.java:1888-1895`): an operator
+    /// argument whose symbol does not resolve to a definition evaluates to whatever value
+    /// `lookup` found. `lookup` reads the tool object of the definition's *body*, so
+    /// `LAMBDA e : 1` resolves to the literal `1` and a module that wants an operator
+    /// reports that value. `None` where the argument is an operator after all.
+    pub(crate) fn op_arg_as_value(&mut self, arg: ExprOrOpArg, c: &Ctx) -> EvalResult<Option<Value>> {
+        let ExprOrOpArg::OpArg(sym) = arg else { return Ok(None) };
+        Ok(match self.lookup(sym, c, StateRef::Empty, false) {
+            Resolved::Binding(Binding::Value(v)) | Resolved::Value(v) => Some(v),
             _ => None,
         })
     }

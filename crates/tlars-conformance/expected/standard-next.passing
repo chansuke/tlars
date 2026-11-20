@@ -365,6 +365,7 @@ tlc/standard/sequences/selectseq_empty_skips_test
 tlc/standard/sequences/selectseq_filters
 tlc/standard/sequences/selectseq_first_int
 tlc/standard/sequences/selectseq_function
+tlc/standard/sequences/selectseq_literal_body
 tlc/standard/sequences/selectseq_named_operator
 tlc/standard/sequences/selectseq_non_boolean_named
 tlc/standard/sequences/selectseq_none
