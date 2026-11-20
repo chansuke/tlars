@@ -751,9 +751,26 @@ impl<'a> ModelChecker<'a> {
         if fps.len() <= 1 {
             self.out.error(Ec::TLC_BEHAVIOR_UP_TO_THIS_POINT, &[]);
             let step = tlars_tool::StateInfo { state: cur.state.clone(), action: None };
-            self.print_state(ev, &step, None, 1)?;
+            match &succ {
+                // `printInvariantViolationStateTraceState(new TLCStateInfo(s1))`, the one
+                // trace print that does not go through `evalAlias`.
+                None => {
+                    let shown = ev.print_state(&cur.state, None)?;
+                    let label = ev.state_label(&step);
+                    let fp = ev.fingerprint(&cur.state)?.raw() as i64;
+                    self.out.state(Ec::TLC_STATE_PRINT2, &["1", &label, &shown, &fp.to_string()]);
+                }
+                Some(succ) => {
+                    let next = match succ {
+                        Succ::Complete(state) => Some((*state).clone()),
+                        Succ::Partial(_) => None,
+                    };
+                    let trace = [cur.state.clone()];
+                    self.print_state(ev, &step, next.as_ref(), &trace, None, 1)?;
+                }
+            }
             if let Some(succ) = succ {
-                self.print_last(ev, &cur.state, cur.fp, succ, Some(&cur.state), 2)?;
+                self.print_last(ev, &cur.state, cur.fp, succ, &[cur.state.clone()], 2)?;
             }
             return Ok(());
         }
@@ -770,12 +787,18 @@ impl<'a> ModelChecker<'a> {
             }
             Err(e) => return Err(e),
         };
-        let mut printed: Option<State> = None;
+        // `Trace` is the behaviour up to and including the state being printed, so it grows
+        // as the trace is walked.
+        let mut trace: Vec<State> = Vec::with_capacity(prefix.len() + 2);
+        let mut printed: Option<tlars_tool::Aliased> = None;
         let mut number = 0;
-        for step in prefix.iter() {
+        for (i, step) in prefix.iter().enumerate() {
             number += 1;
-            self.print_state(ev, step, printed.as_ref(), number)?;
-            printed = Some(step.state.clone());
+            trace.push(step.state.clone());
+            // Every state's successor is the next one in the trace; the last of the prefix
+            // is followed by `s1`.
+            let next = prefix.get(i + 1).map(|s| s.state.clone()).unwrap_or_else(|| cur.state.clone());
+            printed = Some(self.print_state(ev, step, Some(&next), &trace, printed.as_ref(), number)?);
         }
         // `s1` itself is regenerated from the last prefix state only *after* that state has
         // been printed, which is why a `Print` in the next-state relation shows up between
@@ -783,11 +806,19 @@ impl<'a> ModelChecker<'a> {
         let pred = prefix.last().expect("a prefix of at least one state").state.clone();
         let pred_fp = fps[fps.len() - 2];
         number += 1;
-        if !self.print_successor(ev, &pred, pred_fp, Succ::Complete(&cur.state), printed.as_ref(), number)? {
+        trace.push(cur.state.clone());
+        // `if (s2 == null) lastPrinted = null`: the final state of a trace is printed whole.
+        let prev = succ.as_ref().and(printed.as_ref());
+        let next = match &succ {
+            Some(Succ::Complete(state)) => Some((*state).clone()),
+            // An incomplete successor is still `s2`, so `s1` is not the final state.
+            Some(Succ::Partial(_)) | None => None,
+        };
+        if !self.print_successor(ev, &pred, pred_fp, Succ::Complete(&cur.state), next.as_ref(), &trace, prev, number)? {
             return Ok(());
         }
         if let Some(succ) = succ {
-            self.print_last(ev, &cur.state, cur.fp, succ, Some(&cur.state), number + 1)?;
+            self.print_last(ev, &cur.state, cur.fp, succ, &trace, number + 1)?;
         }
         Ok(())
     }
@@ -804,7 +835,7 @@ impl<'a> ModelChecker<'a> {
         pred: &State,
         pred_fp: tlars_tool::Fp,
         succ: Succ<'_>,
-        printed: Option<&State>,
+        trace: &[State],
         number: usize,
     ) -> Result<bool, EvalError> {
         let target = match succ {
@@ -815,8 +846,12 @@ impl<'a> ModelChecker<'a> {
             Ok(Some((state, action))) => {
                 match ev.complete(&state) {
                     Some(complete) => {
-                        let step = tlars_tool::StateInfo { state: complete, action: Some(action) };
-                        self.print_state(ev, &step, printed, number)?;
+                        let step = tlars_tool::StateInfo { state: complete.clone(), action: Some(action) };
+                        let mut trace = trace.to_vec();
+                        trace.push(complete.clone());
+                        // `evalAlias(sinfo, s2, ..)` with `sinfo` the state itself: `s2` is
+                        // the final state, so its own values answer a prime.
+                        self.print_state(ev, &step, Some(&complete), &trace, None, number)?;
                     }
                     None => {
                         // An incomplete state has no fingerprint, so TLC prints `-1`.
@@ -841,14 +876,16 @@ impl<'a> ModelChecker<'a> {
         pred: &State,
         pred_fp: tlars_tool::Fp,
         succ: Succ<'_>,
-        printed: Option<&State>,
+        next: Option<&State>,
+        trace: &[State],
+        prev: Option<&tlars_tool::Aliased>,
         number: usize,
     ) -> Result<bool, EvalError> {
         let Succ::Complete(state) = succ else { unreachable!("only the last state may be incomplete") };
         let fp = ev.fingerprint(state)?;
         match ev.successor_from_fp(pred, pred_fp, fp) {
             Ok(Some(step)) => {
-                self.print_state(ev, &step, printed, number)?;
+                self.print_state(ev, &step, next, trace, prev, number)?;
                 Ok(true)
             }
             Ok(None) => {
@@ -861,15 +898,31 @@ impl<'a> ModelChecker<'a> {
 
     /// `StatePrinter.printInvariantViolationStateTraceState`: 2217 with the state number, the
     /// action label, the state and its fingerprint.
-    fn print_state(&self, ev: &mut Ev<'_>, step: &tlars_tool::StateInfo, prev: Option<&State>, number: usize) -> Result<(), EvalError> {
+    fn print_state(
+        &self,
+        ev: &mut Ev<'_>,
+        step: &tlars_tool::StateInfo,
+        next: Option<&State>,
+        trace: &[State],
+        prev: Option<&tlars_tool::Aliased>,
+        number: usize,
+    ) -> Result<tlars_tool::Aliased, EvalError> {
         let difftrace = self.tool.globals().difftrace;
         let label = ev.state_label(step);
-        let shown = ev.print_state(&step.state, if difftrace { prev } else { None })?;
+        // `evalAlias(info, successor, prefix)`: the successor a prime reads is the next
+        // trace state, or the state itself when there is none.
+        let successor = next.unwrap_or(&step.state);
+        let aliased = ev.eval_alias(&step.state, tlars_tool::StateRef::Full(successor), Some(trace))?;
+        let shown = ev.print_aliased(&aliased, if difftrace { prev } else { None })?;
         // `currentStateInfo.fingerPrint()` for the `fp:` field: a value a variable may not
-        // hold fails here, and the failure replaces the rest of the trace.
-        let fp = ev.fingerprint(&step.state)?.raw() as i64;
+        // hold fails here, and the failure replaces the rest of the trace. An alias that
+        // leaves a variable unbound has no fingerprint, which TLC prints as `-1`.
+        let fp = match ev.aliased_fingerprint(&aliased)? {
+            Some(fp) => fp.raw() as i64,
+            None => -1,
+        };
         self.out.state(Ec::TLC_STATE_PRINT2, &[&number.to_string(), &label, &shown, &fp.to_string()]);
-        Ok(())
+        Ok(aliased)
     }
 }
 
@@ -945,7 +998,7 @@ impl InitSink<'_, '_> {
             let name = mc.tool.invariant_name(id);
             let name = ev.tool().graph().interner().text(name).to_string();
             if !ev.check_invariant(id, &state)? {
-                let shown = ev.print_state(&state, None)?;
+                let shown = ev.print_initial_violation(&state)?;
                 mc.out.error(Ec::TLC_INVARIANT_VIOLATED_INITIAL, &[&name, &shown]);
                 if !mc.continue_after_violation {
                     mc.set_err(ErrState::InvariantInitial { id, state: state.clone() });
@@ -957,7 +1010,7 @@ impl InitSink<'_, '_> {
         }
         for id in mc.tool.implied_inits() {
             if !ev.check_implied_init(id, &state)? {
-                let shown = ev.print_state(&state, None)?;
+                let shown = ev.print_initial_violation(&state)?;
                 mc.out.error(Ec::TLC_PROPERTY_VIOLATED_INITIAL, &["", &shown]);
                 self.result = Ec::TLC_PROPERTY_VIOLATED_INITIAL;
                 self.stopped = true;

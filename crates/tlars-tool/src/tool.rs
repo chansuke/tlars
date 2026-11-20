@@ -47,6 +47,15 @@ pub(crate) struct NamedCheck {
     pub(crate) ctx: Ctx,
 }
 
+/// The cfg ALIAS: the definition body `getAliasSpec()` returns, or the framed message of
+/// the `Assert.fail` it raises instead.
+pub(crate) struct AliasSpec {
+    pub(crate) body: Result<ExprId, String>,
+    /// `TLCExt!Trace`, which `evalAlias` binds to the behaviour printed so far when the
+    /// module is in scope.
+    pub(crate) trace_symbol: Option<tlars_sany::graph::SymbolRef>,
+}
+
 /// Temporal part handed to the liveness checker (`Liveness.parseLiveness` input).
 pub struct Temporal {
     pub fairness: Box<[(ExprId, Ctx)]>,
@@ -65,7 +74,10 @@ pub struct Tool {
     pub(crate) model_constraints: Box<[NamedCheck]>,
     pub(crate) action_constraints: Box<[NamedCheck]>,
     pub(crate) view: Option<NamedCheck>,
-    pub(crate) alias: Option<NamedCheck>,
+    /// `Spec.hasAlias()` plus what `Spec.getAliasSpec()` would return. TLC resolves the
+    /// name every time it prints a trace state, so a name it cannot resolve is reported per
+    /// state as `_ALIASEvalError` rather than at startup.
+    pub(crate) alias: Option<AliasSpec>,
     /// `Spec.getPostConditionSpecs()`, resolved here because the lookups and the arity
     /// checks are pure. TLC runs them when the search ends, so a bad name is reported after
     /// the search, not at startup: [`Tool::postcondition_error`] holds that message.
@@ -138,6 +150,10 @@ impl Tool {
     }
     pub fn temporal(&self) -> &Temporal {
         &self.temporal
+    }
+    /// `Spec.hasAlias()`.
+    pub fn has_alias(&self) -> bool {
+        self.alias.is_some()
     }
     pub fn has_symmetry(&self) -> bool {
         !self.symmetry.is_empty()

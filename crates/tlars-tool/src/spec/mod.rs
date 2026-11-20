@@ -819,9 +819,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     if !config.possible.is_empty() {
         return Err(unimplemented("_POSSIBLE (M3 unit 5)"));
     }
-    if config.alias.is_some() {
-        return Err(unimplemented("ALIAS (M3 unit 5)"));
-    }
+    let alias = config_alias(config, tool, defns, out);
     let view = config_view(config, tool, defns)?;
     let symmetry = config_symmetry(config, tool, unprocessed, out)?;
     let (postconditions, postcondition_error) = config_postconditions(config, tool, defns, out);
@@ -837,6 +835,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     tool.model_constraints = model_constraints.into();
     tool.action_constraints = action_constraints.into();
     tool.view = view;
+    tool.alias = alias;
     tool.symmetry = symmetry;
     tool.postconditions = postconditions;
     tool.postcondition_error = postcondition_error;
@@ -1245,6 +1244,31 @@ fn named_checks(
         }
     }
     Ok(checks)
+}
+
+/// `Spec.hasAlias` + `Spec.getAliasSpec` (`Spec.java:274-304`). TLC calls `getAliasSpec`
+/// once per printed trace state, so the lookup's failure is carried instead of raised: the
+/// name resolves against `defns`, which means a constant-level ALIAS has been folded to a
+/// value and fails as a constant.
+fn config_alias(config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> Option<crate::tool::AliasSpec> {
+    let name = config.alias.as_deref().filter(|s| !s.is_empty())?;
+    let graph = tool.graph.clone();
+    let fail = |ec: Ec| Err(out.text(ec, &["alias", name]));
+    let body = match defn_of(defns, &graph, name) {
+        None => fail(Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED),
+        Some(OpBinding::Replaced(d)) if !graph.op_def(d).params.is_empty() => fail(Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG),
+        Some(OpBinding::Replaced(d)) => Ok(graph.op_def(d).body.expect("a user definition has a body")),
+        Some(_) => fail(Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT),
+    };
+    Some(crate::tool::AliasSpec { body, trace_symbol: trace_symbol(&graph) })
+}
+
+/// `emt.getContext("TLCExt").getSymbol("Trace")`: the symbol `evalAlias` binds the printed
+/// prefix to, or `None` when the module is not in scope and `Trace` cannot appear.
+fn trace_symbol(graph: &SemanticGraph) -> Option<SymbolRef> {
+    let (_, module) = graph.modules().find(|(_, m)| &*graph.interner().text(m.name) == "TLCExt")?;
+    let d = *module.op_defs.iter().find(|&&d| &*graph.interner().text(graph.op_def(d).name) == "Trace")?;
+    Some(SymbolRef::OpDef(d))
 }
 
 /// `Spec.getPostConditionSpecs` (`Spec.java:406-435`), which `checkPostCondition` calls

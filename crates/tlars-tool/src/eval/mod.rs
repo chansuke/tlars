@@ -8,12 +8,16 @@
 //! - `expr`    `eval*`, `evalAppl*`, `lookup`, `getOpContext`, `contexts` (1795-2858, 3989-4120)
 //! - `enabled` `enabled*`                 (2953-3600)
 //! - `replay`  `getState(fp)`, `getState(fp, pred)` (3719-3805)
+//! - `alias`   `evalAlias` + `RecordValue.PrintTLCState` (1680-1766)
 
+mod alias;
 mod enabled;
 pub(crate) mod expr;
 mod init;
 mod next;
 mod replay;
+
+pub use alias::Aliased;
 
 use crate::actions::ActionId;
 use crate::effects::Effects;
