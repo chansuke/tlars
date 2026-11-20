@@ -531,8 +531,19 @@ impl<'a> ModelChecker<'a> {
     fn print_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<&State>) {
         self.out.error(Ec::TLC_BEHAVIOR_UP_TO_THIS_POINT, &[]);
         let fps = self.traces.fingerprints_to(cur.ptr);
-        // The prefix that leads to `cur`, `cur` itself last.
-        let steps = match crate::trace::reconstruct(ev, &fps) {
+        // An initial `s1` is printed as it stands, with no regeneration at all
+        // (`TLCTrace.java:350-370`).
+        if fps.len() <= 1 {
+            let step = tlars_tool::StateInfo { state: cur.state.clone(), action: None };
+            self.print_state(ev, &step, None, 1);
+            if let Some(succ) = succ {
+                self.print_successor(ev, &cur.state, cur.fp, succ, Some(&cur.state), 2);
+            }
+            return;
+        }
+        // `getTrace(s1)` reconstructs the prefix up to but excluding `s1` in one go, so
+        // everything those steps print comes before any state is printed.
+        let prefix = match crate::trace::reconstruct(ev, &fps[..fps.len() - 1]) {
             Ok(Some(steps)) => steps,
             Ok(None) => {
                 self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
@@ -545,39 +556,55 @@ impl<'a> ModelChecker<'a> {
         };
         let mut printed: Option<State> = None;
         let mut number = 0;
-        for step in steps.iter() {
+        for step in prefix.iter() {
             number += 1;
             self.print_state(ev, step, printed.as_ref(), number);
             printed = Some(step.state.clone());
         }
-        let Some(succ) = succ else { return };
-        // The successor is reconstructed so its action label is the first match, as during
-        // the search.
-        let last = steps.last().map(|s| s.state.clone());
+        // `s1` itself is regenerated from the last prefix state only *after* that state has
+        // been printed, which is why a `Print` in the next-state relation shows up between
+        // the two.
+        let pred = prefix.last().expect("a prefix of at least one state").state.clone();
+        let pred_fp = fps[fps.len() - 2];
         number += 1;
-        match last {
-            Some(pred) => {
-                let pred_fp = *fps.last().expect("a non-empty trace");
-                let fp = match ev.fingerprint(succ) {
-                    Ok(fp) => fp,
-                    Err(e) => {
-                        self.out.error(Ec::GENERAL, &[&e.message]);
-                        return;
-                    }
-                };
-                match ev.successor_from_fp(&pred, pred_fp, fp) {
-                    Ok(Some(step)) => self.print_state(ev, &step, printed.as_ref(), number),
-                    Ok(None) => {
-                        self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
-                    }
-                    Err(e) => {
-                        self.out.error(Ec::GENERAL, &[&e.message]);
-                    }
-                }
+        if !self.print_successor(ev, &pred, pred_fp, &cur.state, printed.as_ref(), number) {
+            return;
+        }
+        if let Some(succ) = succ {
+            self.print_successor(ev, &cur.state, cur.fp, succ, Some(&cur.state), number + 1);
+        }
+    }
+
+    /// `getState(fp, pred)` followed by the state's own line: the action label is the first
+    /// match, as during the search.
+    fn print_successor(
+        &self,
+        ev: &mut Ev<'_>,
+        pred: &State,
+        pred_fp: tlars_tool::Fp,
+        state: &State,
+        printed: Option<&State>,
+        number: usize,
+    ) -> bool {
+        let fp = match ev.fingerprint(state) {
+            Ok(fp) => fp,
+            Err(e) => {
+                self.out.error(Ec::GENERAL, &[&e.message]);
+                return false;
             }
-            None => {
-                let step = tlars_tool::StateInfo { state: succ.clone(), action: None };
-                self.print_state(ev, &step, printed.as_ref(), number);
+        };
+        match ev.successor_from_fp(pred, pred_fp, fp) {
+            Ok(Some(step)) => {
+                self.print_state(ev, &step, printed, number);
+                true
+            }
+            Ok(None) => {
+                self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
+                false
+            }
+            Err(e) => {
+                self.out.error(Ec::GENERAL, &[&e.message]);
+                false
             }
         }
     }
