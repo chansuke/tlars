@@ -103,6 +103,14 @@ impl PartialState {
     pub(crate) fn from_values(values: &[Value]) -> PartialState {
         PartialState(values.iter().map(|v| Some(v.clone())).collect())
     }
+    /// A complete state as the partial form the equality search compares.
+    pub fn from_state(s: &State) -> PartialState {
+        PartialState::from_values(s.values())
+    }
+    /// `copy()` for a caller outside this crate.
+    pub fn copy_out(&self) -> PartialState {
+        self.copy()
+    }
 }
 
 /// `TLCStateFun`: persistent bindings for ENABLED (bind returns a new state).

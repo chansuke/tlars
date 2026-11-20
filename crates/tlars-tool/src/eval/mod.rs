@@ -296,17 +296,19 @@ impl<'t> Ev<'t> {
     }
 
     /// `TLCStateMut.equals` (`TLCStateMut.java:85-100`): slot by slot, an unassigned slot
-    /// matching only another unassigned one.
-    pub fn states_match(&mut self, a: &PartialState, b: &PartialState) -> EvalResult<bool> {
+    /// matching only another unassigned one. A comparison of incomparable values throws a
+    /// `TLCRuntimeException`, which `getState(s1, s)` catches to skip that candidate
+    /// (`Tool.java:3812-3828`), so it answers "not this one" rather than failing.
+    pub fn states_match(&mut self, a: &PartialState, b: &PartialState) -> bool {
         for i in 0..self.tool.var_count() {
             let slot = self.tool.vars.slot(i);
             match (a.lookup(slot).cloned(), b.lookup(slot).cloned()) {
                 (None, None) => {}
-                (Some(x), Some(y)) if x.tlc_equals(self, &y)? => {}
-                _ => return Ok(false),
+                (Some(x), Some(y)) if matches!(x.tlc_equals(self, &y), Ok(true)) => {}
+                _ => return false,
             }
         }
-        Ok(true)
+        true
     }
 
     /// `TLCState.equals` as `SetOfStates.put0` uses it: an equality that throws is `false`.

@@ -618,7 +618,7 @@ impl<'a> ModelChecker<'a> {
             let step = tlars_tool::StateInfo { state: cur.state.clone(), action: None };
             self.print_state(ev, &step, None, 1);
             if let Some(succ) = succ {
-                self.print_successor(ev, &cur.state, cur.fp, succ, Some(&cur.state), 2);
+                self.print_last(ev, &cur.state, cur.fp, succ, Some(&cur.state), 2);
             }
             return;
         }
@@ -655,12 +655,56 @@ impl<'a> ModelChecker<'a> {
             return;
         }
         if let Some(succ) = succ {
-            self.print_successor(ev, &cur.state, cur.fp, succ, Some(&cur.state), number + 1);
+            self.print_last(ev, &cur.state, cur.fp, succ, Some(&cur.state), number + 1);
         }
     }
 
     /// `getState(fp, pred)` followed by the state's own line: the action label is the first
     /// match, as during the search.
+    /// `getState(s2, s1)` (`TLCTrace.java:426-440`): the *last* state of a counterexample is
+    /// found by value equality, not by fingerprint, so two successors that share a
+    /// fingerprint cannot be swapped. An incomplete successor is matched the same way and
+    /// printed with its unassigned variables as `null`.
+    fn print_last(
+        &self,
+        ev: &mut Ev<'_>,
+        pred: &State,
+        pred_fp: tlars_tool::Fp,
+        succ: Succ<'_>,
+        printed: Option<&State>,
+        number: usize,
+    ) -> bool {
+        let target = match succ {
+            Succ::Complete(state) => tlars_tool::PartialState::from_state(state),
+            Succ::Partial(s1) => s1.copy_out(),
+        };
+        match ev.successor_matching(pred, pred_fp, &target) {
+            Ok(Some((state, action))) => {
+                match ev.complete(&state) {
+                    Some(complete) => {
+                        let step = tlars_tool::StateInfo { state: complete, action: Some(action) };
+                        self.print_state(ev, &step, printed, number);
+                    }
+                    None => {
+                        // An incomplete state has no fingerprint, so TLC prints `-1`.
+                        let label = ev.action_label(action);
+                        let shown = ev.print_partial_state(&state);
+                        self.out.state(Ec::TLC_STATE_PRINT2, &[&number.to_string(), &label, &shown, "-1"]);
+                    }
+                }
+                true
+            }
+            Ok(None) => {
+                self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
+                false
+            }
+            Err(e) => {
+                self.out.error(Ec::GENERAL, &[&e.message]);
+                false
+            }
+        }
+    }
+
     fn print_successor(
         &self,
         ev: &mut Ev<'_>,
@@ -670,28 +714,7 @@ impl<'a> ModelChecker<'a> {
         printed: Option<&State>,
         number: usize,
     ) -> bool {
-        // An incomplete successor has no fingerprint, so TLC matches it by state equality
-        // and prints it with its unassigned variables as `null`.
-        let state = match succ {
-            Succ::Complete(state) => state,
-            Succ::Partial(s1) => {
-                return match ev.successor_action_of(pred, pred_fp, s1) {
-                    Ok(action) => {
-                        let shown = ev.print_partial_state(s1);
-                        let label = match action {
-                            Some(a) => ev.action_label(a),
-                            None => "<Initial predicate>".to_string(),
-                        };
-                        self.out.state(Ec::TLC_STATE_PRINT2, &[&number.to_string(), &label, &shown, "-1"]);
-                        true
-                    }
-                    Err(e) => {
-                        self.out.error(Ec::GENERAL, &[&e.message]);
-                        false
-                    }
-                };
-            }
-        };
+        let Succ::Complete(state) = succ else { unreachable!("only the last state may be incomplete") };
         let fp = match ev.fingerprint(state) {
             Ok(fp) => fp,
             Err(e) => {

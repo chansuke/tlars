@@ -42,10 +42,11 @@ impl<'t> Ev<'t> {
         Ok(None)
     }
 
-    /// `getState(TLCState s1, TLCState s)` (`Tool.java:3805-3822`): the action whose
-    /// successor *equals* `target`, which is how an incomplete successor is matched, since it
-    /// has no fingerprint.
-    pub fn successor_action_of(&mut self, pred: &State, pred_fp: Fp, target: &PartialState) -> EvalResult<Option<ActionId>> {
+    /// `getState(TLCState s1, TLCState s)` (`Tool.java:3803-3833`): the first successor that
+    /// *equals* `target`, in action split order. TLC matches the last state of a
+    /// counterexample this way rather than by fingerprint, so two successors that share a
+    /// fingerprint cannot be confused, and a candidate whose comparison throws is skipped.
+    pub fn successor_matching(&mut self, pred: &State, pred_fp: Fp, target: &PartialState) -> EvalResult<Option<(PartialState, ActionId)>> {
         self.begin_expansion(pred_fp);
         let count = self.tool.actions.len();
         for i in 0..count {
@@ -55,8 +56,8 @@ impl<'t> Ev<'t> {
                 Ok(()) | Err(Halt::Stop) => {}
                 Err(Halt::Eval(e)) => return Err(e),
             }
-            if sink.found.is_some() {
-                return Ok(Some(id));
+            if let Some(state) = sink.found.take() {
+                return Ok(Some((state, id)));
             }
         }
         Ok(None)
@@ -84,16 +85,17 @@ impl InitSink for InitMatch {
     }
 }
 
-/// `TLCStateMut.equals` over the partial successors of one action.
+/// `TLCStateMut.equals` over the successors of one action. The state is kept as the
+/// generator built it, so an incomplete successor matches too.
 struct PartialMatch<'a> {
     want: &'a PartialState,
-    found: Option<()>,
+    found: Option<PartialState>,
 }
 
 impl NextSink for PartialMatch<'_> {
     fn add_next(&mut self, ev: &mut Ev<'_>, _s0: &State, _action: ActionId, s1: &PartialState) -> Flow {
-        if self.found.is_none() && ev.states_match(s1, self.want)? {
-            self.found = Some(());
+        if self.found.is_none() && ev.states_match(s1, self.want) {
+            self.found = Some(s1.copy());
         }
         Ok(())
     }
