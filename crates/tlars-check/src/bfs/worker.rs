@@ -18,6 +18,8 @@ pub(super) struct Worker<'a> {
 /// The part of the worker that `addElement` mutates.
 struct SinkState {
     generated: u64,
+    /// `Worker.unseenSuccessorStates`, reset after each expanded state.
+    unseen: u32,
     /// Liveness successor set of the state being expanded, sized `16 * multiplier`.
     live_successors: Option<SetOfStates>,
     /// Grows whenever a successor set outgrew its initial capacity (`Worker.java:235`);
@@ -28,7 +30,7 @@ struct SinkState {
 impl<'a> Worker<'a> {
     pub(super) fn new(id: u16, mc: &'a ModelChecker<'a>) -> Self {
         let locals = WorkerLocals::new(id, mc.seed);
-        Worker { id, mc, locals, sink: SinkState { generated: 0, live_successors: None, live_multiplier: 1 } }
+        Worker { id, mc, locals, sink: SinkState { generated: 0, unseen: 0, live_successors: None, live_multiplier: 1 } }
     }
 
     /// `Worker.run`.
@@ -47,8 +49,10 @@ impl<'a> Worker<'a> {
                 Err(Halt::Eval(e)) => mc.next_failed(&cur, None, e),
             }
             // Deadlock = zero addElement calls, even if every successor was out of model.
-            if mc.check_deadlock && generated_before == self.sink.generated {
-                mc.set_err(ErrState::Deadlock { state: cur.clone() });
+            if mc.check_deadlock && generated_before == self.sink.generated && mc.set_err(ErrState::Deadlock { state: cur.clone() }) {
+                mc.out.error(tlars_msg::Ec::TLC_DEADLOCK_REACHED, &[]);
+                let mut ev = mc.tool.ev(&mut self.locals, mc.out);
+                mc.print_trace_and_stop(&mut ev, &cur, None);
             }
             if let (Some(live), Some(succs)) = (mc.live.as_ref(), self.sink.live_successors.take()) {
                 let mut ev = mc.tool.ev(&mut self.locals, mc.out);
@@ -57,6 +61,11 @@ impl<'a> Worker<'a> {
                 }
             }
             mc.stats[self.id as usize].generated.store(self.sink.generated, Relaxed);
+            // `outDegree.addSample(unseenSuccessorStates)`, with 32 buckets and the last one
+            // holding the overflow.
+            let bucket = (self.sink.unseen as usize).min(31);
+            mc.stats[self.id as usize].out_degree.lock().expect("out degree")[bucket] += 1;
+            self.sink.unseen = 0;
         }
         mc.worker_done(self.id);
     }
@@ -122,6 +131,8 @@ impl<O: SeenOracle> WorkerSink<'_, O> {
                 // Written before invariants run, so a violation's trace can include it.
                 new_ptr = Some(mc.traces.append(self.worker, Some(self.cur.ptr), fp));
                 new_fp = Some(fp);
+                mc.traces.record_level(self.worker, self.cur.level + 1);
+                self.st.unseen += 1;
             }
             if let Some(live) = self.st.live_successors.as_mut() {
                 live.put(ev, fp, succ.clone()); // even if seen

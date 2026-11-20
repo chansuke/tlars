@@ -5,13 +5,16 @@
 //! list cells, and the continuation's lifetime is checked by the compiler.
 //! The successor is built in one `&mut PartialState` with bind/unbind, as in TLC.
 
+use super::expr::{Builtin, Resolved};
 use super::{EvalControl, Ev, NextSink};
 use crate::actions::Action;
-use crate::ctx::Ctx;
-use crate::error::Flow;
+use crate::ctx::{Binding, Ctx};
+use crate::error::{EvalError, Flow};
 use crate::fp64::Fp;
 use crate::state::{PartialState, State, StateRef};
-use tlars_sany::graph::{BuiltinOp, ExprId, ExprNode, ExprOrOpArg};
+use crate::value::Value;
+use tlars_msg::Ec;
+use tlars_sany::graph::{ExprId, ExprNode, ExprOrOpArg};
 
 /// `ActionItemList`. `Empty` = all conjuncts done: hand the successor to the sink.
 #[derive(Clone, Copy)]
@@ -81,7 +84,7 @@ impl<'t> Ev<'t> {
         }
     }
 
-    /// `getNextStatesApplImpl` (excerpt: the connectives that shape successor order).
+    /// `getNextStatesApplImpl` (`Tool.java:1100-1548`).
     fn next_appl(
         &mut self,
         a: &Action,
@@ -92,30 +95,275 @@ impl<'t> Ev<'t> {
         s1: &mut PartialState,
         sink: &mut dyn NextSink,
     ) -> Flow {
-        let tool = self.tool;
-        let ExprNode::OpAppl { op, args, .. } = tool.graph().expr(pred) else { unreachable!() };
-        match self.opcode(*op, c) {
-            Some(BuiltinOp::ConjList | BuiltinOp::Land) => self.next_conj(a, args, acts, c, s0, s1, sink),
-            Some(BuiltinOp::DisjList | BuiltinOp::Lor) => {
+        let graph = self.tool.graph.clone();
+        let ExprNode::OpAppl { op, args, .. } = graph.expr(pred) else { unreachable!() };
+        let (op, args) = (*op, args.clone());
+        let mut code = self.opcode(op);
+        if code.is_none() {
+            // A user-defined operator, unless a cfg override or INSTANCE put a built-in here.
+            match self.lookup(op, c, StateRef::Full(s0), false) {
+                Resolved::UserOp(d) | Resolved::Binding(Binding::OpDef(d)) => {
+                    code = self.opcode(tlars_sany::graph::SymbolRef::OpDef(d));
+                    if code.is_none() {
+                        let body = graph.op_def(d).body.expect("a user definition has a body");
+                        let c1 = self.op_context(d, &args, c, true);
+                        return self.next_impl(a, body, acts, &c1, s0, s1, sink);
+                    }
+                }
+                Resolved::Binding(Binding::Thunk(t)) => {
+                    match t.cached(self, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR) {
+                        None => {
+                            let (e, tc) = (t.expr, t.ctx.clone());
+                            return self.next_impl(a, e, acts, &tc, s0, s1, sink);
+                        }
+                        Some(v) => return self.next_filter(a, pred, acts, s0, s1, sink, v),
+                    }
+                }
+                other => {
+                    // `getNextStatesApplEvalAppl`: an `OpValue` is applied to the arguments,
+                    // any other value is the result.
+                    let v = self.apply_resolved(other, op, pred, &args, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                    return self.next_filter(a, pred, acts, s0, s1, sink, v);
+                }
+            }
+        }
+        let Some(code) = code else { unreachable!("resolved above") };
+        let arg = |i: usize| args[i].expect_expr();
+        match code {
+            Builtin::ConjList | Builtin::Land => self.next_conj(a, &args, acts, c, s0, s1, sink),
+            Builtin::DisjList | Builtin::Lor => {
                 for arg in args.iter() {
                     self.next_impl(a, arg.expect_expr(), acts, c, s0, s1, sink)?;
                 }
                 Ok(())
             }
-            // TODO(pseudocode, the rest of getNextStatesApplImpl):
-            //   user op (opcode 0): lookup(op, c) -> OpDef: recurse into body with
-            //     getOpContext(args as call-by-name Thunks); LazyValue: use cached value or
-            //     recurse into lv.expr in lv.ctx; ThmOrAssumpDef likewise.
-            //   \E x \in S: for ctx in contexts(S, Normalized, first var fastest) recurse.
-            //   \A: cons all but first context onto acts.
-            //   x' = e: if x' unbound bind (follow Thunk to its expr: `x <- y` binds y'),
-            //     else test equals. x' \in S: S.elements(Native) — duplicates of lazy
-            //     SetCup/Union are generated twice (counts as "generated").
-            //   IF/CASE: guard, one branch (CASE: first true guard in source order).
-            //   [A]_v: A's states, then UNCHANGED v.  <A>_v: push Changed(v).
-            //   UNCHANGED e: process_unchanged.  f[x] on FcnLambda: expand body.
-            //   anything else: boolean filter via eval, then next_continue.
-            _ => todo!(),
+            Builtin::BoundedExists => {
+                let ExprNode::OpAppl { bound, .. } = graph.expr(pred) else { unreachable!() };
+                let bound = bound.as_deref().expect("a bounded quantifier has bounds");
+                let body = arg(0);
+                let mut contexts = self.contexts(bound, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                while let Some(c1) = contexts.next(self)? {
+                    self.next_impl(a, body, acts, &c1, s0, s1, sink)?;
+                }
+                Ok(())
+            }
+            // The first binding is evaluated, the rest become predicate items.
+            Builtin::BoundedForall => {
+                let ExprNode::OpAppl { bound, .. } = graph.expr(pred) else { unreachable!() };
+                let bound = bound.as_deref().expect("a bounded quantifier has bounds");
+                let body = arg(0);
+                let mut contexts = self.contexts(bound, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                let Some(first) = contexts.next(self)? else {
+                    return self.next_continue(a, acts, s0, s1, sink);
+                };
+                let mut rest = Vec::new();
+                while let Some(c2) = contexts.next(self)? {
+                    rest.push(c2);
+                }
+                self.push_forall(a, body, &rest, acts, s0, s1, sink, &first)
+            }
+            Builtin::IfThenElse => {
+                let v = self.eval(arg(0), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                match v {
+                    Value::Bool(b) => self.next_impl(a, if b { arg(1) } else { arg(2) }, acts, c, s0, s1, sink),
+                    _ => {
+                        let reason = format!(
+                            "In computing next states, a non-boolean expression ({}) was used as the condition of an IF.{}",
+                            v.kind_string(),
+                            graph.expr_tlc_text(pred)
+                        );
+                        Err(EvalError::detailed(reason, Some(graph.loc(pred))).into())
+                    }
+                }
+            }
+            Builtin::Case => {
+                let mut other = None;
+                for a_i in args.iter() {
+                    let pair = a_i.expect_expr();
+                    let ExprNode::OpAppl { args: pair_args, .. } = graph.expr(pair) else { unreachable!("CASE arms are $Pair") };
+                    let pair_args = pair_args.clone();
+                    match pair_args[0] {
+                        ExprOrOpArg::Absent => other = Some(pair_args[1].expect_expr()),
+                        guard => {
+                            let guard = guard.expect_expr();
+                            let v = self.eval(guard, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                            match v {
+                                Value::Bool(true) => return self.next_impl(a, pair_args[1].expect_expr(), acts, c, s0, s1, sink),
+                                Value::Bool(false) => {}
+                                _ => {
+                                    let arm = pair_args[1].expect_expr();
+                                    let reason = format!(
+                                        "In computing next states, a non-boolean expression ({}) was used as a guard condition of a CASE.\n{}",
+                                        v.kind_string(),
+                                        graph.expr_tlc_text(arm)
+                                    );
+                                    return Err(EvalError::detailed(reason, Some(graph.loc(arm))).into());
+                                }
+                            }
+                        }
+                    }
+                }
+                match other {
+                    Some(e) => self.next_impl(a, e, acts, c, s0, s1, sink),
+                    None => {
+                        let reason = format!(
+                            "In computing next states, TLC encountered a CASE with no conditions true.\n{}",
+                            graph.expr_tlc_text(pred)
+                        );
+                        Err(EvalError::detailed(reason, Some(graph.loc(pred))).into())
+                    }
+                }
+            }
+            // `f[x]` on a lazy function expands the body at `x`.
+            Builtin::FcnApply => {
+                let fval = self.eval(arg(0), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::KEEP_LAZY)?;
+                let fval = match &fval {
+                    Value::FcnLambda(l) if l.converted.get().is_none() => {
+                        let c1 = self.fcn_context(l, &args, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                        let body = l.body;
+                        return self.next_impl(a, body, acts, &c1, s0, s1, sink);
+                    }
+                    Value::FcnLambda(l) => Value::FcnRcd(l.converted.get().expect("just checked").clone()),
+                    _ => fval.clone(),
+                };
+                if !fval.is_function() {
+                    let reason = format!(
+                        "In computing next states, a non-function ({}) was applied as a function.\n{}",
+                        fval.kind_string(),
+                        graph.expr_tlc_text(pred)
+                    );
+                    return Err(EvalError::detailed(reason, Some(graph.loc(pred))).into());
+                }
+                let argv = self.eval(arg(1), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                let bval = fval.apply(self, &argv, EvalControl::CLEAR)?;
+                let Value::Bool(b) = bval else {
+                    let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["next states", "boolean", &graph.expr_tlc_text(pred)]);
+                    return Err(EvalError { loc: Some(graph.loc(arg(1))), ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message) }.into());
+                };
+                if b { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
+            }
+            Builtin::AngleAct => {
+                let item = ActItem { pred: args[1].expect_expr(), ctx: c, kind: ActKind::Changed, next: acts };
+                self.next_impl(a, arg(0), Acts::Cons(&item), c, s0, s1, sink)
+            }
+            // `[A]_e`: A's successors, then the stuttering step.
+            Builtin::SquareAct => {
+                self.next_impl(a, arg(0), acts, c, s0, s1, sink)?;
+                self.process_unchanged(a, args[1].expect_expr(), acts, c, s0, s1, sink)
+            }
+            Builtin::Eq => self.next_assign(a, pred, &args, acts, c, s0, s1, sink, Assign::Eq),
+            Builtin::In => self.next_assign(a, pred, &args, acts, c, s0, s1, sink, Assign::In),
+            Builtin::Subseteq => self.next_assign(a, pred, &args, acts, c, s0, s1, sink, Assign::Subseteq),
+            Builtin::Implies => {
+                let v = self.eval(arg(0), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                match v {
+                    Value::Bool(true) => self.next_impl(a, arg(1), acts, c, s0, s1, sink),
+                    Value::Bool(false) => self.next_continue(a, acts, s0, s1, sink),
+                    _ => {
+                        let reason = format!(
+                            "In computing next states of a predicate of the form P => Q, P was\n{}.\n{}",
+                            v.kind_string(),
+                            graph.expr_tlc_text(pred)
+                        );
+                        Err(EvalError::detailed(reason, Some(graph.loc(pred))).into())
+                    }
+                }
+            }
+            Builtin::Unchanged => self.process_unchanged(a, arg(0), acts, c, s0, s1, sink),
+            Builtin::Nop => self.next_impl(a, arg(0), acts, c, s0, s1, sink),
+            Builtin::Cdot => Err(EvalError::unimplemented("action composition (A \\cdot B)".into()).into()),
+            // Every other built-in operator is a boolean filter.
+            _ => {
+                let v = self.eval(pred, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                self.next_filter(a, pred, acts, s0, s1, sink, v)
+            }
+        }
+    }
+
+    /// `getNextStatesApplUsrDefOp` and the `default` case: the value must be a boolean, and a
+    /// true one continues with the remaining items.
+    fn next_filter(
+        &mut self,
+        a: &Action,
+        pred: ExprId,
+        acts: Acts<'_>,
+        s0: &State,
+        s1: &mut PartialState,
+        sink: &mut dyn NextSink,
+        v: Value,
+    ) -> Flow {
+        let Value::Bool(b) = v else {
+            let graph = self.tool.graph.clone();
+            let shown = v.to_tlc_string(self)?;
+            let message =
+                self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["next states", "boolean", &shown, &graph.expr_tlc_text(pred)]);
+            return Err(EvalError {
+                loc: Some(graph.loc(pred)),
+                ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
+            }
+            .into());
+        };
+        if b { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
+    }
+
+    /// `x' = e`, `x' \in S` and `x' \subseteq S`: bind the primed variable if it is still
+    /// free, otherwise test what it is bound to.
+    #[allow(clippy::too_many_arguments)]
+    fn next_assign(
+        &mut self,
+        a: &Action,
+        pred: ExprId,
+        args: &[ExprOrOpArg],
+        acts: Acts<'_>,
+        c: &Ctx,
+        s0: &State,
+        s1: &mut PartialState,
+        sink: &mut dyn NextSink,
+        kind: Assign,
+    ) -> Flow {
+        let graph = self.tool.graph.clone();
+        let Some(slot) = self.get_primed_var(args[0].expect_expr(), c, false) else {
+            // Not an assignment: TLC casts the value to a BoolValue without checking.
+            let v = self.eval(pred, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+            let Value::Bool(b) = v else { return Err(EvalError::class_cast(v.java_class(), "BoolValue").into()) };
+            if !b {
+                return Ok(());
+            }
+            return self.next_continue(a, acts, s0, s1, sink);
+        };
+        let rval = self.eval(args[1].expect_expr(), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+        let rval = if kind == Assign::Subseteq { crate::value::subset(rval) } else { rval };
+        let bound = s1.lookup(slot).cloned();
+        match (kind, bound) {
+            (Assign::Eq, None) => {
+                s1.bind(slot, rval);
+                let r = self.next_continue(a, acts, s0, s1, sink);
+                s1.unbind(slot);
+                r
+            }
+            (Assign::Eq, Some(lval)) => {
+                if lval.tlc_equals(self, &rval)? { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
+            }
+            (_, None) => {
+                if !rval.is_enumerable() {
+                    let reason = format!(
+                        "In computing next states, the right side of \\IN is not enumerable.\n{}",
+                        graph.expr_tlc_text(pred)
+                    );
+                    return Err(EvalError::detailed(reason, Some(graph.loc(pred))).into());
+                }
+                let mut elems = rval.elements(self, crate::value::enumerate::EnumOrder::Native)?.expect("an enumerable value enumerates");
+                while let Some(elem) = elems.next(self)? {
+                    s1.bind(slot, elem);
+                    let r = self.next_continue(a, acts, s0, s1, sink);
+                    s1.unbind(slot);
+                    r?;
+                }
+                Ok(())
+            }
+            (_, Some(lval)) => {
+                if rval.member(self, &lval)? { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
+            }
         }
     }
 
@@ -155,6 +403,29 @@ impl<'t> Ev<'t> {
         }
     }
 
+    /// `\A x \in S : P`: the bindings after the first become predicate items, consed in
+    /// enumeration order so the list holds them reversed, exactly as TLC's loop does.
+    #[allow(clippy::too_many_arguments)]
+    fn push_forall(
+        &mut self,
+        a: &Action,
+        body: ExprId,
+        rest: &[Ctx],
+        acts: Acts<'_>,
+        s0: &State,
+        s1: &mut PartialState,
+        sink: &mut dyn NextSink,
+        first: &Ctx,
+    ) -> Flow {
+        match rest.split_first() {
+            None => self.next_impl(a, body, acts, first, s0, s1, sink),
+            Some((next, tail)) => {
+                let item = ActItem { pred: body, ctx: next, kind: ActKind::Pred, next: acts };
+                self.push_forall(a, body, tail, Acts::Cons(&item), s0, s1, sink, first)
+            }
+        }
+    }
+
     /// `getNextStates0`: pop the next item, or emit the finished successor.
     pub(crate) fn next_continue(&mut self, a: &Action, acts: Acts<'_>, s0: &State, s1: &mut PartialState, sink: &mut dyn NextSink) -> Flow {
         let Acts::Cons(item) = acts else {
@@ -168,7 +439,7 @@ impl<'t> Ev<'t> {
             ActKind::Unchanged => self.process_unchanged(a, item.pred, item.next, item.ctx, s0, s1, sink),
             ActKind::Changed => {
                 let v0 = self.eval(item.pred, item.ctx, StateRef::Full(s0), StateRef::Empty, EvalControl::CLEAR)?;
-                let v1 = self.eval(item.pred, item.ctx, StateRef::Partial(s1), StateRef::Empty, EvalControl::CLEAR)?;
+                let v1 = self.eval(item.pred, item.ctx, StateRef::Partial(s1), StateRef::Null, EvalControl::CLEAR)?;
                 if v0.tlc_equals(self, &v1)? { Ok(()) } else { self.next_continue(a, item.next, s0, s1, sink) }
             }
         }
@@ -176,7 +447,38 @@ impl<'t> Ev<'t> {
 
     /// `getNextStatesAllAssigned`: every variable bound, remaining items are boolean tests.
     fn next_all_assigned(&mut self, a: &Action, acts: Acts<'_>, s0: &State, s1: &mut PartialState, sink: &mut dyn NextSink) -> Flow {
-        todo!()
+        let mut acts = acts;
+        while let Acts::Cons(item) = acts {
+            match item.kind {
+                ActKind::Conj(_) | ActKind::Pred => {
+                    let v = self.eval(item.pred, item.ctx, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                    let Value::Bool(b) = v else {
+                        let graph = self.tool.graph.clone();
+                        let shown = v.to_tlc_string(self)?;
+                        let text = graph.expr_tlc_text(item.pred);
+                        let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["next states", "boolean", &shown, &text]);
+                        return Err(EvalError {
+                            loc: Some(graph.loc(item.pred)),
+                            ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
+                        }
+                        .into());
+                    };
+                    if !b {
+                        return sink.add_unsatisfied(self, s0, a.id(), s1);
+                    }
+                }
+                ActKind::Unchanged => return self.process_unchanged(a, item.pred, item.next, item.ctx, s0, s1, sink),
+                ActKind::Changed => {
+                    let v0 = self.eval(item.pred, item.ctx, StateRef::Full(s0), StateRef::Empty, EvalControl::CLEAR)?;
+                    let v1 = self.eval(item.pred, item.ctx, StateRef::Partial(s1), StateRef::Null, EvalControl::CLEAR)?;
+                    if v0.tlc_equals(self, &v1)? {
+                        return Ok(());
+                    }
+                }
+            }
+            acts = item.next;
+        }
+        sink.add_next(self, s0, a.id(), s1)
     }
 
     /// `processUnchanged`: bind unbound primed vars to their s0 values, test bound ones.
@@ -190,7 +492,86 @@ impl<'t> Ev<'t> {
         s1: &mut PartialState,
         sink: &mut dyn NextSink,
     ) -> Flow {
-        todo!()
+        let graph = self.tool.graph.clone();
+        if let Some(slot) = self.get_var(expr, c, false) {
+            let val0 = s0.get(slot).clone();
+            match s1.lookup(slot).cloned() {
+                None => {
+                    s1.bind(slot, val0);
+                    let r = self.next_continue(a, acts, s0, s1, sink);
+                    s1.unbind(slot);
+                    return r;
+                }
+                Some(val1) => {
+                    if val0.tlc_equals(self, &val1)? {
+                        return self.next_continue(a, acts, s0, s1, sink);
+                    }
+                    let name = graph.interner().text(self.tool.vars().names[slot.index()]).to_string();
+                    crate::value::warn(self, Ec::TLC_UNCHANGED_VARIABLE_CHANGED, &[&name, &graph.expr_tlc_text(expr)])?;
+                    return Ok(());
+                }
+            }
+        }
+        if let ExprNode::OpAppl { op, args, .. } = graph.expr(expr) {
+            let (op, args) = (*op, args.clone());
+            if self.opcode(op) == Some(Builtin::Tuple) {
+                let Some((first, rest)) = args.split_first() else {
+                    return self.next_continue(a, acts, s0, s1, sink);
+                };
+                let first = first.expect_expr();
+                return self.push_unchanged(rest, c, acts, &mut |ev, acts1| ev.process_unchanged(a, first, acts1, c, s0, s1, sink));
+            }
+            // A 0-arity user operator: follow it to its body.
+            if self.opcode(op).is_none() && args.is_empty() {
+                match self.lookup(op, c, StateRef::Empty, false) {
+                    Resolved::UserOp(d) | Resolved::Binding(Binding::OpDef(d)) => {
+                        if let Some(body) = graph.op_def(d).body {
+                            return self.process_unchanged(a, body, acts, c, s0, s1, sink);
+                        }
+                    }
+                    Resolved::Binding(Binding::Thunk(t)) => {
+                        let (e, tc) = (t.expr, t.ctx.clone());
+                        return self.process_unchanged(a, e, acts, &tc, s0, s1, sink);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        self.verify_unchanged(a, expr, acts, c, s0, s1, sink)
+    }
+
+    /// `verifyUnchanged`: the expression is compared in both states without synthesising any
+    /// successor value.
+    fn verify_unchanged(
+        &mut self,
+        a: &Action,
+        expr: ExprId,
+        acts: Acts<'_>,
+        c: &Ctx,
+        s0: &State,
+        s1: &mut PartialState,
+        sink: &mut dyn NextSink,
+    ) -> Flow {
+        let v0 = self.eval(expr, c, StateRef::Full(s0), StateRef::Empty, EvalControl::CLEAR)?;
+        let v1 = self.eval(expr, c, StateRef::Partial(s1), StateRef::Null, EvalControl::CLEAR)?;
+        if v0.tlc_equals(self, &v1)? { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
+    }
+
+    /// `UNCHANGED <<a, b, c>>`: the components after the first become UNCHANGED items.
+    fn push_unchanged(
+        &mut self,
+        rest: &[ExprOrOpArg],
+        c: &Ctx,
+        acts: Acts<'_>,
+        k: &mut dyn FnMut(&mut Self, Acts<'_>) -> Flow,
+    ) -> Flow {
+        match rest.split_last() {
+            None => k(self, acts),
+            Some((last, init)) => {
+                let item = ActItem { pred: last.expect_expr(), ctx: c, kind: ActKind::Unchanged, next: acts };
+                self.push_unchanged(init, c, Acts::Cons(&item), k)
+            }
+        }
     }
 
     /// `getNextStatesImplSubstInKind`: cons one fresh `Thunk` (cachable = false) per
@@ -205,6 +586,20 @@ impl<'t> Ev<'t> {
         s1: &mut PartialState,
         sink: &mut dyn NextSink,
     ) -> Flow {
-        todo!()
+        let graph = self.tool.graph.clone();
+        let (ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. }) = graph.expr(pred) else {
+            unreachable!("only a SubstIn reaches here")
+        };
+        let (substs, body) = (substs.clone(), *body);
+        let c1 = self.subst_context(&substs, c);
+        self.next_impl(a, body, acts, &c1, s0, s1, sink)
     }
+}
+
+/// Which assignment form `next_assign` handles.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Assign {
+    Eq,
+    In,
+    Subseteq,
 }

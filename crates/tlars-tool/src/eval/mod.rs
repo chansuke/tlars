@@ -42,6 +42,11 @@ impl EvalControl {
     pub fn has(self, flag: Self) -> bool {
         self.0 & flag.0 != 0
     }
+    /// `EvalControl.setPrimedIfEnabled`: primed only inside ENABLED, where the context
+    /// lookup has to stop at the branch.
+    pub(crate) fn set_primed_if_enabled(self) -> Self {
+        if self.has(Self::ENABLED) { self.with(Self::PRIMED) } else { self }
+    }
     /// `EvalControl.semanticallyEquivalent` (LazyValue cache guard).
     pub(crate) fn semantically_equivalent(self, other: Self) -> bool {
         // `KeepLazy`, `Init` and `Const` do not change what an expression means
@@ -86,9 +91,18 @@ pub struct CallStack {
 }
 
 impl CallStack {
-    /// The indented position list printed under `TLC_NESTED_EXPRESSION`.
+    pub fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
+    /// The indented position list printed under `TLC_NESTED_EXPRESSION`
+    /// (`CallStack.toString`): one numbered line per frame, deepest last.
     pub fn to_tlc_string(&self, tool: &Tool) -> String {
-        todo!()
+        let mut out = String::new();
+        for (i, (expr, _)) in self.frames.iter().enumerate() {
+            let loc = tool.graph().loc(*expr).tlc_text(tool.graph().interner());
+            out.push_str(&format!("{}. {loc}\n", i + 1));
+        }
+        out
     }
 }
 
@@ -149,48 +163,189 @@ impl<'t> Ev<'t> {
     }
     /// `isInModel`: all CONSTRAINTs.
     pub fn is_in_model(&mut self, s: &State) -> EvalResult<bool> {
-        todo!()
+        let checks = self.tool.model_constraints.len();
+        for i in 0..checks {
+            let (expr, ctx) = {
+                let check = &self.tool.model_constraints[i];
+                (check.expr, check.ctx.clone())
+            };
+            if !self.is_valid_in(expr, &ctx, crate::state::StateRef::Full(s), crate::state::StateRef::Empty)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
     /// `isInActions`: all ACTION_CONSTRAINTs.
     pub fn is_in_actions(&mut self, s0: &State, s1: &State) -> EvalResult<bool> {
-        todo!()
+        let checks = self.tool.action_constraints.len();
+        for i in 0..checks {
+            let (expr, ctx) = {
+                let check = &self.tool.action_constraints[i];
+                (check.expr, check.ctx.clone())
+            };
+            if !self.is_valid_in(expr, &ctx, crate::state::StateRef::Full(s0), crate::state::StateRef::Full(s1))? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
-    /// `TLCStateMut.fingerPrint`: deepNormalize, then SYMMETRY (min permuted state compared
-    /// in `vars[]` order, early exit on cmp > 0) or VIEW, then FP64 over `vars[]` order.
+    /// `TLCStateMut.fingerPrint` (`TLCStateMut.java:171-237`): with no SYMMETRY and no VIEW,
+    /// the values' own fingerprints in `vars[]` order. Each value normalises itself on the
+    /// way, which is why fingerprinting a state also leaves it shareable.
     pub fn fingerprint(&mut self, s: &State) -> EvalResult<Fp> {
-        todo!()
+        if self.tool.has_symmetry() || self.tool.view.is_some() {
+            return Err(crate::error::EvalError::unimplemented("SYMMETRY and VIEW fingerprints (M3 unit 5)".into()));
+        }
+        let mut fp = self.tool.fp64.new_fp();
+        for i in 0..s.len() {
+            let v = s.get(self.tool.vars.slot(i)).clone();
+            fp = v.fingerprint(self, fp)?;
+        }
+        Ok(fp)
     }
     /// One INVARIANT, `Ok(false)` = violated.
     pub fn check_invariant(&mut self, id: CheckId<Invariant>, s: &State) -> EvalResult<bool> {
-        todo!()
+        let (expr, ctx) = {
+            let check = &self.tool.invariants[id.index()];
+            (check.expr, check.ctx.clone())
+        };
+        self.is_valid_in(expr, &ctx, crate::state::StateRef::Full(s), crate::state::StateRef::Empty)
     }
     /// One implied action `[][A]_v`, checked for every successor, seen or not.
     pub fn check_implied_action(&mut self, id: CheckId<ImpliedAction>, s0: &State, s1: &State) -> EvalResult<bool> {
-        todo!()
+        let (expr, ctx) = {
+            let check = &self.tool.implied_actions[id.index()];
+            (check.expr, check.ctx.clone())
+        };
+        self.is_valid_in(expr, &ctx, crate::state::StateRef::Full(s0), crate::state::StateRef::Full(s1))
     }
     pub fn check_implied_init(&mut self, id: CheckId<ImpliedInit>, s: &State) -> EvalResult<bool> {
-        todo!()
+        let (expr, ctx) = {
+            let check = &self.tool.implied_inits[id.index()];
+            (check.expr, check.ctx.clone())
+        };
+        self.is_valid_in(expr, &ctx, crate::state::StateRef::Full(s), crate::state::StateRef::Empty)
     }
     pub fn check_postconditions(&mut self) -> Result<(), (tlars_msg::Ec, Vec<String>)> {
-        todo!()
+        debug_assert!(self.tool.postconditions.is_empty(), "POSTCONDITION is not processed yet");
+        Ok(())
+    }
+
+    /// `Tool.isValid(action, s0, s1)`: the predicate must be a boolean.
+    fn is_valid_in(
+        &mut self,
+        expr: ExprId,
+        ctx: &crate::ctx::Ctx,
+        s0: crate::state::StateRef<'_>,
+        s1: crate::state::StateRef<'_>,
+    ) -> EvalResult<bool> {
+        match self.eval(expr, ctx, s0, s1, EvalControl::CLEAR)? {
+            crate::value::Value::Bool(b) => Ok(b),
+            _ => {
+                let graph = &self.tool.graph;
+                let loc = graph.loc(expr);
+                let message = self.out.text(Ec::TLC_EXPECTED_VALUE, &["boolean", &graph.expr_tlc_text(expr)]);
+                Err(EvalError { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime })
+            }
+        }
     }
 
     /// `TLCState.equals` as `SetOfStates.put0` uses it: an equality that throws is `false`.
     pub fn states_equal_or_false(&mut self, a: &State, b: &State) -> bool {
-        todo!()
+        (0..a.len()).all(|i| {
+            let slot = self.tool.vars.slot(i);
+            let (x, y) = (a.get(slot).clone(), b.get(slot).clone());
+            matches!(x.tlc_equals(self, &y), Ok(true))
+        })
     }
 
     // ---- printing ----
 
-    /// `TLCStateMut.toString` / ALIAS `PrintTLCState`: `x = v` for one variable, else
-    /// `/\ x = v` per variable in `vars[]` order (ALIAS: record fields in token order,
-    /// `_format`, `_ALIASEvalError`); `prev` given = `-difftrace`.
+    /// `TLCStateMut.toString` (`TLCStateMut.java:327-396`): `x = v` for one variable, else
+    /// `/\ x = v` per variable in `vars[]` order; `prev` given = `-difftrace`, which prints
+    /// only the variables that changed.
     pub fn print_state(&mut self, s: &State, prev: Option<&State>) -> String {
-        todo!()
+        let interner = self.tool.graph.interner().clone();
+        let single = s.len() == 1;
+        let mut out = String::new();
+        for i in 0..s.len() {
+            let slot = self.tool.vars.slot(i);
+            let val = s.get(slot).clone();
+            if let Some(prev) = prev {
+                let old = prev.get(slot).clone();
+                if matches!(old.tlc_equals(self, &val), Ok(true)) {
+                    continue;
+                }
+            }
+            let name = interner.text(self.tool.vars.names[i]);
+            let shown = val.ppr(self).unwrap_or_default();
+            if !single {
+                out.push_str("/\\ ");
+            }
+            out.push_str(&format!("{name} = {shown}\n"));
+        }
+        out
+    }
+    /// `TLCStateMut.getUnassigned()`, named and sorted as 2109 prints them.
+    pub fn unassigned(&self, s1: &PartialState) -> Vec<String> {
+        s1.unassigned(&self.tool.vars, self.tool.graph.interner())
+    }
+    /// A partially assigned state as `toString` prints it: an unassigned variable is a Java
+    /// `null`, which `Values.ppr` renders as `null`.
+    pub fn print_partial_state(&mut self, s: &PartialState) -> String {
+        let interner = self.tool.graph.interner().clone();
+        let single = self.tool.var_count() == 1;
+        let mut out = String::new();
+        for i in 0..self.tool.var_count() {
+            let slot = self.tool.vars.slot(i);
+            let shown = match s.lookup(slot).cloned() {
+                Some(v) => v.ppr(self).unwrap_or_default(),
+                None => "null".to_string(),
+            };
+            let name = interner.text(self.tool.vars.names[i]);
+            if !single {
+                out.push_str("/\\ ");
+            }
+            out.push_str(&format!("{name} = {shown}\n"));
+        }
+        out
+    }
+    /// `TLCStateInfo.info`: the action's location, or `<Initial predicate>` for a state TLC
+    /// recovered from an initial predicate it cannot name (`TLCStateInfo.java:32-63`).
+    pub fn state_label(&mut self, step: &StateInfo) -> String {
+        match step.action {
+            None => "<Initial predicate>".to_string(),
+            Some(a) => self.action_label(a),
+        }
+    }
+    /// `Action.getName()`, which 2109 prints when the spec has more than one action.
+    pub fn action_name(&mut self, a: ActionId) -> String {
+        match self.tool.actions[a.index()].name() {
+            Some(n) => self.tool.graph.interner().text(n).to_string(),
+            None => "UnnamedAction".to_string(),
+        }
     }
     /// `Action.getLocation()`: `<Name(p) line L, col C to line L2, col C2 of module M>`.
     pub fn action_label(&mut self, a: ActionId) -> String {
-        todo!()
+        let action = &self.tool.actions[a.index()];
+        let (pred, op_def, ctx) = (action.pred, action.op_def, action.ctx.clone());
+        let name = action.name.map_or_else(|| "Action".to_string(), |n| self.tool.graph.interner().text(n).to_string());
+        self.labelled(&name, pred, op_def, &ctx)
+    }
+    /// `Action.getLocation(name)`: the action's parameters, as bound by splitting, then the
+    /// predicate's location.
+    pub(crate) fn labelled(&mut self, name: &str, pred: ExprId, op_def: Option<tlars_sany::graph::OpDefId>, ctx: &crate::ctx::Ctx) -> String {
+        let graph = self.tool.graph.clone();
+        let params = op_def.map(|d| graph.op_def(d).params.clone()).unwrap_or_default();
+        let mut shown = Vec::new();
+        for &p in params.iter() {
+            if let Some(crate::ctx::Binding::Value(v)) = ctx.lookup(tlars_sany::graph::SymbolRef::Param(p)) {
+                let v = v.clone();
+                shown.push(v.to_tlc_string(self).unwrap_or_default());
+            }
+        }
+        let args = if shown.is_empty() { String::new() } else { format!("({})", shown.join(",")) };
+        format!("<{name}{args} {}>", graph.loc(pred).tlc_text(graph.interner()))
     }
 
     // ---- internal ----

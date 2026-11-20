@@ -34,6 +34,12 @@ impl<K> Clone for CheckId<K> {
 }
 impl<K> Copy for CheckId<K> {}
 
+impl<K> CheckId<K> {
+    pub(crate) fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
 /// An INVARIANT / implied property / constraint: its cfg name, expression and context.
 pub(crate) struct NamedCheck {
     pub(crate) name: Atom,

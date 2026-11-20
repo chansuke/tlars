@@ -1,7 +1,6 @@
 //! TLC's `setToolObject(toolId, ...)` side data, as immutable tables indexed by graph ids.
 
 use crate::modules::NativeId;
-use crate::state::VarSlot;
 use crate::value::Value;
 use tlars_sany::graph::{ExprId, OpDefId};
 
@@ -34,7 +33,6 @@ pub(crate) enum DeclBinding {
     Op(OpDefId),
     /// cfg `C <- Op` where `Op` is a Java-module override (`MethodValue`).
     Native(NativeId),
-    Var(VarSlot),
 }
 
 pub(crate) struct Bindings {

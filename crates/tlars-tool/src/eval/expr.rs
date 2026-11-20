@@ -14,7 +14,7 @@ use crate::value::{Closure, Except, Value};
 use std::sync::Arc;
 use tlars_msg::Ec;
 use tlars_sany::Atom;
-use tlars_sany::graph::{BoundSymbols, BuiltinOp, ExprId, ExprNode, ExprOrOpArg, OpDefId, OpDefKind, ParamId, SymbolRef};
+use tlars_sany::graph::{BoundSymbols, ExprId, ExprNode, ExprOrOpArg, OpDefId, OpDefKind, ParamId, SymbolRef};
 
 /// What a name resolved to (`SymbolNodeValueLookupProvider.lookup`).
 pub(crate) enum Resolved {
@@ -92,7 +92,9 @@ impl<'t> Ev<'t> {
     /// context, then the symbol's tool object, then a definition body's (through INSTANCE
     /// substitutions).
     pub(crate) fn lookup(&mut self, sym: SymbolRef, c: &Ctx, s0: StateRef<'_>, cutoff: bool) -> Resolved {
-        if let Some(b) = c.lookup(sym) {
+        // `c.lookup(opNode, cutoff && isVarDecl)`: the cutoff applies to a variable only.
+        let is_var_decl = matches!(sym, SymbolRef::Decl(d) if is_variable(self.tool(), d));
+        if let Some(b) = c.lookup_cutoff(sym, cutoff && is_var_decl) {
             return Resolved::Binding(b.clone());
         }
         let tool = self.tool();
@@ -113,8 +115,16 @@ impl<'t> Ev<'t> {
                 Some(crate::spec::DeclBinding::Table(lines)) => Resolved::OpRcd(lines.clone()),
                 Some(crate::spec::DeclBinding::Op(op)) => Resolved::UserOp(*op),
                 Some(crate::spec::DeclBinding::Native(id)) => Resolved::Native(*id),
-                Some(crate::spec::DeclBinding::Var(slot)) => Resolved::Var(*slot),
-                None => Resolved::Value(Value::Undef),
+                // `Spec.lookup(opNode, c, s, cutoff)` (`Spec.java:450-468`): a declaration
+                // with no tool object is read from the state, by the slot `setLoc` gave its
+                // name. An unbound one leaves `lookup` returning the node itself.
+                None => match tool.vars.slot_of(tool.graph.decl(d).name) {
+                    Some(slot) => match s0.get(slot) {
+                        Some(v) => Resolved::Value(v.clone()),
+                        None => Resolved::Var(slot),
+                    },
+                    None => Resolved::Value(Value::Undef),
+                },
             },
             SymbolRef::Param(_) => unreachable!("SANY binds every parameter in the context"),
             SymbolRef::Thm(_) | SymbolRef::Module(_) => Resolved::Value(Value::Undef),
@@ -196,6 +206,14 @@ impl<'t> Ev<'t> {
                     return Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()));
                 }
                 Resolved::Binding(Binding::Value(_)) | Resolved::Value(_) | Resolved::Var(_) => {
+                    // Fairness on a sub-action that leaves a subscript variable unassigned
+                    // (`Tool.java:2064-2090`).
+                    if !control.has(EvalControl::ENABLED) && control.has(EvalControl::PRIMED) && matches!(op, SymbolRef::Decl(_)) {
+                        let name = self.symbol_name(op);
+                        let text = graph.expr_tlc_text(expr);
+                        let message = self.out().text(Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_LIVE, &[&name, &text]);
+                        return Err(EvalError::runtime(Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_LIVE, message));
+                    }
                     if matches!(op, SymbolRef::OpDef(d) if matches!(self.tool().bindings.op_def(d).or_else(|| self.body_binding(d)), Some(OpBinding::Unimplemented))) {
                         let name = self.symbol_name(op);
                         return Err(EvalError::unimplemented(format!("the Java implementation of {name}")));
@@ -647,6 +665,41 @@ impl<'t> Ev<'t> {
                 }
                 Ok(result)
             }
+            // `x'` reads the successor: s1 becomes the state, and there is no successor of a
+            // successor (`Tool.java:2720-2736`).
+            Builtin::Prime => self.eval(arg(0), c, s1, StateRef::Null, control.set_primed_if_enabled()),
+            Builtin::Unchanged => {
+                let v0 = self.eval(arg(0), c, s0, StateRef::Empty, control)?;
+                let v1 = self.eval(arg(0), c, s1, StateRef::Null, control.set_primed_if_enabled())?;
+                Ok(Value::Bool(v0.tlc_equals(self, &v1)?))
+            }
+            Builtin::AngleAct | Builtin::SquareAct => {
+                let angle = builtin == Builtin::AngleAct;
+                let form = if angle { "<A>_e" } else { "[A]_e" };
+                let v = self.eval(arg(0), c, s0, s1, control)?;
+                let Value::Bool(b) = v else {
+                    let reason = format!("Attempted to evaluate an expression of form {form}, but A was not a boolean.\n{}", text(self, expr));
+                    return Err(not_boolean(self, reason, expr));
+                };
+                // `<A>_e` is false and `[A]_e` true as soon as A settles it.
+                if b == angle {
+                    return Ok(Value::Bool(angle));
+                }
+                let v0 = self.eval(arg(1), c, s0, StateRef::Empty, control)?;
+                let v1 = self.eval(arg(1), c, s1, StateRef::Null, control.set_primed_if_enabled())?;
+                let same = v0.tlc_equals(self, &v1)?;
+                Ok(Value::Bool(same != angle))
+            }
+            Builtin::Enabled => {
+                let c1 = c.branch();
+                let enabled = self.enabled(arg(0), super::next::Acts::Empty, &c1, s0, &crate::state::FunState::EMPTY)?;
+                Ok(Value::Bool(enabled))
+            }
+            Builtin::Nop => self.eval(arg(0), c, s0, s1, control),
+            Builtin::Cdot => Err(EvalError::unimplemented("action composition (A \\cdot B)".into())),
+            Builtin::Box | Builtin::TemporalExists | Builtin::TemporalForall => {
+                Err(EvalError::unimplemented("a temporal operator outside PROPERTY (M4)".into()))
+            }
             Builtin::Unimplemented(name) => Err(EvalError::unimplemented(format!("the operator {name} (M2 unit 4)"))),
         }
     }
@@ -769,7 +822,7 @@ impl<'t> Ev<'t> {
 
     /// `Tool.contexts` (`Tool.java:4080-4110`): every domain is evaluated first; then the
     /// bindings run like an odometer with the first variable fastest.
-    fn contexts(&mut self, bound: &BoundSymbols, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Contexts> {
+    pub(crate) fn contexts(&mut self, bound: &BoundSymbols, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Contexts> {
         let graph = self.tool().graph.clone();
         let mut vars = Vec::new();
         for list in bound.lists.iter() {
@@ -803,15 +856,266 @@ impl<'t> Ev<'t> {
         Ok(Contexts { base: c.clone(), vars, current, done })
     }
 
-    /// Builtin opcode of an applied operator, after `lookup` (an INSTANCE or cfg override may
-    /// map a user name onto a builtin). TLC: `BuiltInOPs.getOpCode(opDef.getName())`.
-    pub(crate) fn opcode(&mut self, op: SymbolRef, c: &Ctx) -> Option<BuiltinOp> {
-        todo!("M3: opcodes for next-state splitting")
+    /// `BuiltInOPs.getOpCode(opNode.getName())` of an applied operator; `None` for a
+    /// user-defined one.
+    pub(crate) fn opcode(&self, op: SymbolRef) -> Option<Builtin> {
+        self.builtin(op)
     }
 
-    pub(crate) fn not_boolean_next(&mut self, pred: ExprId, c: &Ctx) -> EvalError {
-        todo!("'The next state relation is not a boolean expression.' with location")
+    /// `getNextStatesApplEvalAppl` / the init and next `OpValue` branch: an `OpValue` is
+    /// applied to the arguments, and anything else is the value itself. The variants
+    /// `next_appl` and `init_appl` handle before this are not reached.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn apply_resolved(
+        &mut self,
+        resolved: Resolved,
+        op: SymbolRef,
+        expr: ExprId,
+        args: &[ExprOrOpArg],
+        c: &Ctx,
+        s0: StateRef<'_>,
+        s1: StateRef<'_>,
+        control: EvalControl,
+    ) -> EvalResult<Value> {
+        match resolved {
+            Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
+                if args.len() != crate::modules::arity(id) {
+                    let name = self.symbol_name(op);
+                    return Err(EvalError::unimplemented(format!("the Java method behind {name} applied to {} arguments", args.len())));
+                }
+                match crate::modules::imp(id) {
+                    crate::modules::NativeImpl::Lazy(f) => f(self, args, c, s0, s1, control),
+                    crate::modules::NativeImpl::Strict(_) => {
+                        let mut vals = Vec::with_capacity(args.len());
+                        for &a in args {
+                            vals.push(self.eval(a.expect_expr(), c, s0, s1, control)?);
+                        }
+                        crate::modules::apply(self, id, &vals)
+                    }
+                }
+            }
+            Resolved::OpRcd(lines) | Resolved::Binding(Binding::OpRcd(lines)) => {
+                let mut vals = Vec::with_capacity(args.len());
+                for &a in args {
+                    vals.push(self.eval(a.expect_expr(), c, s0, s1, control)?);
+                }
+                self.apply_op_rcd(&lines, &vals)
+            }
+            Resolved::Binding(Binding::Value(v)) | Resolved::Value(v) if !matches!(v, Value::Undef) => Ok(v),
+            // The value is missing or not applicable: `evalApplImpl`'s last `else`.
+            _ => {
+                let name = self.symbol_name(op);
+                let text = self.tool().graph.expr_tlc_text(expr);
+                let message = self.out().text(Ec::TLC_CONFIG_UNDEFINED_OR_NO_OPERATOR, &[&name, &text]);
+                Err(EvalError::runtime(Ec::TLC_CONFIG_UNDEFINED_OR_NO_OPERATOR, message))
+            }
+        }
     }
+
+    /// `Tool.getFcnContext(fcn, args, ...)`: `args[1]` evaluated and bound to the formals.
+    pub(crate) fn fcn_context(
+        &mut self,
+        fcn: &Arc<crate::value::FcnLambdaValue>,
+        args: &[ExprOrOpArg],
+        c: &Ctx,
+        s0: StateRef<'_>,
+        s1: StateRef<'_>,
+        control: EvalControl,
+    ) -> EvalResult<Ctx> {
+        let arg = self.eval(args[1].expect_expr(), c, s0, s1, control)?;
+        fcn.fcn_context(self, &arg)
+    }
+
+    /// `Spec.getVar(expr, c, cutoff)` (`SymbolNodeValueLookupProvider.java:29-84`): the state
+    /// variable `expr` denotes, if any.
+    pub(crate) fn get_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+        let graph = self.tool().graph.clone();
+        match graph.expr(expr) {
+            ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
+                let c1 = self.subst_context(substs, c);
+                self.get_var(*body, &c1, cutoff)
+            }
+            ExprNode::LetIn { defs, body, .. } => {
+                let c1 = self.let_context(defs, c);
+                self.get_var(*body, &c1, cutoff)
+            }
+            ExprNode::Label { body, .. } => self.get_var(*body, c, cutoff),
+            ExprNode::OpAppl { op, .. } if self.arity(*op) == 0 => match self.lookup(*op, c, StateRef::Empty, cutoff) {
+                Resolved::Binding(Binding::Thunk(t)) => self.get_var(t.expr, &t.ctx.clone(), cutoff),
+                Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
+                    let body = self.tool().graph.op_def(d).body;
+                    body.and_then(|b| self.get_var(b, c, cutoff))
+                }
+                Resolved::Var(slot) => Some(slot),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// `Spec.getPrimedVar` (`Spec.java:138-205`): the variable `expr` primes, if any.
+    pub(crate) fn get_primed_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+        let graph = self.tool().graph.clone();
+        match graph.expr(expr) {
+            ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
+                let c1 = self.subst_context(substs, c);
+                self.get_primed_var(*body, &c1, cutoff)
+            }
+            ExprNode::LetIn { defs, body, .. } => {
+                let c1 = self.let_context(defs, c);
+                self.get_primed_var(*body, &c1, cutoff)
+            }
+            ExprNode::Label { body, .. } => self.get_primed_var(*body, c, cutoff),
+            ExprNode::OpAppl { op, args, .. } => {
+                if self.opcode(*op) == Some(Builtin::Prime) {
+                    return self.get_var(args[0].expect_expr(), c, cutoff);
+                }
+                if self.arity(*op) != 0 {
+                    return None;
+                }
+                match self.lookup(*op, c, StateRef::Empty, cutoff) {
+                    Resolved::Binding(Binding::Thunk(t)) => self.get_primed_var(t.expr, &t.ctx.clone(), cutoff),
+                    Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
+                        let body = self.tool().graph.op_def(d).body;
+                        body.and_then(|b| self.get_primed_var(b, c, cutoff))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// `getVal` for every substitution, consed over the *outer* context.
+    pub(crate) fn subst_context(&mut self, substs: &[tlars_sany::graph::Subst], c: &Ctx) -> Ctx {
+        let mut c1 = c.clone();
+        for sub in substs {
+            let val = self.get_val(sub.expr, c, false);
+            c1 = c1.cons(SymbolRef::Decl(sub.decl), val);
+        }
+        c1
+    }
+
+    /// The context `getVar` / `getLevelBound` build for a LET: every 0-arity definition
+    /// becomes a thunk over the context so far.
+    pub(crate) fn let_context(&mut self, defs: &[OpDefId], c: &Ctx) -> Ctx {
+        let graph = self.tool().graph.clone();
+        let mut c1 = c.clone();
+        for &d in defs {
+            let def = graph.op_def(d);
+            if def.params.is_empty() {
+                let body = def.body.expect("a LET definition has a body");
+                c1 = c1.cons(SymbolRef::OpDef(d), Binding::Thunk(Thunk::new(body, c1.clone(), true)));
+            }
+        }
+        c1
+    }
+
+    /// `opNode.getArity()`.
+    fn arity(&self, op: SymbolRef) -> usize {
+        let graph = &self.tool().graph;
+        match op {
+            SymbolRef::OpDef(d) => graph.op_def(d).params.len(),
+            SymbolRef::Decl(d) => graph.decl(d).arity.max(0) as usize,
+            SymbolRef::Param(p) => graph.param(p).arity.max(0) as usize,
+            SymbolRef::Thm(_) | SymbolRef::Module(_) => 0,
+        }
+    }
+
+    /// `Assert.fail("The next state relation is not a boolean expression.\n" + next, next, c)`.
+    pub(crate) fn not_boolean_next(&mut self, pred: ExprId, _c: &Ctx) -> EvalError {
+        let graph = &self.tool().graph;
+        let reason = format!("The next state relation is not a boolean expression.\n{}", graph.expr_tlc_text(pred));
+        let loc = graph.loc(pred);
+        EvalError::detailed(reason, Some(loc))
+    }
+
+    /// `SymbolNodeValueLookupProvider.getLevelBound` (`:158-280`): the conservative level TLC
+    /// uses to split SPECIFICATION into initial predicate, next-state relation and temporal
+    /// formulas.
+    pub(crate) fn level_bound(&mut self, expr: ExprId, c: &Ctx) -> u8 {
+        let graph = self.tool().graph.clone();
+        match graph.expr(expr) {
+            ExprNode::OpAppl { op, args, bound, .. } => {
+                if let Some(code) = self.opcode(*op) {
+                    if code.is_temporal() {
+                        return 3;
+                    }
+                    if code.is_action() {
+                        return 2;
+                    }
+                    if code == Builtin::Enabled {
+                        return 1;
+                    }
+                }
+                let mut level = 0;
+                for b in bound.iter().flat_map(|b| b.lists.iter()) {
+                    level = level.max(self.level_bound(b.domain, c));
+                }
+                // A recursive function's own name is bound, so its body is not walked again.
+                let c = match (self.opcode(*op), bound.as_deref()) {
+                    (Some(Builtin::RecursiveFcnSpec), Some(b)) => {
+                        c.cons(SymbolRef::Param(b.unbounded[0]), Binding::Value(Value::Int(1)))
+                    }
+                    _ => c.clone(),
+                };
+                for a in args.iter() {
+                    if let ExprOrOpArg::Expr(e) = *a {
+                        level = level.max(self.level_bound(e, &c));
+                    }
+                }
+                if self.opcode(*op).is_some() {
+                    return level;
+                }
+                // A user-defined operator: a variable is level 1, a definition contributes
+                // its body's level, a thunk its expression's.
+                if matches!(op, SymbolRef::Decl(d) if self.tool().vars.slot_of(graph.decl(*d).name).is_some()) {
+                    return 1;
+                }
+                match self.lookup(*op, &c, StateRef::Empty, false) {
+                    Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
+                        let c1 = c.cons(*op, Binding::Value(Value::Int(1)));
+                        if let Some(body) = graph.op_def(d).body {
+                            level = level.max(self.level_bound(body, &c1));
+                        }
+                    }
+                    Resolved::Binding(Binding::Thunk(t)) => {
+                        let (e, tc) = (t.expr, t.ctx.clone());
+                        level = level.max(self.level_bound(e, &tc));
+                    }
+                    _ => {}
+                }
+                level
+            }
+            ExprNode::LetIn { defs, body, .. } => {
+                let mut level = 0;
+                let mut c1 = c.clone();
+                for &d in defs.iter() {
+                    if let Some(b) = graph.op_def(d).body {
+                        level = level.max(self.level_bound(b, &c1));
+                    }
+                    c1 = c1.cons(SymbolRef::OpDef(d), Binding::Value(Value::Int(1)));
+                }
+                level.max(self.level_bound(*body, &c1))
+            }
+            ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
+                let mut c1 = c.clone();
+                for sub in substs.iter() {
+                    let val = self.get_val(sub.expr, c, true);
+                    c1 = c1.cons(SymbolRef::Decl(sub.decl), val);
+                }
+                self.level_bound(*body, &c1)
+            }
+            ExprNode::Label { body, .. } => self.level_bound(*body, c),
+            _ => 0,
+        }
+    }
+}
+
+/// `opNode.getKind() == VariableDeclKind`.
+fn is_variable(tool: &crate::tool::Tool, d: tlars_sany::graph::DeclId) -> bool {
+    use tlars_sany::graph::DeclKind;
+    matches!(tool.graph.decl(d).kind, DeclKind::Variable | DeclKind::NewVariable)
 }
 
 /// What an operator argument of a Java module resolves to: `OpLambdaValue` for a definition,
@@ -848,7 +1152,7 @@ enum Bound {
 }
 
 /// `ContextEnumerator`.
-struct Contexts {
+pub(crate) struct Contexts {
     base: Ctx,
     vars: Vec<(Bound, ValueEnumeration)>,
     current: Vec<Value>,
@@ -856,7 +1160,7 @@ struct Contexts {
 }
 
 impl Contexts {
-    fn next(&mut self, ev: &mut Ev<'_>) -> EvalResult<Option<Ctx>> {
+    pub(crate) fn next(&mut self, ev: &mut Ev<'_>) -> EvalResult<Option<Ctx>> {
         if self.done {
             return Ok(None);
         }
@@ -904,7 +1208,7 @@ impl Contexts {
 
 /// The opcodes of `BuiltInOPs` this evaluator implements; the others are named.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Builtin {
+pub(crate) enum Builtin {
     ConjList,
     DisjList,
     Land,
@@ -945,7 +1249,36 @@ enum Builtin {
     FcnConstructor,
     RecursiveFcnSpec,
     Except,
+    Prime,
+    Unchanged,
+    Enabled,
+    /// `<A>_e`.
+    AngleAct,
+    /// `[A]_e`.
+    SquareAct,
+    Cdot,
+    /// `$Nop`, which SANY wraps a subexpression name in.
+    Nop,
+    Box,
+    TemporalExists,
+    TemporalForall,
     Unimplemented(&'static str),
+}
+
+impl Builtin {
+    /// `BuiltInOPs.isAction` (`BuiltInOPs.java:113-115`).
+    pub(crate) fn is_action(self) -> bool {
+        matches!(self, Builtin::Prime | Builtin::Unchanged | Builtin::AngleAct | Builtin::SquareAct | Builtin::Cdot)
+    }
+
+    /// `BuiltInOPs.isTemporal`: `$SF` through `<>`.
+    pub(crate) fn is_temporal(self) -> bool {
+        match self {
+            Builtin::Box | Builtin::TemporalExists | Builtin::TemporalForall => true,
+            Builtin::Unimplemented(name) => matches!(name, "$SF" | "$WF" | "~>" | "-+->" | "<>"),
+            _ => false,
+        }
+    }
 }
 
 /// Every name `BuiltInOPs` registers (`BuiltInOPs.java:17-84`).
@@ -1001,6 +1334,16 @@ impl Builtin {
             "$FcnConstructor" | "$NonRecursiveFcnSpec" => Builtin::FcnConstructor,
             "$RecursiveFcnSpec" => Builtin::RecursiveFcnSpec,
             "$Except" => Builtin::Except,
+            "'" => Builtin::Prime,
+            "UNCHANGED" => Builtin::Unchanged,
+            "ENABLED" => Builtin::Enabled,
+            "$AngleAct" => Builtin::AngleAct,
+            "$SquareAct" => Builtin::SquareAct,
+            "\\cdot" => Builtin::Cdot,
+            "$Nop" => Builtin::Nop,
+            "[]" => Builtin::Box,
+            "$TemporalExists" => Builtin::TemporalExists,
+            "$TemporalForall" => Builtin::TemporalForall,
             other => Builtin::Unimplemented(BUILT_IN_OPS.iter().copied().find(|n| *n == other)?),
         })
     }

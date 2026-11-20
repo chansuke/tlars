@@ -3,14 +3,22 @@
 //! split order. That choice decides the printed action label and, under VIEW/SYMMETRY, the
 //! printed state. The engine never re-derives labels itself.
 
-use super::{Ev, StateInfo};
-use crate::error::EvalResult;
+use super::{Ev, InitSink, NextSink, StateInfo};
+use crate::actions::ActionId;
+use crate::error::{EvalResult, Flow, Halt};
 use crate::fp64::Fp;
-use crate::state::State;
+use crate::state::{PartialState, State};
 
 impl<'t> Ev<'t> {
+    /// `getState(fp)` (`Tool.java:3719-3762`): the first initial state with this fingerprint.
+    /// Generation runs to the end; later matches do not replace the first.
     pub fn state_from_fp(&mut self, fp: Fp) -> EvalResult<Option<StateInfo>> {
-        todo!("init_states with a sink that stops at the first fingerprint match")
+        let mut sink = InitMatch { want: fp, found: None };
+        match self.init_states(&mut sink) {
+            Ok(()) | Err(Halt::Stop) => {}
+            Err(Halt::Eval(e)) => return Err(e),
+        }
+        Ok(sink.found.map(|state| StateInfo { state, action: None }))
     }
 
     /// `getState(fp, pred)` starts with `IdThread.setCurrentState(pred)` (`Tool.java:3786`),
@@ -19,11 +27,58 @@ impl<'t> Ev<'t> {
     /// `RandomEnumerableValues.reset()` rewinds (`reset_init_random`).
     pub fn successor_from_fp(&mut self, pred: &State, pred_fp: Fp, fp: Fp) -> EvalResult<Option<StateInfo>> {
         self.begin_expansion(pred_fp);
-        todo!("per action in order: next_states_of with a first-match sink")
+        let count = self.tool.actions.len();
+        for i in 0..count {
+            let id = self.tool.actions[i].id();
+            let mut sink = NextMatch { want: fp, found: None };
+            match self.next_states_of(pred, id, &mut sink) {
+                Ok(()) | Err(Halt::Stop) => {}
+                Err(Halt::Eval(e)) => return Err(e),
+            }
+            if let Some((state, action)) = sink.found {
+                return Ok(Some(StateInfo { state, action: Some(action) }));
+            }
+        }
+        Ok(None)
     }
 
     /// `RandomEnumerableValues.reset()`: rewind the init-generation stream before replay.
     pub fn reset_init_random(&mut self) {
-        todo!()
+        self.locals.effects.reset_random(self.tool.globals.seed);
+    }
+}
+
+/// `InitStateSelectorFunctor`: keeps the first match and lets generation finish.
+struct InitMatch {
+    want: Fp,
+    found: Option<State>,
+}
+
+impl InitSink for InitMatch {
+    fn add_init(&mut self, ev: &mut Ev<'_>, s: &PartialState) -> Flow {
+        let Some(state) = ev.complete(s) else { return Ok(()) };
+        if self.found.is_none() && ev.fingerprint(&state)? == self.want {
+            self.found = Some(state);
+        }
+        Ok(())
+    }
+}
+
+/// `getState(fp, s)`'s inner loop: the first successor of one action whose fingerprint
+/// matches, after which the remaining successors of that action are not generated.
+struct NextMatch {
+    want: Fp,
+    found: Option<(State, ActionId)>,
+}
+
+impl NextSink for NextMatch {
+    fn add_next(&mut self, ev: &mut Ev<'_>, _s0: &State, action: ActionId, s1: &PartialState) -> Flow {
+        let Some(state) = ev.complete(s1) else { return Ok(()) };
+        // TLC generates every successor of the action and then picks the first match, so
+        // the RandomElement draws of the later successors still happen.
+        if self.found.is_none() && ev.fingerprint(&state)? == self.want {
+            self.found = Some((state, action));
+        }
+        Ok(())
     }
 }

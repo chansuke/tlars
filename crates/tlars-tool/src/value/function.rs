@@ -791,6 +791,16 @@ impl FcnLambdaValue {
 
     /// The formals bound to `args`. `strict` is `apply`, which fails where `select` answers
     /// `None`: a domain miss, and a tuple argument whose length is not the formals'.
+    /// `Tool.getFcnContext` (`Tool.java:3989-4046`): the body's context for one argument.
+    /// A tuple argument of the wrong length is the one case `bind_args` answers `None` for,
+    /// which `getFcnContext` reports with its own wording.
+    pub(crate) fn fcn_context(self: &Arc<Self>, ev: &mut Ev<'_>, args: &Value) -> EvalResult<Ctx> {
+        match self.bind_args(ev, args, true)? {
+            Some(c1) => Ok(c1),
+            None => Err(self.no_match(ev, "the argument", args)?),
+        }
+    }
+
     fn bind_args(self: &Arc<Self>, ev: &mut Ev<'_>, args: &Value, strict: bool) -> EvalResult<Option<Ctx>> {
         let mut c1 = self.base_ctx();
         if self.arg_len() == 1 {

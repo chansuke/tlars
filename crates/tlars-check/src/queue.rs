@@ -32,27 +32,66 @@ struct QueueInner {
 
 impl StateQueue {
     pub(crate) fn new(workers: usize) -> Self {
-        todo!()
+        let inner = QueueInner { fifo: VecDeque::new(), workers, waiting: 0, suspend_requested: false, finished: false };
+        StateQueue { inner: Mutex::new(inner), avail: Condvar::new() }
     }
     pub(crate) fn enqueue(&self, s: Queued) {
-        todo!()
+        let mut inner = self.inner.lock().expect("queue");
+        inner.fifo.push_back(s);
+        self.avail.notify_all();
     }
     /// `sDequeue`: blocks; `None` once the queue is empty and every worker waits
     /// (`StateQueue.isAvail`), or after `finish_all`.
     pub(crate) fn dequeue(&self) -> Option<Queued> {
-        todo!()
+        let mut inner = self.inner.lock().expect("queue");
+        loop {
+            if inner.finished {
+                return None;
+            }
+            if !inner.suspend_requested {
+                if let Some(s) = inner.fifo.pop_front() {
+                    return Some(s);
+                }
+            }
+            // Every worker idle with an empty queue means the search is over.
+            inner.waiting += 1;
+            if !inner.suspend_requested && inner.waiting == inner.workers {
+                inner.finished = true;
+                inner.waiting -= 1;
+                self.avail.notify_all();
+                return None;
+            }
+            inner = self.avail.wait(inner).expect("queue");
+            inner.waiting -= 1;
+        }
     }
     /// `suspendAll`: park workers for periodic work (liveness, checkpoint, FPSet growth).
     pub(crate) fn suspend_all(&self) -> bool {
-        todo!()
+        let mut inner = self.inner.lock().expect("queue");
+        if inner.finished {
+            return false;
+        }
+        inner.suspend_requested = true;
+        self.avail.notify_all();
+        while inner.waiting < inner.workers && !inner.finished {
+            inner = self.avail.wait(inner).expect("queue");
+        }
+        !inner.finished
     }
     pub(crate) fn resume_all(&self) {
-        todo!()
+        let mut inner = self.inner.lock().expect("queue");
+        inner.suspend_requested = false;
+        self.avail.notify_all();
     }
     pub(crate) fn finish_all(&self) {
-        todo!()
+        let mut inner = self.inner.lock().expect("queue");
+        inner.finished = true;
+        self.avail.notify_all();
     }
     pub(crate) fn len(&self) -> u64 {
-        todo!()
+        self.inner.lock().expect("queue").fifo.len() as u64
+    }
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }

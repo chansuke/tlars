@@ -29,7 +29,7 @@ pub(crate) use sets::{lazy_cap, lazy_cup, lazy_diff, set_of_fcns, set_of_rcds, s
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
 use crate::eval::{EvalControl, Ev};
-use crate::state::{Snapshot, StateRef};
+use crate::state::StateRef;
 use std::sync::{Arc, OnceLock};
 use tlars_sany::Atom;
 use tlars_sany::graph::{ExprId, ParamId, SymbolRef};
@@ -244,29 +244,44 @@ pub struct SetBinValue {
 }
 
 /// A captured evaluation environment: TLC's `(tool, con, state, pstate, control)` minus the
-/// tool, which is passed explicitly as `Ev` when the closure is forced.
+/// tool, which is passed explicitly as `Ev` when the closure is forced. Both states are
+/// copied, as the `FcnLambdaValue` / `SetPredValue` constructors do.
 pub struct Closure {
     pub(crate) ctx: Ctx,
-    pub(crate) s0: Option<Arc<Snapshot>>,
-    pub(crate) s1: Option<Arc<Snapshot>>,
+    pub(crate) s0: Option<Arc<crate::state::PartialState>>,
+    pub(crate) s1: Option<Arc<crate::state::PartialState>>,
     pub(crate) control: EvalControl,
 }
 
 impl Closure {
-    /// `new FcnLambdaValue(..., c, s0, s1, control)`, whose constructor copies both states.
-    /// Copying them is M3, so a closure built while a state is bound is refused here instead
-    /// of forcing with the wrong variables later.
+    /// `new FcnLambdaValue(..., c, s0, s1, control)`.
     pub(crate) fn capture(ctx: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Closure> {
-        if !matches!((s0, s1), (StateRef::Empty, StateRef::Empty)) {
-            return Err(EvalError::unimplemented("a function or set closure over a state (M3)".into()));
-        }
-        Ok(Closure { ctx: ctx.clone(), s0: None, s1: None, control })
+        Ok(Closure { ctx: ctx.clone(), s0: capture_state(s0), s1: capture_state(s1), control })
     }
 
     /// The captured `(state, pstate)` as `eval` takes them.
     pub(crate) fn states(&self) -> (StateRef<'_>, StateRef<'_>) {
-        debug_assert!(self.s0.is_none() && self.s1.is_none(), "capture refuses a closure over a state");
-        (StateRef::Empty, StateRef::Empty)
+        let s0 = match &self.s0 {
+            Some(p) => StateRef::Partial(p),
+            None => StateRef::Empty,
+        };
+        let s1 = match &self.s1 {
+            Some(p) => StateRef::Partial(p),
+            None => StateRef::Empty,
+        };
+        (s0, s1)
+    }
+}
+
+/// `s.copy()`; `None` where TLC's state holds no variable at all, which is how the closure
+/// then evaluates (`TLCState.Empty`). `TLCStateFun` has no `copy`, and ENABLED's thunks are
+/// not cachable, so no closure is built over one.
+fn capture_state(s: StateRef<'_>) -> Option<Arc<crate::state::PartialState>> {
+    match s {
+        StateRef::Empty | StateRef::Null => None,
+        StateRef::Full(s) => Some(Arc::new(crate::state::PartialState::from_values(s.values()))),
+        StateRef::Partial(p) => Some(Arc::new(p.copy())),
+        StateRef::Fun(_) => None,
     }
 }
 
