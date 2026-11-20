@@ -358,6 +358,7 @@ tlc/checker/next/fcn_constant_true_continues
 tlc/checker/next/fcn_lambda_body_generates
 tlc/checker/next/fcn_nonbool
 tlc/checker/next/fcn_nonfunction
+tlc/checker/next/fcn_outside_lambda_domain
 tlc/checker/next/forall_assigns
 tlc/checker/next/forall_chains_instances
 tlc/checker/next/forall_empty_alone

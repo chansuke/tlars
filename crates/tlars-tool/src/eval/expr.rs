@@ -980,6 +980,23 @@ impl<'t> Ev<'t> {
         control: EvalControl,
     ) -> EvalResult<Ctx> {
         let arg = self.eval(args[1].expect_expr(), c, s0, s1, control)?;
+        // `getFcnContext`'s own domain check (`Tool.java:3999-4004`), whose wording differs
+        // from `FcnLambdaValue.apply`'s: the argument is followed straight by the sentence,
+        // and the function expression's location is appended.
+        if fcn.arg_len() == 1 {
+            let domain = fcn.params[0].2.clone();
+            if !domain.member(self, &arg)? {
+                let f = Value::FcnLambda(fcn.clone()).ppr(self)?;
+                let a = arg.ppr(self)?;
+                let at = args[0].expect_expr();
+                let graph = self.tool().graph.clone();
+                let reason = format!(
+                    "In applying the function\n{f},\nthe first argument is:\n{a}which is not in its domain.\n{}",
+                    graph.expr_tlc_text(at)
+                );
+                return Err(EvalError::detailed(reason, Some(graph.loc(at))));
+            }
+        }
         fcn.fcn_context(self, &arg)
     }
 
