@@ -1421,37 +1421,82 @@ fn config_symmetry(
         }
         generators.push(crate::symmetry::Generator { pairs });
     }
-    // `argNodes.length >= values.size()`: as many permuted sets as permutations means every
-    // symmetry set holds at most one element, and TLC then warns and uses no symmetry at
-    // all. Naming the offending sets needs `SyntaxTreeNode.getHumanReadableImage`, which the
-    // frozen graph does not carry.
-    let arg_count = match graph.expr(body) {
-        ExprNode::OpAppl { args, .. } => args.len(),
+    let args: Vec<ExprOrOpArg> = match graph.expr(body) {
+        ExprNode::OpAppl { args, .. } => args.to_vec(),
         // `(OpApplNode) opDef.getBody()` on another node kind.
         _ => return Err(unimplemented("a SYMMETRY whose definition body is not an operator application")),
     };
-    if arg_count >= values.len() {
-        return Err(unimplemented("the SYMMETRY too-small-set warning (2300), which needs SemanticNode.getHumanReadableImage (M3)"));
+    // `argNodes.length >= values.size()`: as many permuted sets as permutations means every
+    // symmetry set holds at most one element, and TLC then warns and uses no symmetry at all.
+    let mut offenders = SymmetrySetList::default();
+    if args.len() >= values.len() {
+        for arg in &args {
+            offenders.add(config, &graph, arg)?;
+        }
+        offenders.warn(out)?;
+        return Ok(Box::new([]));
     }
     let subgroup = crate::symmetry::permutation_group(&mut ev, &generators, &tool.model_values).map_err(uncaught)?;
-    // The second offender check only looks at `Permutations(S)` where `S` is a name the cfg
-    // bound to a set, so it is also reachable only with an image to print.
+    // A set none of whose elements the subgroup permutes is an offender too, and this time
+    // TLC keeps the subgroup it computed and only warns.
     let members: Vec<Atom> = subgroup.iter().flat_map(|p| p.images()).map(|mv| mv.name).collect();
-    for arg in permutation_set_args(tool, body) {
-        let elems = arg.snapshot().to_vec();
+    for (arg, set) in permutation_set_args(tool, body) {
+        let elems = set.snapshot().to_vec();
         let found = elems.iter().any(|e| matches!(e, Value::Model(mv) if members.contains(&mv.name)));
         if !found {
-            return Err(unimplemented("the SYMMETRY too-small-set warning (2300), which needs SemanticNode.getHumanReadableImage (M3)"));
+            offenders.add(config, &graph, &arg)?;
         }
     }
+    offenders.warn(out)?;
     Ok(subgroup.into())
+}
+
+/// `cardinalityOneSetList` and `offenderCount` of `getSymmetryPerms` (`Tool.java:3861-3917`):
+/// the names warning 2300 lists, and how many there are, which also picks its plurals.
+#[derive(Default)]
+struct SymmetrySetList {
+    names: Vec<String>,
+}
+
+impl SymmetrySetList {
+    /// `addToSubTwoSizedSymmetrySetList` (`Tool.java:3923-3942`): the argument's token image,
+    /// unwrapped from `Permutations(..)`, then mapped back through the cfg's overrides so a
+    /// `CONSTANT S <- T` prints the name the spec uses.
+    fn add(&mut self, config: &ModelConfig, graph: &SemanticGraph, arg: &ExprOrOpArg) -> Result<(), SpecError> {
+        let ExprOrOpArg::Expr(node) = arg else { return Ok(()) };
+        let Some(image) = graph.human_readable_image(*node) else {
+            return Err(unimplemented("warning 2300 for a symmetry set whose token image was not kept (M3)"));
+        };
+        const PERMUTATIONS: &str = "Permutations";
+        // `image.substring(PERMUTATIONS.length() + 1, image.length() - 1)`, which drops the
+        // opening parenthesis and the closing one.
+        let alias = match image.strip_prefix(PERMUTATIONS) {
+            Some(rest) => &rest[1..rest.len() - 1],
+            None => image,
+        };
+        let shown = config.overrides_reverse.get(&alias.to_string(), java_hash(alias)).cloned().unwrap_or_else(|| alias.to_string());
+        self.names.push(shown);
+        Ok(())
+    }
+
+    /// The `offenderCount > 0` warning, whose four parameters are the plurals TLC picks from
+    /// the count (`Tool.java:3909-3916`).
+    fn warn(&self, out: &dyn Report) -> Result<(), SpecError> {
+        if self.names.is_empty() {
+            return Ok(());
+        }
+        let many = self.names.len() > 1;
+        let (plurality, anti_plurality, to_have) = if many { ("s", "", "have") } else { ("", "s", "has") };
+        let list = self.names.join(", and ");
+        out.warning(Ec::TLC_SYMMETRY_SET_TOO_SMALL, &[plurality, &list, to_have, anti_plurality]).map_err(warning_as_error)
+    }
 }
 
 /// `getSetEnumValueFromArgumentNode` over every argument of the symmetry definition's body
 /// (`Tool.java:3944-3971`): the set a `Permutations(S)` argument permutes, but only where
 /// `S` is a name whose tool object is a `SetEnumValue`, which is what a cfg `S = {..}`
 /// leaves behind. An inline `Permutations({A, B})` yields nothing.
-fn permutation_set_args(tool: &Tool, body: ExprId) -> Vec<std::sync::Arc<crate::value::SetEnumValue>> {
+fn permutation_set_args(tool: &Tool, body: ExprId) -> Vec<(ExprOrOpArg, std::sync::Arc<crate::value::SetEnumValue>)> {
     let graph = &tool.graph;
     let ExprNode::OpAppl { args, .. } = graph.expr(body) else { return Vec::new() };
     let mut sets = Vec::new();
@@ -1476,7 +1521,7 @@ fn permutation_set_args(tool: &Tool, body: ExprId) -> Vec<std::sync::Arc<crate::
             _ => None,
         };
         if let Some(Value::SetEnum(set)) = bound {
-            sets.push(set);
+            sets.push((*arg, set));
         }
     }
     sets

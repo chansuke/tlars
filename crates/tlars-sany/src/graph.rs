@@ -9,6 +9,7 @@
 //! - TLC's mutable "tool objects" are *not* here; `tlars-tool` keeps them in side tables.
 
 use crate::{Atom, Interner};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 macro_rules! id {
@@ -307,6 +308,13 @@ pub struct SemanticGraph {
     /// Level checker output, indexed by `ExprId` / `OpDefId`.
     expr_levels: Vec<Level>,
     op_levels: Vec<Level>,
+    /// `SyntaxTreeNode.getHumanReadableImage()` for the arguments of each definition body
+    /// that is an operator application: the subtree's token images concatenated, with no
+    /// whitespace and no comments. Warning 2300 is the only reader, and `Tool.getSymmetryPerms`
+    /// only ever asks about these nodes, so the image is kept for them alone — one per
+    /// argument rather than one per expression, which would cost the source size times the
+    /// nesting depth.
+    body_arg_images: BTreeMap<ExprId, Arc<str>>,
     root: ModuleId,
     interner: Arc<Interner>,
 }
@@ -322,12 +330,13 @@ pub(crate) struct GraphParts {
     pub(crate) exprs: Vec<ExprNode>,
     pub(crate) expr_levels: Vec<Level>,
     pub(crate) op_levels: Vec<Level>,
+    pub(crate) body_arg_images: BTreeMap<ExprId, Arc<str>>,
 }
 
 impl SemanticGraph {
     pub(crate) fn from_parts(parts: GraphParts, root: ModuleId, interner: Arc<Interner>) -> SemanticGraph {
-        let GraphParts { modules, op_defs, decls, params, thms, exprs, expr_levels, op_levels } = parts;
-        SemanticGraph { modules, op_defs, decls, params, thms, exprs, expr_levels, op_levels, root, interner }
+        let GraphParts { modules, op_defs, decls, params, thms, exprs, expr_levels, op_levels, body_arg_images } = parts;
+        SemanticGraph { modules, op_defs, decls, params, thms, exprs, expr_levels, op_levels, body_arg_images, root, interner }
     }
 
     pub fn root(&self) -> ModuleId {
@@ -354,6 +363,11 @@ impl SemanticGraph {
     }
     pub fn expr_count(&self) -> usize {
         self.exprs.len()
+    }
+    /// `((SyntaxTreeNode) node.getTreeNode()).getHumanReadableImage()`, kept only for the
+    /// arguments of a definition body's application (see `body_arg_images`).
+    pub fn human_readable_image(&self, id: ExprId) -> Option<&str> {
+        self.body_arg_images.get(&id).map(|s| &**s)
     }
     pub fn op_def(&self, id: OpDefId) -> &OpDefNode {
         &self.op_defs[id.index()]

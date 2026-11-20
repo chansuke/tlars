@@ -310,6 +310,26 @@ impl Freezer {
         Ok(id)
     }
 
+    /// `Tool.getSymmetryPerms` names an offending symmetry set with
+    /// `((SyntaxTreeNode) node.getTreeNode()).getHumanReadableImage()` on the arguments of
+    /// the SYMMETRY definition's body (`Tool.java:3860, 3923-3925`). The syntax tree goes
+    /// away with the parse, so the image for just those nodes is copied out now.
+    fn record_body_arg_images(&mut self, body: &J<SemanticNodeObj>) -> JResult<()> {
+        if class(body) != "OpApplNode" {
+            return Ok(());
+        }
+        for arg in nodes(body.getArgs()?).iter() {
+            if arg.is_null() {
+                continue;
+            }
+            let id = self.expr_or_op_arg(arg)?;
+            let ExprOrOpArg::Expr(id) = id else { continue };
+            let image = arg.getTreeNode__SemanticNode()?.getHumanReadableImage()?;
+            self.parts.body_arg_images.insert(id, Arc::from(image.java_string().as_str()));
+        }
+        Ok(())
+    }
+
     /// Copies bodies until no definition, theorem or module is left half-done.
     fn drain(&mut self) -> JResult<()> {
         loop {
@@ -320,6 +340,7 @@ impl Freezer {
                 if !body.is_null() {
                     let b = self.expr(&body)?;
                     self.parts.op_defs[id.index()].body = Some(b);
+                    self.record_body_arg_images(&body)?;
                 }
             } else if let Some((t, id)) = self.pending_thms.pop() {
                 let body = t.getBody_0_via_ThmOrAssumpDefNode()?;

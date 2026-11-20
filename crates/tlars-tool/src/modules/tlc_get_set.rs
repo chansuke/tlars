@@ -303,7 +303,7 @@ fn unknown_action_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
 /// `TLCGet("spec")` (`TLCGetSet.java:320-377`). PROPERTY fills `impliedinits`,
 /// `impliedactions` and `impliedtemporals`, which stay empty until M4.
 fn spec_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
-    let mut set = |elems: Vec<Value>| Value::set_enum_of(elems, false);
+    let set = |elems: Vec<Value>| Value::set_enum_of(elems, false);
     let inits = ev.tool().init_actions().iter().map(|a| action_value(ev, a)).collect::<EvalResult<Vec<_>>>();
     let inits = set(inits?);
     let actions = ev.tool().actions().iter().map(|a| action_value(ev, a)).collect::<EvalResult<Vec<_>>>();
