@@ -107,6 +107,60 @@ impl Value {
                 Value::FcnRcd(f).tlc_equals(ev, other)
             }
             (Value::User(_), _) => Ok(self.user_compare(ev, other)? == Ordering::Equal),
+            // `SUBSET S = SUBSET T` is decided by `S = T` without enumerating either
+            // (`SubsetValue.java:75-86`).
+            (Value::Subset(a), Value::Subset(b)) => a.base.tlc_equals(ev, &b.base),
+            (Value::KSubset(_), _) | (_, Value::KSubset(_)) => Err(EvalError::unimplemented("equality of a k-subset (M5)".into())),
+            // `[S -> T]`: one empty domain makes both the unit set, one empty range makes
+            // both empty (`SetOfFcnsValue.java:80-95`).
+            (Value::SetOfFcns(a), Value::SetOfFcns(b)) => {
+                let (unit1, unit2) = (a.domain.is_empty(ev)?, b.domain.is_empty(ev)?);
+                if unit1 || unit2 {
+                    return Ok(unit1 == unit2);
+                }
+                let (empty1, empty2) = (a.range.is_empty(ev)?, b.range.is_empty(ev)?);
+                if empty1 || empty2 {
+                    return Ok(empty1 == empty2);
+                }
+                Ok(a.domain.tlc_equals(ev, &b.domain)? && a.range.tlc_equals(ev, &b.range)?)
+            }
+            (Value::SetOfRcds(a), Value::SetOfRcds(b)) => {
+                if self.is_empty(ev)? {
+                    return other.is_empty(ev);
+                }
+                if other.is_empty(ev)? {
+                    return Ok(false);
+                }
+                if a.names.len() != b.names.len() {
+                    return Ok(false);
+                }
+                // The name is compared before the field's set, so a differing name stops
+                // the comparison of the sets (`SetOfRcdsValue.java:75-81`).
+                for i in 0..a.names.len() {
+                    if a.names[i] != b.names[i] || !a.sets[i].tlc_equals(ev, &b.sets[i])? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            (Value::SetOfTuples(a), Value::SetOfTuples(b)) => {
+                if self.is_empty(ev)? {
+                    return other.is_empty(ev);
+                }
+                if other.is_empty(ev)? {
+                    return Ok(false);
+                }
+                if a.sets.len() != b.sets.len() {
+                    return Ok(false);
+                }
+                values_equal(ev, &a.sets, &b.sets)
+            }
+            // Every other lazy set is enumerated first, so the comparison and its error
+            // text are SetEnumValue's.
+            _ if self.is_enumerable() => {
+                let set = self.convert_and_cache(ev)?;
+                Value::SetEnum(set).tlc_equals(ev, other)
+            }
             _ => Err(EvalError::unimplemented(format!("equality of {} (M2 unit 5)", self.kind_string()))),
         }
     }
@@ -245,6 +299,13 @@ impl Value {
                 Value::FcnRcd(f).tlc_compare(ev, other)
             }
             (Value::User(_), _) => self.user_compare(ev, other),
+            // `SUBSET S` against `SUBSET T` compares the base sets (`SubsetValue.java:55-67`).
+            (Value::Subset(a), Value::Subset(b)) => a.base.tlc_compare(ev, &b.base),
+            (Value::KSubset(_), _) | (_, Value::KSubset(_)) => Err(EvalError::unimplemented("comparison of a k-subset (M5)".into())),
+            _ if self.is_enumerable() => {
+                let set = self.convert_and_cache(ev)?;
+                Value::SetEnum(set).tlc_compare(ev, other)
+            }
             _ => Err(EvalError::unimplemented(format!("comparison of {} (M2 unit 5)", self.kind_string()))),
         }
     }
@@ -262,6 +323,12 @@ impl Value {
             Value::Bool(_) => not_a_set(ev, "boolean"),
             Value::Int(_) => not_a_set(ev, "integer"),
             Value::Str(_) => not_a_set(ev, "string"),
+            Value::Model(_) => not_a_set(ev, "model value"),
+            // `UndefValue.member` leaves out the noun (`UndefValue.java:45-50`).
+            Value::Undef => {
+                let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
+                Err(EvalError::detailed(format!("Attempted to check if the value:\n{e}\nis an element {s}"), None))
+            }
             Value::Interval(i) => match elem {
                 Value::Int(x) => Ok(*x >= i.lo && *x <= i.hi),
                 _ if i.lo <= i.hi => {
@@ -317,7 +384,140 @@ impl Value {
                 let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
                 Err(EvalError::detailed(format!("Attempted to check if the value:\n{e}\nis an element of the function {s}"), None))
             }
-            _ => Err(EvalError::unimplemented(format!("membership in {} (M2 unit 5)", self.kind_string()))),
+            // The lazy classes answer from their operands, never by enumerating themselves.
+            Value::SetCup(s) => Ok(s.left.member(ev, elem)? || s.right.member(ev, elem)?),
+            Value::SetCap(s) => Ok(s.left.member(ev, elem)? && s.right.member(ev, elem)?),
+            Value::SetDiff(s) => Ok(s.left.member(ev, elem)? && !s.right.member(ev, elem)?),
+            Value::Subset(s) => {
+                if !elem.is_enumerable() {
+                    let (e, p) = (elem.ppr(ev)?, self.ppr(ev)?);
+                    return Err(EvalError::detailed(
+                        format!("Attempted to check if the non-enumerable value\n{e}\nis element of\n{p}"),
+                        None,
+                    ));
+                }
+                let mut elems = elem.elements(ev, EnumOrder::Native)?.expect("an enumerable value enumerates");
+                while let Some(e) = elems.next(ev)? {
+                    if !s.base.member(ev, &e)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            Value::KSubset(_) => Err(EvalError::unimplemented("membership in a k-subset (M5)".into())),
+            Value::Union(u) => {
+                if !u.set.is_enumerable() {
+                    let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
+                    return Err(EvalError::detailed(
+                        format!("Attempted to check if:\n {e}\nis an element of the non-enumerable set:\n {s}"),
+                        None,
+                    ));
+                }
+                let mut elems = u.set.elements(ev, EnumOrder::Native)?.expect("an enumerable value enumerates");
+                while let Some(inner) = elems.next(ev)? {
+                    if inner.member(ev, elem)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            Value::SetPred(p) => {
+                if let Some(set) = p.converted.get() {
+                    return Value::SetEnum(set.clone()).member(ev, elem);
+                }
+                match set_pred_member(ev, p, elem) {
+                    // `catch (EvalException e)` turns the predicate's own failure into a
+                    // message about the membership test (`SetPredValue.java:141-145`).
+                    Err(e) if matches!(e.kind, crate::error::EvalErrorKind::Eval) => {
+                        let (x, s) = (elem.ppr(ev)?, p.inner.ppr(ev)?);
+                        let pred = ev.tool().graph().expr_tlc_text(p.pred);
+                        Err(EvalError::detailed(
+                            format!("Cannot decide if element:\n{x}\n is element of:\n{s}\nand satisfies the predicate {pred}"),
+                            None,
+                        ))
+                    }
+                    other => other,
+                }
+            }
+            // `f \in [D -> R]`: the domains must be equal and every value in the range
+            // (`SetOfFcnsValue.java:113-143`).
+            Value::SetOfFcns(s) => {
+                let Some(fcn) = elem.to_fcn_rcd(ev)? else {
+                    let (e, p) = (elem.to_tlc_string(ev)?, self.ppr(ev)?);
+                    return Err(EvalError::detailed(
+                        format!("Attempted to check if \n{e}\nwhich is not a TLC function value, is in the set of functions:\n{p}"),
+                        None,
+                    ));
+                };
+                let same_domain = match fcn.interval() {
+                    Some(iv) => Value::Interval(iv).tlc_equals(ev, &s.domain)?,
+                    None => {
+                        let (domain, _) = fcn.normalize(ev)?;
+                        let fdom = Value::set_enum_normalized(domain.expect("an explicit domain").to_vec());
+                        s.domain.tlc_equals(ev, &fdom)?
+                    }
+                };
+                if !same_domain {
+                    return Ok(false);
+                }
+                for v in fcn.values.to_vec() {
+                    if !s.range.member(ev, &v)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            Value::SetOfRcds(s) => {
+                let Some(rcd) = elem.to_rcd(ev)? else {
+                    let (e, p) = (elem.to_tlc_string(ev)?, self.ppr(ev)?);
+                    return Err(EvalError::detailed(format!("Attempted to check if non-record\n{e}\nis in the set of records:\n{p}"), None));
+                };
+                let (names, values) = record_normalized(ev, &rcd)?;
+                let (names, values) = (names.to_vec(), values.to_vec());
+                if s.names.len() != names.len() {
+                    return Ok(false);
+                }
+                for i in 0..s.names.len() {
+                    if s.names[i] != names[i] || !s.sets[i].member(ev, &values[i])? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            Value::SetOfTuples(s) => {
+                let Some(tuple) = elem.to_tuple(ev)? else {
+                    // A function whose domain is not all integers cannot be a tuple, and TLC
+                    // reports it as a non-tuple (`SetOfTuplesValue.java:128-145`).
+                    let Some(fcn) = elem.to_fcn_rcd(ev)? else {
+                        let (e, p) = (elem.to_tlc_string(ev)?, self.ppr(ev)?);
+                        return Err(EvalError::detailed(
+                            format!("Attempted to check if non-tuple\n{e}\nis in the set of tuples:\n{p}"),
+                            None,
+                        ));
+                    };
+                    if fcn.interval().is_some() {
+                        return Ok(false);
+                    }
+                    let (domain, _) = fcn.snapshot();
+                    if !domain.expect("an explicit domain").iter().all(|d| matches!(d, Value::Int(_))) {
+                        let (e, p) = (elem.to_tlc_string(ev)?, self.ppr(ev)?);
+                        return Err(EvalError::detailed(
+                            format!("Attempted to check if non-tuple\n{e}\nis in the set of tuples:\n{p}"),
+                            None,
+                        ));
+                    }
+                    return Ok(false);
+                };
+                if tuple.elems.len() != s.sets.len() {
+                    return Ok(false);
+                }
+                for (set, e) in s.sets.iter().zip(tuple.elems.iter()) {
+                    if !set.member(ev, e)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
         }
     }
 
@@ -468,7 +668,100 @@ impl Value {
                 Some(r) => Value::FcnRcd(r.clone()).size(ev),
                 None => f.params_size(ev),
             },
-            _ => Err(EvalError::unimplemented(format!("the cardinality of {} (M2 unit 5)", self.kind_string()))),
+            // `2^|S|`, refused above 31 elements because the result must fit an int
+            // (`SubsetValue.java:184-191`).
+            Value::Subset(s) => {
+                let sz = s.base.size(ev)?;
+                if sz >= 31 {
+                    return Err(self.overflow_code(ev)?);
+                }
+                Ok(1 << sz)
+            }
+            Value::KSubset(_) => Err(EvalError::unimplemented("the cardinality of a k-subset (M5)".into())),
+            // `|R|^|D|`, with the unit and empty cases first (`SetOfFcnsValue.java:242-263`).
+            Value::SetOfFcns(s) => {
+                if s.domain.is_empty(ev)? {
+                    return Ok(1);
+                }
+                if s.range.is_empty(ev)? {
+                    return Ok(0);
+                }
+                let rsz = s.range.size(ev)?;
+                if rsz == 1 {
+                    return Ok(1);
+                }
+                let dsz = s.domain.size(ev)?;
+                let mut sz: i64 = 1;
+                for _ in 0..dsz {
+                    sz *= i64::from(rsz);
+                    if sz < i64::from(i32::MIN) || sz > i64::from(i32::MAX) {
+                        let shown = self.ppr(ev)?;
+                        return Err(EvalError::detailed(format!("Overflow when computing the number of elements in:\n{shown}"), None));
+                    }
+                }
+                Ok(sz as i32)
+            }
+            Value::SetOfRcds(s) => {
+                if self.is_empty(ev)? {
+                    return Ok(0);
+                }
+                self.product_size(ev, &s.sets, None)
+            }
+            Value::SetOfTuples(s) => {
+                if self.is_empty(ev)? {
+                    return Ok(0);
+                }
+                let sets = s.sets.clone();
+                self.product_size(ev, &sets, Some("Overflow when computing the number of elements in "))
+            }
+            // The rest report the cardinality of their enumerated form.
+            Value::SetCup(_) | Value::SetCap(_) | Value::SetDiff(_) | Value::Union(_) | Value::SetPred(_) => {
+                let set = self.convert_and_cache(ev)?;
+                Value::SetEnum(set).size(ev)
+            }
+        }
+    }
+
+    /// `Assert.fail(EC.TLC_MODULE_OVERFLOW, "the number of elements in:\n" + ppr)`.
+    fn overflow_code(&self, ev: &mut Ev<'_>) -> EvalResult<EvalError> {
+        let shown = self.ppr(ev)?;
+        let text = ev.out().text(Ec::TLC_MODULE_OVERFLOW, &[&format!("the number of elements in:\n{shown}")]);
+        Ok(EvalError::runtime(Ec::TLC_MODULE_OVERFLOW, text))
+    }
+
+    /// The product of the constituents' cardinalities. A set of records reports the overflow
+    /// through 2178, a product of sets through its own text (`SetOfTuplesValue.java:231-244`).
+    fn product_size(&self, ev: &mut Ev<'_>, sets: &[Value], plain: Option<&str>) -> EvalResult<i32> {
+        let mut sz: i64 = 1;
+        for set in sets {
+            sz *= i64::from(set.size(ev)?);
+            if sz < i64::from(i32::MIN) || sz > i64::from(i32::MAX) {
+                return match plain {
+                    Some(prefix) => {
+                        let shown = self.ppr(ev)?;
+                        Err(EvalError::detailed(format!("{prefix}{shown}"), None))
+                    }
+                    None => Err(self.overflow_code(ev)?),
+                };
+            }
+        }
+        Ok(sz as i32)
+    }
+}
+
+/// `SetPredValue.member` without its `EvalException` handler: the element must be in the
+/// inner set and satisfy the predicate (`SetPredValue.java:108-146`).
+fn set_pred_member(ev: &mut Ev<'_>, p: &Arc<super::SetPredValue>, elem: &Value) -> EvalResult<bool> {
+    if !p.inner.member(ev, elem)? {
+        return Ok(false);
+    }
+    let c1 = p.bind(ev, elem)?;
+    let (s0, s1) = p.env.states();
+    match ev.eval(p.pred, &c1, s0, s1, p.env.control)? {
+        Value::Bool(b) => Ok(b),
+        _ => {
+            let pred = ev.tool().graph().expr_tlc_text(p.pred);
+            Err(EvalError::detailed(format!("The evaluation of predicate {pred} yielded non-Boolean value."), None))
         }
     }
 }

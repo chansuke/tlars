@@ -382,6 +382,67 @@ impl<'t> Ev<'t> {
                 );
                 Err(not_boolean(self, reason, expr))
             }
+            // `{x \in S : P}`: filtered eagerly over a Reducible S, kept as a SetPredValue
+            // otherwise (`Tool.java:2466-2512`).
+            Builtin::SubsetOf => {
+                let bound = bound.expect("a set filter has a bound");
+                let list = &bound.lists[0];
+                let in_val = self.eval(list.domain, c, s0, s1, control)?;
+                let pred = arg(0);
+                if !in_val.is_reducible() {
+                    return Ok(Value::SetPred(Arc::new(crate::value::SetPredValue {
+                        vars: list.vars.clone(),
+                        tuple: list.tuple,
+                        inner: in_val,
+                        pred,
+                        env: Closure::capture(c, s0, s1, control)?,
+                        converted: std::sync::OnceLock::new(),
+                    })));
+                }
+                let is_norm = in_val.is_normalized();
+                let mut elems = in_val.elements(self, EnumOrder::Native)?.expect("a Reducible value enumerates");
+                let mut vals = crate::value::ValueVec::new(self);
+                while let Some(elem) = elems.next(self)? {
+                    let mut c1 = c.clone();
+                    if list.tuple {
+                        // TLC casts the element to a tuple and reads its components without
+                        // checking the length (`Tool.java:2475-2478`).
+                        let Value::Tuple(t) = &elem else { return Err(EvalError::class_cast(elem.java_class(), "TupleValue")) };
+                        for (i, &id) in list.vars.iter().enumerate() {
+                            let Some(v) = t.elems.get(i) else { return Err(EvalError::index_out_of_bounds(i, t.elems.len())) };
+                            c1 = c1.cons(SymbolRef::Param(id), Binding::Value(v.clone()));
+                        }
+                    } else {
+                        c1 = c1.cons(SymbolRef::Param(list.vars[0]), Binding::Value(elem.clone()));
+                    }
+                    let bval = self.eval(pred, &c1, s0, s1, control)?;
+                    let Value::Bool(b) = bval else {
+                        let reason = format!(
+                            "Attempted to evaluate an expression of form {{x \\in S : P(x)}} when P was {}.\n{}",
+                            bval.kind_string(),
+                            text(self, pred)
+                        );
+                        return Err(not_boolean(self, reason, pred));
+                    };
+                    if b {
+                        vals.push(elem)?;
+                    }
+                }
+                Ok(Value::set_enum_of(vals.into_vec(), is_norm))
+            }
+            // `{e : x \in S}`: always eager, and the result keeps the order the body
+            // produced (`Tool.java:2436-2449`).
+            Builtin::SetOfAll => {
+                let bound = bound.expect("a set map has a bound");
+                let mut contexts = self.contexts(bound, c, s0, s1, control)?;
+                let body = arg(0);
+                let mut vals = crate::value::ValueVec::new(self);
+                while let Some(c1) = contexts.next(self)? {
+                    let v = self.eval(body, &c1, s0, s1, control)?;
+                    vals.push(v)?;
+                }
+                Ok(Value::set_enum(vals.into_vec()))
+            }
             Builtin::SetEnumerate => {
                 let mut elems = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
@@ -656,7 +717,7 @@ impl Contexts {
                 self.done = true;
                 break;
             }
-            self.vars[i].1.reset();
+            self.vars[i].1.reset(ev)?;
             self.current[i] = self.vars[i].1.next(ev)?.expect("a reset enumeration of a non-empty set has an element");
         }
         if self.vars.is_empty() {
@@ -685,6 +746,8 @@ enum Builtin {
     BoundedForall,
     BoundedExists,
     BoundedChoose,
+    SubsetOf,
+    SetOfAll,
     UnboundedChoose,
     UnboundedExists,
     UnboundedForall,
@@ -731,6 +794,8 @@ impl Builtin {
             "$BoundedForall" => Builtin::BoundedForall,
             "$BoundedExists" => Builtin::BoundedExists,
             "$BoundedChoose" => Builtin::BoundedChoose,
+            "$SubsetOf" => Builtin::SubsetOf,
+            "$SetOfAll" => Builtin::SetOfAll,
             "$UnboundedChoose" => Builtin::UnboundedChoose,
             "$UnboundedExists" => Builtin::UnboundedExists,
             "$UnboundedForall" => Builtin::UnboundedForall,

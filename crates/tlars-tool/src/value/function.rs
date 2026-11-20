@@ -454,13 +454,15 @@ impl FcnRcdValue {
         let domain = domain.expect("an explicit domain");
         if self.is_normalized() && domain.len() >= LINEAR_SEARCH_THRESHOLD {
             // `Arrays.binarySearch(domain, arg, Value::compareTo)`: the domain element is the
-            // receiver, and the hit is confirmed with `equals` (`FcnRcdValue.java:433-455`).
-            let (mut lo, mut hi) = (0usize, domain.len());
-            while lo < hi {
-                let mid = lo + (hi - lo) / 2;
+            // receiver, the bounds are inclusive (so the first probe of an even-sized domain
+            // is below the middle), and the hit is confirmed with `equals`
+            // (`FcnRcdValue.java:433-455`).
+            let (mut lo, mut hi) = (0i64, domain.len() as i64 - 1);
+            while lo <= hi {
+                let mid = ((lo + hi) >> 1) as usize;
                 match domain[mid].tlc_compare(ev, arg)? {
-                    Ordering::Less => lo = mid + 1,
-                    Ordering::Greater => hi = mid,
+                    Ordering::Less => lo = mid as i64 + 1,
+                    Ordering::Greater => hi = mid as i64 - 1,
                     Ordering::Equal => {
                         return Ok(if domain[mid].tlc_equals(ev, arg)? { Some(values[mid].clone()) } else { None });
                     }
@@ -981,7 +983,7 @@ impl ParamEnum {
                         *done = true;
                         break;
                     }
-                    enums[i].reset();
+                    enums[i].reset(ev)?;
                     current[i] = enums[i].next(ev)?.expect("a reset enumeration of a non-empty set has an element");
                 }
                 Ok(Some(Value::tuple(elems)))
