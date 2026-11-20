@@ -96,8 +96,10 @@ fn tlc_get_string(ev: &mut Ev<'_>, name: Atom, s0: StateRef<'_>, control: EvalCo
     if FROM_CHECKER.contains(&key.as_str()) {
         return Err(EvalError::unimplemented(format!("TLCGet(\"{key}\") (M3 unit 5)")));
     }
-    if key.starts_with("-D") {
-        return Err(EvalError::unimplemented(format!("TLCGet(\"{key}\"), which reads a Java system property (M3 unit 5)")));
+    // `System.getProperty(key.substring(2), key)`: the default is the whole key, `-D` and all.
+    if let Some(property) = key.strip_prefix("-D") {
+        let text = ev.tool().property(property).unwrap_or_else(|| key.clone());
+        return Ok(Value::Str(ev.tool().graph().interner().intern(&text)));
     }
     Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key]))
 }
@@ -131,10 +133,12 @@ pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
                 ev.tool().registers.lock().expect("registers").set_named(name, a[1].clone());
                 return Ok(Value::Bool(true));
             }
+            // `System.setProperty(key.substring(2), val.toString())`, so a string value
+            // keeps the quotes its `toString` prints.
             _ if key.starts_with("-D") => {
-                return Err(EvalError::unimplemented(format!(
-                    "TLCSet(\"{key}\", ...), which sets a Java system property (M3 unit 5)"
-                )));
+                let text = a[1].to_tlc_string(ev)?;
+                ev.tool().set_property(&key["-D".len()..], text);
+                return Ok(Value::Bool(true));
             }
             _ => {}
         }

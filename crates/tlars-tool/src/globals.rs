@@ -32,4 +32,7 @@ pub struct TlcGlobals {
     pub seed: i64,
     pub aril: i64,
     pub no_timestamps: bool,
+    /// The `-D` properties the CLI was given, in the order given (a later one wins). What
+    /// `TLCGet("-Dkey")` falls back to when nothing set that key at run time.
+    pub properties: Vec<(String, String)>,
 }

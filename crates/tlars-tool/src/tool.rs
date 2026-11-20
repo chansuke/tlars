@@ -77,6 +77,9 @@ pub struct Tool {
     /// `TLCSet`'s registers, which live in TLC's worker threads and so outlast any one
     /// `WorkerLocals` (`effects::Registers`).
     pub(crate) registers: std::sync::Mutex<crate::effects::Registers>,
+    /// What `TLCSet("-Dkey", v)` wrote, newest last. TLC calls `System.setProperty`, a JVM
+    /// global; tlars keeps it per run, so two runs in one process cannot see each other's.
+    pub(crate) set_properties: std::sync::Mutex<Vec<(String, String)>>,
 }
 
 impl Tool {
@@ -91,6 +94,22 @@ impl Tool {
     }
     pub fn globals(&self) -> &TlcGlobals {
         &self.globals
+    }
+    /// `System.getProperty(name)`: what `TLCSet` wrote last, else the CLI's `-D` option.
+    pub(crate) fn property(&self, name: &str) -> Option<String> {
+        let set = self.set_properties.lock().expect("system properties");
+        if let Some((_, v)) = set.iter().rev().find(|(k, _)| k == name) {
+            return Some(v.clone());
+        }
+        self.globals.properties.iter().rev().find(|(k, _)| k == name).map(|(_, v)| v.clone())
+    }
+    /// `System.setProperty(name, value)`.
+    pub(crate) fn set_property(&self, name: &str, value: String) {
+        let mut set = self.set_properties.lock().expect("system properties");
+        match set.iter_mut().find(|(k, _)| k == name) {
+            Some(slot) => slot.1 = value,
+            None => set.push((name.to_string(), value)),
+        }
     }
     /// Next-state actions in split order (= successor generation order).
     pub fn actions(&self) -> &[Action] {
