@@ -3,6 +3,7 @@ tlc/expressions/arithmetic/overflow/decimal_in_dead_branch
 tlc/expressions/arithmetic/overflow/hex_too_big
 tlc/expressions/arithmetic/overflow/literal_too_big
 tlc/expressions/arithmetic/overflow/literal_too_big_in_dead_branch
+tlc/expressions/choose/unbounded_unused_definition
 tlc/expressions/let/forward_reference_is_a_parse_error
 tlc/expressions/let/redefining_bound_variable_is_a_parse_error
 tlc/expressions/operators/closures/definition_redefined_is_parse_error
@@ -13,6 +14,8 @@ tlc/expressions/operators/higher_order/lambda_as_value
 tlc/expressions/operators/higher_order/number_for_operator_parameter
 tlc/expressions/operators/higher_order/operator_for_value_parameter
 tlc/expressions/operators/higher_order/wrong_argument_count
+tlc/expressions/operators/laziness/failing_unused_definition_is_silent
+tlc/expressions/operators/laziness/parameterized_definition_not_at_startup
 tlc/expressions/operators/recursive/declared_not_defined
 tlc/expressions/operators/recursive/declared_wrong_arity
 tlc/expressions/operators/recursive/operator_parameter_last_rejected
