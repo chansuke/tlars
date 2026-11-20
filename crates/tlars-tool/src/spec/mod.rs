@@ -315,29 +315,34 @@ fn fold_module(tool: &mut Tool, graph: &SemanticGraph, m: &ModuleNode, out: &dyn
     }
 }
 
-/// `processConfig` (`SpecProcessor.java:735-955`): INIT/NEXT/SPECIFICATION and the named
+/// `processConfig` (`SpecProcessor.java:782-955`): INIT/NEXT/SPECIFICATION and the named
 /// checks. An empty cfg binds nothing, but a spec with variables still needs an INIT.
 fn process_config(config: &ModelConfig, tool: &Tool) -> Result<(), SpecError> {
-    let empty = config.init.is_none()
-        && config.next.is_none()
-        && config.specification.is_none()
-        && config.invariants.is_empty()
-        && config.properties.is_empty()
-        && config.constraints.is_empty()
-        && config.action_constraints.is_empty()
-        && config.postconditions.is_empty()
-        && config.possible.is_empty()
-        && config.view.is_none()
-        && config.symmetry.is_none()
-        && config.alias.is_none()
-        && config.periodic.is_none()
-        && config.rl_reward.is_none();
-    if !empty {
-        todo!("M3: processConfig for a non-empty cfg");
+    // Processed before the INIT/NEXT checks (`:785-890`).
+    let checks_before = config.init.is_some()
+        || config.next.is_some()
+        || config.specification.is_some()
+        || !config.invariants.is_empty()
+        || !config.properties.is_empty();
+    if checks_before {
+        todo!("M3: INVARIANT, SPECIFICATION, INIT/NEXT and PROPERTY in processConfig");
     }
     // `:891-896`: no init predicate, but variables to initialise.
     if tool.var_count() != 0 {
         return Err(SpecError::Failure { ec: Ec::TLC_CONFIG_MISSING_INIT });
+    }
+    // Processed after them (`:944-952`), or later by the Tool and the checker.
+    let checks_after = !config.constraints.is_empty()
+        || !config.action_constraints.is_empty()
+        || config.rl_reward.is_some()
+        || config.periodic.is_some()
+        || !config.possible.is_empty()
+        || !config.postconditions.is_empty()
+        || config.view.is_some()
+        || config.symmetry.is_some()
+        || config.alias.is_some();
+    if checks_after {
+        todo!("M3: constraints, _RL_REWARD, _PERIODIC, _POSSIBLE, POSTCONDITION, VIEW, SYMMETRY and ALIAS");
     }
     Ok(())
 }
