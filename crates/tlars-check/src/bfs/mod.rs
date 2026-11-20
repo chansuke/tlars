@@ -195,6 +195,11 @@ impl<'a> ModelChecker<'a> {
                 // `modelCheckImpl`'s `catch (Throwable e)` around `doInit`: the state the
                 // functor was working on, if any, is printed with the message.
                 let ec = eval_error_code(&e);
+                // `doInit` carries the functor's state to the checker only for the
+                // exceptions it catches by name (`ModelChecker.java:390-402`): an
+                // `EvalException` passes straight through and leaves `errState` null, so the
+                // message is the general one and names no state.
+                let errored = errored.filter(|_| !matches!(e.kind, tlars_tool::EvalErrorKind::Eval));
                 match errored {
                     Some(state) => {
                         let shown = {
