@@ -146,6 +146,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         fp64: crate::fp64::Fp64::new(globals.fp_index),
         model_values,
         globals,
+        registers: std::sync::Mutex::new(crate::effects::Registers::default()),
     };
     let mut defns = defns;
     fold_constant_defns(&mut tool, &mut defns, out)?;

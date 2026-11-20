@@ -58,18 +58,58 @@ pub trait RunCounters: Sync {
     fn diameter(&self) -> u32;
 }
 
+/// `IdThread.localValues` and `IdThread.namedRegisters`: what `TLCSet` writes and `TLCGet`
+/// reads back. They belong to the run, not to one [`Effects`], because TLC keeps them in the
+/// worker *threads*, which outlive any single generation step: a register an ASSUME sets is
+/// read back by the initial predicate, and one an action sets by the invariant.
+///
+/// One bank, which is exactly TLC's single-worker behaviour: the main thread writes every
+/// worker's bank (`AbstractChecker.setAllValues`) and reads worker 0's, and worker 0 reads
+/// and writes its own. Per-worker banks, and with them the per-worker tuples of
+/// `TLCGet("all")`, arrive with `-workers` (M6).
+#[derive(Default)]
+pub(crate) struct Registers {
+    /// Indexed by register number, as `IdThread.getLocalValues()` lays it out.
+    indexed: Vec<Option<Value>>,
+    /// The `"s:"`-prefixed named registers, in the order they were first set.
+    named: Vec<(tlars_sany::Atom, Value)>,
+}
+
+impl Registers {
+    /// `IdThread.setLocalValue(idx, val)`.
+    pub(crate) fn set(&mut self, index: usize, v: Value) {
+        if self.indexed.len() <= index {
+            self.indexed.resize(index + 1, None);
+        }
+        self.indexed[index] = Some(v);
+    }
+    /// `IdThread.getLocalValue(idx)`; `None` = `TLC_MODULE_TLCGET_UNDEFINED`.
+    pub(crate) fn get(&self, index: usize) -> Option<Value> {
+        self.indexed.get(index).cloned().flatten()
+    }
+    /// `IdThread.setNamedRegister(name, val)`.
+    pub(crate) fn set_named(&mut self, name: tlars_sany::Atom, v: Value) {
+        match self.named.iter_mut().find(|(n, _)| *n == name) {
+            Some(slot) => slot.1 = v,
+            None => self.named.push((name, v)),
+        }
+    }
+    /// `IdThread.getNamedRegister(name)`.
+    pub(crate) fn get_named(&self, name: tlars_sany::Atom) -> Option<Value> {
+        self.named.iter().find(|(n, _)| *n == name).map(|(_, v)| v.clone())
+    }
+}
+
 /// Per-worker effect state: what TLC keeps in `IdThread` locals and statics.
 pub(crate) struct Effects {
     pub(crate) random: StateRandom,
-    /// `TLCSet(i, v)` integer registers (per worker in TLC: `IdThread.localValues`).
-    pub(crate) registers: Vec<Option<Value>>,
     /// The parent being expanded, set by `next_states` and by replay.
     pub(crate) current: Option<(ExpansionId, Fp)>,
 }
 
 impl Effects {
     pub(crate) fn new(run_seed: i64) -> Self {
-        Effects { random: StateRandom::new(run_seed), registers: Vec::new(), current: None }
+        Effects { random: StateRandom::new(run_seed), current: None }
     }
     /// `RandomEnumerableValues.reset()`: a fresh stream seeded with the run seed.
     pub(crate) fn reset_random(&mut self, run_seed: i64) {
@@ -77,11 +117,5 @@ impl Effects {
     }
     pub(crate) fn rng(&mut self) -> &mut JavaRandom {
         self.random.for_draw(self.current)
-    }
-    pub(crate) fn tlc_set(&mut self, index: usize, v: Value) {
-        todo!("grow registers; TLC_MODULE_TLCSET_* errors live in error.rs")
-    }
-    pub(crate) fn tlc_get(&self, index: usize) -> Option<&Value> {
-        todo!("None = TLC_MODULE_TLCGET_UNDEFINED")
     }
 }

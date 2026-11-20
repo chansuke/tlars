@@ -74,6 +74,9 @@ pub struct Tool {
     pub(crate) globals: TlcGlobals,
     /// `ModelValue.mvs`, in creation order (cfg first).
     pub(crate) model_values: Box<[ModelValue]>,
+    /// `TLCSet`'s registers, which live in TLC's worker threads and so outlast any one
+    /// `WorkerLocals` (`effects::Registers`).
+    pub(crate) registers: std::sync::Mutex<crate::effects::Registers>,
 }
 
 impl Tool {

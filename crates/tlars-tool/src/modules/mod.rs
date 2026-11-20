@@ -12,6 +12,7 @@ mod finite_sets;
 mod naturals;
 mod sequences;
 mod tlc;
+mod tlc_get_set;
 
 pub(crate) use naturals::eval_exception;
 
@@ -51,14 +52,25 @@ pub(crate) struct NativeOp {
     pub(crate) imp: NativeImpl,
     /// `Method.toString()`, as TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE prints it.
     pub(crate) signature: &'static str,
+    /// `@Evaluation(minLevel = ...)` / `@TLAPlusOperator(minLevel = ...)`, which
+    /// `getLevelBound` takes as the level of an application. It is what keeps `TLCGet` out of
+    /// constant folding (`SymbolNodeValueLookupProvider.java:270-276`).
+    pub(crate) min_level: u8,
 }
 
 use JavaParam::{IntValue as I, Value as V};
 
 macro_rules! natives {
-    ($( $class:literal $name:literal ($($p:ident),*) $kind:ident $imp:expr, $sig:literal; )*) => {
+    ($( $class:literal $name:literal ($($p:ident),*) $kind:ident $imp:expr, $sig:literal $(, min_level $lvl:literal)?; )*) => {
         pub(crate) static REGISTRY: &[NativeOp] = &[
-            $( NativeOp { module: $class, tla_name: $name, params: &[$($p),*], imp: NativeImpl::$kind($imp), signature: $sig }, )*
+            $( NativeOp {
+                module: $class,
+                tla_name: $name,
+                params: &[$($p),*],
+                imp: NativeImpl::$kind($imp),
+                signature: $sig,
+                min_level: 0 $(+ $lvl)?,
+            }, )*
         ];
     };
 }
@@ -106,6 +118,8 @@ natives! {
     "TLC" "Assert" (V, V) Strict tlc::assert, "public static tlc2.value.impl.Value tlc2.module.TLC.Assert(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" ":>" (V, V) Strict tlc::make_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.MakeFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "@@" (V, V) Strict tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;
+    "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
 }
 
 /// The `tlc2.module` classes. A module with one of these names has its own definitions
@@ -134,6 +148,25 @@ pub(crate) fn imp(id: NativeId) -> NativeImpl {
 /// The Java method's parameter count.
 pub(crate) fn arity(id: NativeId) -> usize {
     id.op().params.len()
+}
+
+/// `EvaluatingValue.getMinLevel()` / `MethodValue.getMinLevel()`.
+pub(crate) fn min_level(id: NativeId) -> u8 {
+    id.op().min_level
+}
+
+/// `EvaluatingValue.eval`'s `catch (Throwable e)` (`EvaluatingValue.java:92-95`): where
+/// `MethodValue` lets an `EvalException` the method raised on purpose through, an
+/// `@Evaluation` override wraps *every* failure, so even `TLCGet(1) was undefined` reaches
+/// the spec inside `TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE`.
+pub(crate) fn wrap_evaluating(ev: &Ev<'_>, module: &str, tla_name: &str, e: EvalError) -> EvalError {
+    use crate::error::EvalErrorKind::{StackOverflow, Unimplemented};
+    if matches!(e.kind, Unimplemented | StackOverflow) {
+        return e;
+    }
+    let signature = NativeId::of_module(module, tla_name).expect("a registered native").op().signature;
+    let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[signature, &e.message]);
+    EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message)
 }
 
 /// `MethodValue.eval(args)`: the arguments are cast to the method's parameter types first.

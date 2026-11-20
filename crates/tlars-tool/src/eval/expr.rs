@@ -1157,6 +1157,11 @@ impl<'t> Ev<'t> {
                         let (e, tc) = (t.expr, t.ctx.clone());
                         level = level.max(self.level_bound(e, &tc));
                     }
+                    // A Java override contributes its declared `minLevel`, which is how
+                    // `TLCGet` stays out of constant folding (`:270-276`).
+                    Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
+                        level = level.max(crate::modules::min_level(id));
+                    }
                     _ => {}
                 }
                 level
