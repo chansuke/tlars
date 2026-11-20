@@ -25,6 +25,10 @@ pub(crate) enum Resolved {
     /// cfg `op(a, b) = v` (`OpRcdValue`, an `OpValue`).
     OpRcd(crate::spec::OpRcd),
     Var(crate::state::VarSlot),
+    /// A definition TLC overrides with a Java method tlars does not implement. Keeping it
+    /// apart from `Undef` is what lets every caller stop as unimplemented instead of
+    /// reporting an undefined operator.
+    Unimplemented,
 }
 
 impl<'t> Ev<'t> {
@@ -101,7 +105,9 @@ impl<'t> Ev<'t> {
                 Resolved::UserOp(d) => Binding::OpDef(d),
                 Resolved::Native(id) => Binding::Native(id),
                 Resolved::OpRcd(lines) => Binding::OpRcd(lines),
-                Resolved::Var(_) => Binding::Value(Value::Undef),
+                // `lookup` returns the unimplemented `MethodValue` itself; passing it on as
+                // a value makes the use site report it.
+                Resolved::Var(_) | Resolved::Unimplemented => Binding::Value(Value::Undef),
             },
             ExprOrOpArg::Absent => unreachable!("only CASE's OTHER guard is absent"),
         }
@@ -227,6 +233,10 @@ impl<'t> Ev<'t> {
                 Resolved::Binding(Binding::Lambda(_) | Binding::ExceptAt(_)) => {
                     return Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()));
                 }
+                Resolved::Unimplemented => {
+                    let name = self.symbol_name(op);
+                    return Err(EvalError::unimplemented(format!("the Java implementation of {name}")));
+                }
                 Resolved::Binding(Binding::Value(_)) | Resolved::Value(_) | Resolved::Var(_) => {
                     // Fairness on a sub-action that leaves a subscript variable unassigned
                     // (`Tool.java:2064-2090`).
@@ -235,10 +245,6 @@ impl<'t> Ev<'t> {
                         let text = graph.expr_tlc_text(expr);
                         let message = self.out().text(Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_LIVE, &[&name, &text]);
                         return Err(EvalError::runtime(Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_LIVE, message));
-                    }
-                    if matches!(op, SymbolRef::OpDef(d) if matches!(self.tool().bindings.op_def(d).cloned().or_else(|| self.body_binding(d)), Some(OpBinding::Unimplemented))) {
-                        let name = self.symbol_name(op);
-                        return Err(EvalError::unimplemented(format!("the Java implementation of {name}")));
                     }
                     // `Assert.fail(TLC_CONFIG_UNDEFINED_OR_NO_OPERATOR, ...)` (`Tool.java:2103`).
                     let name = self.symbol_name(op);
@@ -925,6 +931,10 @@ impl<'t> Ev<'t> {
         control: EvalControl,
     ) -> EvalResult<Value> {
         match resolved {
+            Resolved::Unimplemented => {
+                let name = self.symbol_name(op);
+                Err(EvalError::unimplemented(format!("the Java implementation of {name}")))
+            }
             Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
                 if args.len() != crate::modules::arity(id) {
                     let name = self.symbol_name(op);
@@ -1184,10 +1194,11 @@ fn resolved(b: &OpBinding, d: OpDefId) -> Resolved {
         OpBinding::Value(v) => Resolved::Value(v.clone()),
         OpBinding::Native(id) => Resolved::Native(*id),
         OpBinding::Replaced(r) => Resolved::UserOp(*r),
-        OpBinding::Table(_) | OpBinding::Unimplemented => {
+        OpBinding::Table(_) => {
             let _ = d;
             Resolved::Value(Value::Undef)
         }
+        OpBinding::Unimplemented => Resolved::Unimplemented,
     }
 }
 
