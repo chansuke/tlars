@@ -632,10 +632,14 @@ fn fold_module(tool: &mut Tool, defns: &mut Defns, graph: &SemanticGraph, m: &Mo
         if tool.bindings.body_chain(graph, body).is_some() {
             continue;
         }
-        if graph.level(body) != Level::Constant {
+        let mut locals = WorkerLocals::new(0, tool.globals.seed);
+        // `getLevelBound(body, Context.Empty)`, not SANY's own level (`:355`). The two differ
+        // where SANY's rule drops an argument the body never uses: `PrintT(ENABLED A)` is
+        // constant to SANY, because `PrintT(out) == TRUE` ignores `out`, while `getLevelBound`
+        // walks the arguments and finds the ENABLED.
+        if { tool.ev(&mut locals, out).level_bound(body, &Ctx::EMPTY) } != 0 {
             continue;
         }
-        let mut locals = WorkerLocals::new(0, tool.globals.seed);
         let folded = {
             let mut ev = tool.ev(&mut locals, out);
             ev.eval(body, &Ctx::EMPTY, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR)
