@@ -1,0 +1,1575 @@
+== tlc/standard/internal/json_trace_no_violation model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/json_trace_violation model
+exit 12
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2110:1 Invariant Inv is violated.
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> x = 0
+> 2217:4 2: <Next line 19, col 9 to line 19, col 24 of module json_trace_violation>
+> x = 1
+> 2217:4 3: <Next line 19, col 9 to line 19, col 24 of module json_trace_violation>
+> x = 2
+> | "CounterExample written: trace.json"
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/internal/missing_deps_dottrace model
+exit 150
+> | Fatal errors while parsing TLA+ spec in file missing_deps_dottrace
+> | In module _DotTrace
+> | Cannot find source file for module GraphViz imported in module _DotTrace.
+> | *** Errors: 1
+> | In module _DotTrace
+> | Cannot find source file for module GraphViz imported in module _DotTrace.
+> 3002:1 Parsing or semantic analysis failed.
+== tlc/standard/internal/missing_deps_tlapluscounterexample model
+exit 150
+> | Fatal errors while parsing TLA+ spec in file missing_deps_tlapluscounterexample
+> | In module _TLAPlusCounterExample
+> | Cannot find source file for module IOUtils imported in module _TLAPlusCounterExample.
+> | *** Errors: 1
+> | In module _TLAPlusCounterExample
+> | Cannot find source file for module IOUtils imported in module _TLAPlusCounterExample.
+> 3002:1 Parsing or semantic analysis failed.
+== tlc/standard/internal/missing_deps_tlcactiontrace model
+exit 150
+> | Fatal errors while parsing TLA+ spec in file missing_deps_tlcactiontrace
+> | In module _TLCActionTrace
+> | Cannot find source file for module IOUtils imported in module _TLCActionTrace.
+> | *** Errors: 1
+> | In module _TLCActionTrace
+> | Cannot find source file for module IOUtils imported in module _TLCActionTrace.
+> 3002:1 Parsing or semantic analysis failed.
+== tlc/standard/internal/missing_deps_tlctespec model
+exit 150
+> | Fatal errors while parsing TLA+ spec in file missing_deps_tlctespec
+> | In module _TLCTESpec
+> | Cannot find source file for module IOUtils imported in module _TLCTESpec.
+> | *** Errors: 1
+> | In module _TLCTESpec
+> | Cannot find source file for module IOUtils imported in module _TLCTESpec.
+> 3002:1 Parsing or semantic analysis failed.
+== tlc/standard/internal/missing_deps_tlctraceplain model
+exit 150
+> | Fatal errors while parsing TLA+ spec in file missing_deps_tlctraceplain
+> | In module _TLCTracePlain
+> | Cannot find source file for module IOUtils imported in module _TLCTracePlain.
+> | *** Errors: 1
+> | In module _TLCTracePlain
+> | Cannot find source file for module IOUtils imported in module _TLCTracePlain.
+> 3002:1 Parsing or semantic analysis failed.
+== tlc/standard/internal/possible_check_name_hit model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/possible_check_name_unknown model
+exit 10
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [t |-> 3]
+> 2404:1 Postcondition Post at line 19, col 9 to line 19, col 27 of module possible_check_name_unknown is false.
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/internal/possible_check_name_zero model
+exit 10
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [never |-> 0]
+> 2404:1 Postcondition Post at line 19, col 9 to line 19, col 27 of module possible_check_name_zero is false.
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/internal/possible_counts_empty model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/possible_print_counts model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [t |-> 3]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/possible_track_constant_folded model
+exit 0
+> 2149:3 The invariant Inv is a constant-level formula (i.e., it contains no variables, primes, or temporal operators) and evaluates to TRUE. To assert constant-level formulas in your spec, use ASSUME ConstInv. If you optionally want to give the assumption a name, write ASSUME YourAssumption == ConstInv instead. See https://explain.tlapl.us/assumptions-and-invariants for additional details.
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/possible_track_false model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [f |-> 0]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/possible_track_state_dependent model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [one |-> 1]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/possible_track_true model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [t |-> 3]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/possible_track_two_names model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [zero |-> 1, all |-> 3]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/tlc_trace_no_violation model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/internal/tlc_trace_violation model
+exit 12
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2110:1 Invariant Inv is violated.
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> x = 0
+> 2217:4 2: <Next line 19, col 9 to line 19, col 24 of module tlc_trace_violation>
+> x = 1
+> 2217:4 3: <Next line 19, col 9 to line 19, col 24 of module tlc_trace_violation>
+> x = 2
+> | "CounterExample written: trace.bin"
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/real_time/extends_declares_now model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.1E-19
+> 2199:0 3 states generated, 2 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 2.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/real_time/now_must_be_assigned model
+exit 255
+> 2102:1 current state is not a legal state
+> While working on the initial state:
+> /\ now = null
+> /\ x = 0
+== tlc/standard/real_time/now_next_real_enumeration model
+exit 75
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 1000:1 TLC threw an unexpected exception.
+> This was probably caused by an error in the spec or model.
+> See the User Output or TLC Console for clues to what happened.
+> The exception was a java.lang.RuntimeException
+> : Attempted to enumerate { x \in S : p(x) } when S:
+> "Reals"
+> is not enumerable
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> /\ now = 0
+> /\ x = 0
+> 2103:1 The error occurred when TLC was evaluating the nested
+> expressions at the following positions:
+> 0. Line 15, column 9 to line 15, column 49 in now_next_real_enumeration
+> 1. Line 15, column 9 to line 15, column 14 in now_next_real_enumeration
+> 2. Line 15, column 19 to line 15, column 49 in now_next_real_enumeration
+> 2199:0 1 states generated, 1 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 1.
+== tlc/standard/real_time/rtbound_temporal_quantifier model
+exit 255
+> 2213:1 TLC cannot handle the temporal formula line 20, col 6 to line 20, col 49 of module RealTime
+== tlc/standard/real_time/rtbound_unused_is_harmless model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.1E-19
+> 2199:0 3 states generated, 2 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 2.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/real_time/rtnow_property_fails model
+exit 255
+> 2213:1 TLC cannot handle the temporal formula line 26, col 20 to line 26, col 62 of module RealTime:
+> TLC encountered a non-enumerable quantifier bound
+> "Reals".
+> line 26, col 29 to line 26, col 32 of module RealTime
+== tlc/standard/tlc_eval/constant_in_invariant_prints_once model
+exit 0
+> | "once"  7
+> 2149:3 The invariant Inv is a constant-level formula (i.e., it contains no variables, primes, or temporal operators) and evaluates to TRUE. To assert constant-level formulas in your spec, use ASSUME ConstInv. If you optionally want to give the assumption a name, write ASSUME YourAssumption == ConstInv instead. See https://explain.tlapl.us/assumptions-and-invariants for additional details.
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_eval/next_state_value model
+exit 12
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2110:1 Invariant Inv is violated.
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> x = {1, 2}
+> 2217:4 2: <Next line 16, col 9 to line 16, col 32 of module next_state_value>
+> x = {{}, {1}}
+> 2199:0 2 states generated, 2 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 2.
+== tlc/standard/tlc_eval/state_level_not_cached model
+exit 0
+> | 0  0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | 1  1
+> | 2  2
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/cache_action_level model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | 1  1
+> | 2  2
+> | 0  0
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/cache_state_level model
+exit 0
+> | 0  0
+> | 0  0
+> | 0  0
+> | 0  0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | 1  1
+> | 1  1
+> | 1  1
+> | 1  1
+> | 2  2
+> | 2  2
+> | 2  2
+> | 2  2
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/counterexample_deadlock model
+exit 11
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2114:1 Deadlock reached.
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> x = 0
+> 2217:4 2: <Next line 16, col 9 to line 16, col 27 of module counterexample_deadlock>
+> x = 1
+> 2217:4 3: <Next line 16, col 9 to line 16, col 27 of module counterexample_deadlock>
+> x = 2
+> | [ action |->
+> |       { << <<1, [x |-> 0]>>,
+> |            [ name |-> "Next",
+> |              location |->
+> |                  [ beginLine |-> 16,
+> |                    beginColumn |-> 9,
+> |                    endLine |-> 16,
+> |                    endColumn |-> 27,
+> |                    module |-> "counterexample_deadlock" ] ],
+> |            <<2, [x |-> 1]>> >>,
+> |         << <<2, [x |-> 1]>>,
+> |            [ name |-> "Next",
+> |              location |->
+> |                  [ beginLine |-> 16,
+> |                    beginColumn |-> 9,
+> |                    endLine |-> 16,
+> |                    endColumn |-> 27,
+> |                    module |-> "counterexample_deadlock" ] ],
+> |            <<3, [x |-> 2]>> >> },
+> |   state |-> {<<1, [x |-> 0]>>, <<2, [x |-> 1]>>, <<3, [x |-> 2]>>} ]
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/counterexample_init_violation model
+exit 12
+> 2107:1 Invariant Inv is violated by the initial state:
+> x = 0
+> | [action |-> {}, state |-> {<<1, [x |-> 0]>>}]
+== tlc/standard/tlc_ext/counterexample_invariant_violation model
+exit 12
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2110:1 Invariant Inv is violated.
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> x = 0
+> 2217:4 2: <Next line 17, col 9 to line 17, col 24 of module counterexample_invariant_violation>
+> x = 1
+> 2217:4 3: <Next line 17, col 9 to line 17, col 24 of module counterexample_invariant_violation>
+> x = 2
+> | [ action |->
+> |       { << <<1, [x |-> 0]>>,
+> |            [ name |-> "Next",
+> |              location |->
+> |                  [ beginLine |-> 17,
+> |                    beginColumn |-> 9,
+> |                    endLine |-> 17,
+> |                    endColumn |-> 24,
+> |                    module |-> "counterexample_invariant_violation" ] ],
+> |            <<2, [x |-> 1]>> >>,
+> |         << <<2, [x |-> 1]>>,
+> |            [ name |-> "Next",
+> |              location |->
+> |                  [ beginLine |-> 17,
+> |                    beginColumn |-> 9,
+> |                    endLine |-> 17,
+> |                    endColumn |-> 24,
+> |                    module |-> "counterexample_invariant_violation" ] ],
+> |            <<3, [x |-> 2]>> >> },
+> |   state |-> {<<1, [x |-> 0]>>, <<2, [x |-> 1]>>, <<3, [x |-> 2]>>} ]
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/counterexample_liveness_loop model
+exit 13
+> 2212:0 Implied-temporal checking--satisfiability problem has 1 branches.
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2192:0 Checking temporal properties for the complete state space with 2 total distinct states at (<date>)
+> 2116:1 Temporal property Prop was violated.
+> 2264:1 The following behavior constitutes a counter-example:
+> 2217:4 1: <Initial predicate>
+> x = 0
+> 2217:4 2: <Next line 16, col 9 to line 16, col 24 of module counterexample_liveness_loop>
+> x = 1
+> 2122:4 1: Back to state: <Next line 16, col 9 to line 16, col 24 of module counterexample_liveness_loop>
+> | [ action |->
+> |       { << <<1, [x |-> 0]>>,
+> |            [ name |-> "Next",
+> |              location |->
+> |                  [ beginLine |-> 16,
+> |                    beginColumn |-> 9,
+> |                    endLine |-> 16,
+> |                    endColumn |-> 24,
+> |                    module |-> "counterexample_liveness_loop" ] ],
+> |            <<2, [x |-> 1]>> >>,
+> |         << <<2, [x |-> 1]>>,
+> |            [ name |-> "Next",
+> |              location |->
+> |                  [ beginLine |-> 16,
+> |                    beginColumn |-> 9,
+> |                    endLine |-> 16,
+> |                    endColumn |-> 24,
+> |                    module |-> "counterexample_liveness_loop" ] ],
+> |            <<1, [x |-> 0]>> >> },
+> |   state |-> {<<1, [x |-> 0]>>, <<2, [x |-> 1]>>} ]
+> 2267:0 Finished checking temporal properties in <time> at <date>
+> 2199:0 3 states generated, 2 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 2.
+== tlc/standard/tlc_ext/counterexample_no_violation model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [action |-> {}, state |-> {}]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/defer_bfs_never_runs model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 0.0
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/defer_simulate_runs_on_chosen model
+exit 0
+> 2269:0 Computed 1 initial states...
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<"deferred", 0, 1>>
+> | <<"deferred", 1, 2>>
+> | <<"deferred", 2, 0>>
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_ext/eval_def_instance_module model
+exit 75
+> 1000:1 
+> 2154:0 Attempted to apply the operator overridden by the Java method
+> public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcDefByName(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel),
+> but it produced the following error:
+> 2283:0 The argument of TLCEvalDefinition should be a name of a definition reachable from the root module, but instead it is:
+> "Inner"
+> 2103:1 The error occurred when TLC was evaluating the nested
+> expressions at the following positions:
+> 0. Line 18, column 9 to line 18, column 47 in eval_def_instance_module
+> 1. Line 18, column 9 to line 18, column 13 in eval_def_instance_module
+> 2. Line 18, column 18 to line 18, column 47 in eval_def_instance_module
+> 3. Line 18, column 18 to line 18, column 43 in eval_def_instance_module
+> 2199:0 0 states generated, 0 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 0.
+== tlc/standard/tlc_ext/eval_def_state_variable model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/get_or_default_named_set model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/pick_action_false_no_stdin model
+exit 75
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 20000:0 Extend behavior of length 1 with a "Next" step [<Action line 35, col 9 to line 35, col 24 of module pick_action_false_no_stdin>]? (Yes/no/explored/states/diff):
+> 1000:1 TLC threw an unexpected exception.
+> This was probably caused by an error in the spec or model.
+> See the User Output or TLC Console for clues to what happened.
+> The exception was a java.lang.RuntimeException
+> :
+> 2154:0 Attempted to apply the operator overridden by the Java method
+> public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.pickSuccessor(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel),
+> but it produced the following error:
+> No line found
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> x = 0
+> 2217:4 2: <Next line 35, col 9 to line 35, col 24 of module pick_action_false_no_stdin>
+> x = 1
+> 20000:0 Extend behavior of length 1 with a "Next" step [<Action line 35, col 9 to line 35, col 24 of module pick_action_false_no_stdin>]? (Yes/no/explored/states/diff):
+> 2103:1 The error occurred when TLC was evaluating the nested
+> expressions at the following positions:
+> 0. Line 36, column 8 to line 36, column 27 in pick_action_false_no_stdin
+> 2199:0 2 states generated, 1 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 1.
+== tlc/standard/tlc_ext/pick_action_guard_on_successor model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/pick_action_non_boolean model
+exit 75
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 1000:1 TLC threw an unexpected exception.
+> This was probably caused by an error in the spec or model.
+> See the User Output or TLC Console for clues to what happened.
+> The exception was a java.lang.RuntimeException
+> :
+> 2154:0 Attempted to apply the operator overridden by the Java method
+> public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.pickSuccessor(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel),
+> but it produced the following error:
+> In evaluating TLCExt!PickSuccessor, a non-boolean expression (an integer) was used as the condition of an IF.
+> line 17, col 22 to line 17, col 23 of module pick_action_non_boolean
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> x = 0
+> 2217:4 2: <Next line 16, col 9 to line 16, col 24 of module pick_action_non_boolean>
+> x = 1
+> 2103:1 The error occurred when TLC was evaluating the nested
+> expressions at the following positions:
+> 0. Line 17, column 8 to line 17, column 24 in pick_action_non_boolean
+> 2199:0 2 states generated, 1 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 1.
+== tlc/standard/tlc_ext/pick_action_seen_state_skips_guard model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/pick_action_true model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/pick_in_next_unassigned model
+exit 75
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 1000:1 TLC threw an unexpected exception.
+> This was probably caused by an error in the spec or model.
+> See the User Output or TLC Console for clues to what happened.
+> The exception was a java.lang.RuntimeException
+> :
+> 2154:0 Attempted to apply the operator overridden by the Java method
+> public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.pickSuccessor(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel),
+> but it produced the following error:
+> Cannot invoke "tlc2.value.IValue.fingerPrint(long)" because "<local2>[<local5>]" is null
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> x = 0
+> 2103:1 The error occurred when TLC was evaluating the nested
+> expressions at the following positions:
+> 0. Line 28, column 9 to line 29, column 17 in pick_in_next_unassigned
+> 1. Line 28, column 12 to line 28, column 33 in pick_in_next_unassigned
+> 2199:0 1 states generated, 1 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 1.
+== tlc/standard/tlc_ext/postcondition_constant model
+exit 255
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 1000:1 TLC threw an unexpected exception.
+> This was probably caused by an error in the spec or model.
+> See the User Output or TLC Console for clues to what happened.
+> The exception was a java.lang.RuntimeException
+> :
+> 2233:0 The post condition Post cannot be a constant.
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/postcondition_error model
+exit 10
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2405:1 Evaluating postcondition Post at line 17, col 9 to line 17, col 20 of module postcondition_error failed.
+> 2179:0 The second argument of \div is 0.
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/postcondition_false model
+exit 10
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2404:1 Postcondition Post at line 17, col 9 to line 17, col 30 of module postcondition_false is false.
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/postcondition_non_boolean model
+exit 10
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2405:1 Evaluating postcondition Post at 1 failed.
+> 2215:0 TLC expected a boolean value, but did not find one. 1
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/postcondition_true model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/postcondition_unknown model
+exit 255
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 1000:1 TLC threw an unexpected exception.
+> This was probably caused by an error in the spec or model.
+> See the User Output or TLC Console for clues to what happened.
+> The exception was a java.lang.RuntimeException
+> :
+> 2229:0 The post condition Missing specified in the configuration file
+> is not defined in the specification.
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/to_trace_states model
+exit 12
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2110:1 Invariant Inv is violated.
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> x = 0
+> 2217:4 2: <Next line 17, col 9 to line 17, col 24 of module to_trace_states>
+> x = 1
+> 2217:4 3: <Next line 17, col 9 to line 17, col 24 of module to_trace_states>
+> x = 2
+> | <<[x |-> 0], [x |-> 1], [x |-> 2]>>
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/trace_action_constraint model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<0, 1, <<[x |-> 0]>>>>
+> | <<1, 2, <<[x |-> 0], [x |-> 1]>>>>
+> | <<2, 0, <<[x |-> 0], [x |-> 1], [x |-> 2]>>>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/trace_alias model
+exit 12
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2110:1 Invariant Inv is violated.
+> 2121:1 The behavior up to this point is:
+> 2217:4 1: <Initial predicate>
+> /\ x = 0
+> /\ len = 1
+> 2217:4 2: <Next line 17, col 9 to line 17, col 24 of module trace_alias>
+> /\ x = 1
+> /\ len = 2
+> 2217:4 3: <Next line 17, col 9 to line 17, col 24 of module trace_alias>
+> /\ x = 2
+> /\ len = 3
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/trace_elements_are_records model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/trace_in_next model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<[x |-> 0]>>
+> | <<[x |-> 0], [x |-> 1]>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 0.0
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/trace_init_after_assignment model
+exit 0
+> | <<[x |-> 0]>>
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 5.4E-20
+> 2199:0 2 states generated, 1 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 1.
+> 2268:0 The average outdegree of the complete state graph is 0 (minimum is 0, the maximum 0 and the 95th percentile is 0).
+== tlc/standard/tlc_ext/trace_init_before_assignment model
+exit 75
+> 1000:1 
+> 2154:0 Attempted to apply the operator overridden by the Java method
+> public static tlc2.value.impl.TupleValue tlc2.module.TLCExt.getTrace(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel) throws java.io.IOException,
+> but it produced the following error:
+> 1000:0 In evaluating TLCExt!Trace, the state is not completely specified yet (variable x undefined).
+> 2103:1 The error occurred when TLC was evaluating the nested
+> expressions at the following positions:
+> 0. Line 14, column 9 to line 14, column 29 in trace_init_before_assignment
+> 1. Line 14, column 9 to line 14, column 20 in trace_init_before_assignment
+> 2. Line 14, column 9 to line 14, column 13 in trace_init_before_assignment
+> 2199:0 0 states generated, 0 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 0.
+== tlc/standard/tlc_ext/trace_init_before_assignment_plural model
+exit 75
+> 1000:1 
+> 2154:0 Attempted to apply the operator overridden by the Java method
+> public static tlc2.value.impl.TupleValue tlc2.module.TLCExt.getTrace(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel) throws java.io.IOException,
+> but it produced the following error:
+> 1000:0 In evaluating TLCExt!Trace, the state is not completely specified yet (variables x, y undefined).
+> 2103:1 The error occurred when TLC was evaluating the nested
+> expressions at the following positions:
+> 0. Line 14, column 9 to line 14, column 38 in trace_init_before_assignment_plural
+> 1. Line 14, column 9 to line 14, column 29 in trace_init_before_assignment_plural
+> 2. Line 14, column 9 to line 14, column 20 in trace_init_before_assignment_plural
+> 3. Line 14, column 9 to line 14, column 13 in trace_init_before_assignment_plural
+> 2199:0 0 states generated, 0 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 0.
+== tlc/standard/tlc_ext/trace_invariant model
+exit 0
+> | <<[x |-> 0]>>
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<[x |-> 0], [x |-> 1]>>
+> | <<[x |-> 0], [x |-> 1], [x |-> 2]>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/trace_length model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_ext/trace_postcondition model
+exit 10
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2405:1 Evaluating postcondition Post at line 17, col 9 to line 17, col 21 of module trace_postcondition failed.
+> 2154:0 Attempted to apply the operator overridden by the Java method
+> public static tlc2.value.impl.TupleValue tlc2.module.TLCExt.getTrace(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel) throws java.io.IOException,
+> but it produced the following error:
+> 1000:0 In evaluating TLCExt!Trace, the state is not completely specified yet (variable x undefined).
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+== tlc/standard/tlc_ext/trace_simulate model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | <<[x |-> 0, _action |-> [name |-> "Init", location |-> [beginLine |-> 20, beginColumn |-> 9, endLine |-> 20, endColumn |-> 13, module |-> "trace_simulate"]]]>>
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<[x |-> 0, _action |-> [name |-> "Init", location |-> [beginLine |-> 20, beginColumn |-> 9, endLine |-> 20, endColumn |-> 13, module |-> "trace_simulate"]]], [x |-> 1, _action |-> [name |-> "Next", location |-> [beginLine |-> 21, beginColumn |-> 9, endLine |-> 21, endColumn |-> 24, module |-> "trace_simulate"]]]>>
+> | <<[x |-> 0, _action |-> [name |-> "Init", location |-> [beginLine |-> 20, beginColumn |-> 9, endLine |-> 20, endColumn |-> 13, module |-> "trace_simulate"]]], [x |-> 1, _action |-> [name |-> "Next", location |-> [beginLine |-> 21, beginColumn |-> 9, endLine |-> 21, endColumn |-> 24, module |-> "trace_simulate"]]], [x |-> 2, _action |-> [name |-> "Next", location |-> [beginLine |-> 21, beginColumn |-> 9, endLine |-> 21, endColumn |-> 24, module |-> "trace_simulate"]]]>>
+> | <<[x |-> 0, _action |-> [name |-> "Init", location |-> [beginLine |-> 20, beginColumn |-> 9, endLine |-> 20, endColumn |-> 13, module |-> "trace_simulate"]]], [x |-> 1, _action |-> [name |-> "Next", location |-> [beginLine |-> 21, beginColumn |-> 9, endLine |-> 21, endColumn |-> 24, module |-> "trace_simulate"]]], [x |-> 2, _action |-> [name |-> "Next", location |-> [beginLine |-> 21, beginColumn |-> 9, endLine |-> 21, endColumn |-> 24, module |-> "trace_simulate"]]], [x |-> 0, _action |-> [name |-> "Next", location |-> [beginLine |-> 21, beginColumn |-> 9, endLine |-> 21, endColumn |-> 24, module |-> "trace_simulate"]]]>>
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_ext/trace_state_constraint model
+exit 0
+> | <<[x |-> 0]>>
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<[x |-> 0], [x |-> 1]>>
+> | <<[x |-> 0], [x |-> 1], [x |-> 2]>>
+> | <<[x |-> 0], [x |-> 1], [x |-> 2], [x |-> 0]>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/action_unknown_bfs model
+exit 0
+> | [ name |-> "UnnamedAction",
+> |   location |->
+> |       [ beginLine |-> 0,
+> |         beginColumn |-> 0,
+> |         endLine |-> 0,
+> |         endColumn |-> 0,
+> |         module |-> "--TLA+ BUILTINS--" ] ]
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [ name |-> "UnnamedAction",
+> |   location |->
+> |       [ beginLine |-> 0,
+> |         beginColumn |-> 0,
+> |         endLine |-> 0,
+> |         endColumn |-> 0,
+> |         module |-> "--TLA+ BUILTINS--" ] ]
+> | [ name |-> "UnnamedAction",
+> |   location |->
+> |       [ beginLine |-> 0,
+> |         beginColumn |-> 0,
+> |         endLine |-> 0,
+> |         endColumn |-> 0,
+> |         module |-> "--TLA+ BUILTINS--" ] ]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/all_empty model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/all_named_empty model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/all_named_values model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | ("s:a" :> <<2>>)
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/all_values model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<<<2>>>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/assume_named_register_visible_in_workers model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 5.4E-20
+> 2199:0 2 states generated, 1 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 1.
+> 2268:0 The average outdegree of the complete state graph is 0 (minimum is 0, the maximum 0 and the 95th percentile is 0).
+== tlc/standard/tlc_get_set/assume_register_visible_in_workers model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 5.4E-20
+> 2199:0 2 states generated, 1 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 1.
+> 2268:0 The average outdegree of the complete state graph is 0 (minimum is 0, the maximum 0 and the 95th percentile is 0).
+== tlc/standard/tlc_get_set/config_bfs model
+exit 0
+> | [ mode |-> "bfs",
+> |   deadlock |-> TRUE,
+> |   worker |-> 1,
+> |   seed |-> "4",
+> |   fingerprint |-> "-7992595565342442794" ]
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [ mode |-> "bfs",
+> |   deadlock |-> TRUE,
+> |   worker |-> 1,
+> |   seed |-> "4",
+> |   fingerprint |-> "-7992595565342442794" ]
+> | [ mode |-> "bfs",
+> |   deadlock |-> TRUE,
+> |   worker |-> 1,
+> |   seed |-> "4",
+> |   fingerprint |-> "-7992595565342442794" ]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/config_bfs_domain model
+exit 0
+> | {"install", "mode", "deadlock", "seed", "fingerprint", "worker"}
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | {"install", "mode", "deadlock", "seed", "fingerprint", "worker"}
+> | {"install", "mode", "deadlock", "seed", "fingerprint", "worker"}
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/config_generate model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | "generate"
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | "generate"
+> | "generate"
+> 2209:0 Progress(1) at <date>: 3 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 3 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 3
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/config_no_deadlock model
+exit 0
+> | FALSE
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | FALSE
+> | FALSE
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/config_simulate model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | [ mode |-> "simulate",
+> |   depth |-> 3,
+> |   traces |-> 1,
+> |   deadlock |-> TRUE,
+> |   seed |-> "4",
+> |   aril |-> "0",
+> |   worker |-> 1 ]
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [ mode |-> "simulate",
+> |   depth |-> 3,
+> |   traces |-> 1,
+> |   deadlock |-> TRUE,
+> |   seed |-> "4",
+> |   aril |-> "0",
+> |   worker |-> 1 ]
+> | [ mode |-> "simulate",
+> |   depth |-> 3,
+> |   traces |-> 1,
+> |   deadlock |-> TRUE,
+> |   seed |-> "4",
+> |   aril |-> "0",
+> |   worker |-> 1 ]
+> | [ mode |-> "simulate",
+> |   depth |-> 3,
+> |   traces |-> 1,
+> |   deadlock |-> TRUE,
+> |   seed |-> "4",
+> |   aril |-> "0",
+> |   worker |-> 1 ]
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/config_simulate_domain model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | { "install",
+> |   "mode",
+> |   "deadlock",
+> |   "seed",
+> |   "worker",
+> |   "traces",
+> |   "depth",
+> |   "aril",
+> |   "sched" }
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | { "install",
+> |   "mode",
+> |   "deadlock",
+> |   "seed",
+> |   "worker",
+> |   "traces",
+> |   "depth",
+> |   "aril",
+> |   "sched" }
+> | { "install",
+> |   "mode",
+> |   "deadlock",
+> |   "seed",
+> |   "worker",
+> |   "traces",
+> |   "depth",
+> |   "aril",
+> |   "sched" }
+> | { "install",
+> |   "mode",
+> |   "deadlock",
+> |   "seed",
+> |   "worker",
+> |   "traces",
+> |   "depth",
+> |   "aril",
+> |   "sched" }
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/counter_next_read_in_postcondition model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | 2
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 0.0
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/counters_invariant model
+exit 0
+> | [distinct |-> 1, queue |-> 1, generated |-> 1, diameter |-> 1]
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [distinct |-> 2, queue |-> 0, generated |-> 2, diameter |-> 2]
+> | [distinct |-> 3, queue |-> 0, generated |-> 3, diameter |-> 3]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/counters_postcondition model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [distinct |-> 3, queue |-> 0, generated |-> 4, diameter |-> 3]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/exit_true_invariant model
+exit 0
+> | 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | 1
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 0.0
+> 2199:0 2 states generated, 2 distinct states found, 1 states left on queue.
+> 2194:0 The depth of the complete state graph search is 2.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 1, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/exit_true_stops_next model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | 0
+> | 1
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 0.0
+> 2199:0 3 states generated, 3 distinct states found, 1 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 1, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/init_register_visible_in_next model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | 42
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 5.4E-20
+> 2199:0 2 states generated, 1 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 1.
+> 2268:0 The average outdegree of the complete state graph is 0 (minimum is 0, the maximum 0 and the 95th percentile is 0).
+== tlc/standard/tlc_get_set/level_action_constraint model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<0, 1>>
+> | <<1, 2>>
+> | <<2, 3>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/level_constraint model
+exit 0
+> | <<0, 1>>
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<1, 2>>
+> | <<2, 3>>
+> | <<0, 4>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/level_in_next_relation model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 0.0
+> 2199:0 3 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/level_invariant model
+exit 0
+> | <<0, 1>>
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<1, 2>>
+> | <<2, 3>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/level_primed model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<0, 1, 1, 2>>
+> | <<1, 2, 2, 3>>
+> | <<2, 0, 3, 4>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/pause_true_prompts model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | Press enter to resume model checking.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/simulate_action model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | "Init"
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | "Next"
+> | "Next"
+> | "Next"
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/simulate_action_location model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | [ beginLine |-> 20,
+> |   beginColumn |-> 9,
+> |   endLine |-> 20,
+> |   endColumn |-> 13,
+> |   module |-> "simulate_action_location" ]
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [ beginLine |-> 21,
+> |   beginColumn |-> 9,
+> |   endLine |-> 21,
+> |   endColumn |-> 24,
+> |   module |-> "simulate_action_location" ]
+> | [ beginLine |-> 21,
+> |   beginColumn |-> 9,
+> |   endLine |-> 21,
+> |   endColumn |-> 24,
+> |   module |-> "simulate_action_location" ]
+> | [ beginLine |-> 21,
+> |   beginColumn |-> 9,
+> |   endLine |-> 21,
+> |   endColumn |-> 24,
+> |   module |-> "simulate_action_location" ]
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/simulate_diameter model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | 1
+> | 1
+> | 1
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/simulate_level model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | <<0, 1>>
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<1, 2>>
+> | <<2, 3>>
+> | <<0, 4>>
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/simulate_named_register model
+exit 0
+> 2269:0 Computed 1 initial states...
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/simulate_register model
+exit 0
+> 2269:0 Computed 1 initial states...
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/simulate_stats_domain model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | { "behavior",
+> |   "worker",
+> |   "traces",
+> |   "actions",
+> |   "duration",
+> |   "generated",
+> |   "distinct",
+> |   "retries",
+> |   "distinctvalues",
+> |   "levelmean",
+> |   "levelvariance" }
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | { "behavior",
+> |   "worker",
+> |   "traces",
+> |   "actions",
+> |   "duration",
+> |   "generated",
+> |   "distinct",
+> |   "retries",
+> |   "distinctvalues",
+> |   "levelmean",
+> |   "levelvariance" }
+> | { "behavior",
+> |   "worker",
+> |   "traces",
+> |   "actions",
+> |   "duration",
+> |   "generated",
+> |   "distinct",
+> |   "retries",
+> |   "distinctvalues",
+> |   "levelmean",
+> |   "levelvariance" }
+> | { "behavior",
+> |   "worker",
+> |   "traces",
+> |   "actions",
+> |   "duration",
+> |   "generated",
+> |   "distinct",
+> |   "retries",
+> |   "distinctvalues",
+> |   "levelmean",
+> |   "levelvariance" }
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/simulate_stats_fields model
+exit 0
+> 2269:0 Computed 1 initial states...
+> | [traces |-> 0, generated |-> 1, worker |-> 0]
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [traces |-> 1, generated |-> 2, worker |-> 0]
+> | [traces |-> 1, generated |-> 3, worker |-> 0]
+> | [traces |-> 1, generated |-> 4, worker |-> 0]
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2209:0 Progress(1) at <date>: 4 states generated, -1 distinct states found, -1 states left on queue.
+> 2210:0 The number of states generated: 4
+> Simulation using seed 4 and aril 0
+== tlc/standard/tlc_get_set/spec_action_names model
+exit 0
+> | {"Next"}
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | {"Next"}
+> | {"Next"}
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/spec_action_per_disjunct model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | {"Next"}
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 3.3E-19
+> 2199:0 5 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 2.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 2 and the 95th percentile is 2).
+== tlc/standard/tlc_get_set/spec_domain model
+exit 0
+> | { "impliedinits",
+> |   "impliedactions",
+> |   "invariants",
+> |   "impliedtemporals",
+> |   "temporals",
+> |   "actions",
+> |   "inits",
+> |   "variables",
+> |   "actionconstraints",
+> |   "constraints" }
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | { "impliedinits",
+> |   "impliedactions",
+> |   "invariants",
+> |   "impliedtemporals",
+> |   "temporals",
+> |   "actions",
+> |   "inits",
+> |   "variables",
+> |   "actionconstraints",
+> |   "constraints" }
+> | { "impliedinits",
+> |   "impliedactions",
+> |   "invariants",
+> |   "impliedtemporals",
+> |   "temporals",
+> |   "actions",
+> |   "inits",
+> |   "variables",
+> |   "actionconstraints",
+> |   "constraints" }
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/spec_invariant_names model
+exit 0
+> | {"Inv"}
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | {"Inv"}
+> | {"Inv"}
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/spec_postcondition model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [ impliedinits |-> {},
+> |   impliedactions |-> {},
+> |   invariants |->
+> |       { [ name |-> "Inv",
+> |           location |->
+> |               [ beginLine |-> 23,
+> |                 beginColumn |-> 8,
+> |                 endLine |-> 23,
+> |                 endColumn |-> 12,
+> |                 module |-> "spec_postcondition" ] ],
+> |         [ name |-> "Prop",
+> |           location |->
+> |               [ beginLine |-> 24,
+> |                 beginColumn |-> 12,
+> |                 endLine |-> 24,
+> |                 endColumn |-> 16,
+> |                 module |-> "spec_postcondition" ] ] },
+> |   impliedtemporals |-> {},
+> |   temporals |-> {},
+> |   actions |->
+> |       { [ name |-> "Next",
+> |           location |->
+> |               [ beginLine |-> 20,
+> |                 beginColumn |-> 9,
+> |                 endLine |-> 20,
+> |                 endColumn |-> 24,
+> |                 module |-> "spec_postcondition" ] ] },
+> |   inits |->
+> |       { [ name |-> "Init",
+> |           location |->
+> |               [ beginLine |-> 19,
+> |                 beginColumn |-> 9,
+> |                 endLine |-> 19,
+> |                 endColumn |-> 13,
+> |                 module |-> "spec_postcondition" ] ] },
+> |   variables |->
+> |       { [ name |-> "x",
+> |           location |->
+> |               [ beginLine |-> 18,
+> |                 beginColumn |-> 10,
+> |                 endLine |-> 18,
+> |                 endColumn |-> 10,
+> |                 module |-> "spec_postcondition" ] ] },
+> |   actionconstraints |->
+> |       { [ name |-> "Act",
+> |           location |->
+> |               [ beginLine |-> 22,
+> |                 beginColumn |-> 1,
+> |                 endLine |-> 22,
+> |                 endColumn |-> 13,
+> |                 module |-> "spec_postcondition" ] ] },
+> |   constraints |->
+> |       { [ name |-> "Con",
+> |           location |->
+> |               [ beginLine |-> 21,
+> |                 beginColumn |-> 1,
+> |                 endLine |-> 21,
+> |                 endColumn |-> 12,
+> |                 module |-> "spec_postcondition" ] ] } ]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/spec_variable_names model
+exit 0
+> | {"x"}
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | {"x"}
+> | {"x"}
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/spec_with_coverage model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | {[generated |-> 3, distinct |-> 2]}
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2201:0 The coverage statistics at <date> (see https://explain.tlapl.us/module-coverage-statistics for how to interpret the following statistics).
+> 2779:0 <x line 17, col 10 to line 17, col 10 of module spec_with_coverage>: 2
+> 2773:0 <Init line 18, col 1 to line 18, col 4 of module spec_with_coverage>: 1:1
+> 2221:0   line 18, col 9 to line 18, col 13 of module spec_with_coverage: 1
+> 2772:0 <Next line 19, col 1 to line 19, col 4 of module spec_with_coverage>: 2:3
+> 2221:0   line 19, col 9 to line 19, col 24 of module spec_with_coverage: 3
+> 2202:0 End of statistics.
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/stats_domain model
+exit 0
+> | {"worker", "duration", "generated", "diameter", "distinct", "initial", "queue"}
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | {"worker", "duration", "generated", "diameter", "distinct", "initial", "queue"}
+> | {"worker", "duration", "generated", "diameter", "distinct", "initial", "queue"}
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/stats_invariant model
+exit 0
+> | [q |-> 1, d |-> 1, i |-> 1, g |-> 1, m |-> 1, w |-> 0]
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [q |-> 0, d |-> 2, i |-> 1, g |-> 2, m |-> 2, w |-> 0]
+> | [q |-> 0, d |-> 3, i |-> 1, g |-> 3, m |-> 3, w |-> 0]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/tlc_get_set/stats_postcondition model
+exit 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | [q |-> 0, d |-> 3, i |-> 1, g |-> 4, m |-> 3, w |-> 0]
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 1.6E-19
+> 2199:0 4 states generated, 3 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 3.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/toolbox/teposition_clamps_to_trace_length model
+exit 0
+> | <<0, 1>>
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> | <<1, 2>>
+> | <<2, 2>>
+> | <<3, 2>>
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 2.2E-19
+> 2199:0 5 states generated, 4 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 4.
+> 2268:0 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 1 and the 95th percentile is 1).
+== tlc/standard/toolbox/teposition_empty_trace model
+exit 0
+> | 0
+> 2190:0 Finished computing initial states: 1 distinct state generated at <date>.
+> 2193:0 Model checking completed. No error has been found.
+>   Estimates of the probability that TLC did not check all reachable states
+>   because two distinct states had the same fingerprint:
+>   calculated (optimistic):  val = 5.4E-20
+> 2199:0 2 states generated, 1 distinct states found, 0 states left on queue.
+> 2194:0 The depth of the complete state graph search is 1.
+> 2268:0 The average outdegree of the complete state graph is 0 (minimum is 0, the maximum 0 and the 95th percentile is 0).
