@@ -359,6 +359,7 @@ mod tests {
             Value::Union(Arc::new(crate::value::UnionValue {
                 set: set(vec![set(vec![int(1)]), set(vec![int(2), int(1)])]),
                 converted: Default::default(),
+                source: crate::value::Source::none(),
             })),
             crate::value::set_of_fcns(set(vec![int(1), int(2)]), set(vec![Value::Bool(false), Value::Bool(true)])),
             crate::value::set_of_tuples(vec![set(vec![int(1), int(2)]), set(vec![s("a")])]),
