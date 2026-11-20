@@ -1379,7 +1379,7 @@ impl J<SanyOutput> {
     /// Keeps the message, and prints it as TLC's `SimpleSanyOutput(ToolIO.out, INFO)` does.
     fn record(&self, level: LogLevel, message: String) {
         if !matches!(level, LogLevel::Trace | LogLevel::Debug) {
-            super::load::console(super::load::ConsoleLine::Out(message.clone()));
+            super::load::console(super::load::ConsoleLine::Log(message.clone()));
         }
         self.jget_mut().messages.push((level, message));
     }

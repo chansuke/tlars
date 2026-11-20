@@ -237,6 +237,9 @@ fn golden_specs(golden: &Path) -> Vec<GoldenSpec> {
 struct Console(Vec<String>);
 
 impl crate::SanyOut for Console {
+    fn log_line(&mut self, text: &str) {
+        self.line(text);
+    }
     fn line(&mut self, text: &str) {
         self.0.push(format!("out {}", esc(&normalize(text))));
     }

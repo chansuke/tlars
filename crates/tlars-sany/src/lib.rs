@@ -46,12 +46,16 @@ impl SanyErrorCode {
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// SANY's console output, line by line: what TLC's `SimpleSanyOutput` prints to
-/// `ToolIO.out` ("Parsing file ...", "Semantic processing of module X", warnings and errors)
-/// and what PlusCal and the module resolver print to `ToolIO.out`/`ToolIO.err`, in the
-/// order TLC prints them. A line may contain newlines (one `println`).
+/// SANY's console output, line by line, in the order TLC prints it. A line may contain
+/// newlines (one `println`). TLC sends the two kinds of `ToolIO.out` line to different
+/// streams when it holds SANY's log back (`DelayedPrintStream`), so they stay apart here.
 pub trait SanyOut {
+    /// What TLC's `SimpleSanyOutput` logs ("Parsing file ...", "Semantic processing of
+    /// module X", warnings and errors).
+    fn log_line(&mut self, text: &str);
+    /// What PlusCal and the module resolver print to `ToolIO.out` directly.
     fn line(&mut self, text: &str);
+    /// `ToolIO.err`.
     fn err_line(&mut self, text: &str);
 }
 
@@ -110,6 +114,7 @@ pub fn load(req: LoadRequest<'_>, out: &mut dyn SanyOut) -> Result<graph::Semant
         .expect("spawning the SANY thread");
     for line in rx {
         match line {
+            parser::ConsoleLine::Log(s) => out.log_line(&s),
             parser::ConsoleLine::Out(s) => out.line(&s),
             parser::ConsoleLine::Err(s) => out.err_line(&s),
         }

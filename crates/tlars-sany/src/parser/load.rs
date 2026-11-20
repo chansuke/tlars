@@ -22,8 +22,9 @@ pub(crate) struct LoadJob {
     pub(crate) messages_as_errors: Vec<SanyErrorCode>,
 }
 
-/// One `println` to TLC's `ToolIO.out` (where `SimpleSanyOutput` writes too) or `ToolIO.err`.
+/// One `println` by `SimpleSanyOutput`, or one to TLC's `ToolIO.out` or `ToolIO.err`.
 pub(crate) enum ConsoleLine {
+    Log(String),
     Out(String),
     Err(String),
 }
