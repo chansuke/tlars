@@ -443,6 +443,66 @@ impl<'t> Ev<'t> {
                 }
                 Ok(Value::set_enum(vals.into_vec()))
             }
+            // The eager form is the receiver's, so TLC swaps the operands when only the
+            // right one reduces: `SUBSET {} \cup {1}` is built from `{1}`
+            // (`Tool.java:2673-2719`).
+            Builtin::Cup | Builtin::Cap | Builtin::Setdiff => {
+                let a1 = self.eval(arg(0), c, s0, s1, control)?;
+                let a2 = self.eval(arg(1), c, s0, s1, control)?;
+                match builtin {
+                    Builtin::Cup if a1.is_reducible() => a1.cup(self, &a2),
+                    Builtin::Cup if a2.is_reducible() => a2.cup(self, &a1),
+                    Builtin::Cup => Ok(crate::value::lazy_cup(a1, a2)),
+                    Builtin::Cap if a1.is_reducible() => a1.cap(self, &a2),
+                    Builtin::Cap if a2.is_reducible() => a2.cap(self, &a1),
+                    Builtin::Cap => Ok(crate::value::lazy_cap(a1, a2)),
+                    // Only the left side of `\` may reduce: the right one is not enumerated.
+                    _ if a1.is_reducible() => a1.diff(self, &a2),
+                    _ => Ok(crate::value::lazy_diff(a1, a2)),
+                }
+            }
+            Builtin::Subseteq => {
+                let a1 = self.eval(arg(0), c, s0, s1, control)?;
+                let a2 = self.eval(arg(1), c, s0, s1, control)?;
+                if !a1.is_enumerable() {
+                    let reason = format!(
+                        "Attempted to evaluate an expression of form S \\subseteq T, but S was not enumerable.\n{}",
+                        text(self, expr)
+                    );
+                    return Err(not_boolean(self, reason, expr));
+                }
+                Ok(Value::Bool(a1.is_subset_eq(self, &a2)?))
+            }
+            Builtin::Subset => {
+                let v = self.eval(arg(0), c, s0, s1, control)?;
+                Ok(crate::value::subset(v))
+            }
+            Builtin::Union => {
+                let v = self.eval(arg(0), c, s0, s1, control)?;
+                v.union(self)
+            }
+            Builtin::CartesianProd => {
+                let mut sets = Vec::with_capacity(args.len());
+                for i in 0..args.len() {
+                    sets.push(self.eval(arg(i), c, s0, s1, control)?);
+                }
+                Ok(crate::value::set_of_tuples(sets))
+            }
+            Builtin::SetOfFcns => {
+                let domain = self.eval(arg(0), c, s0, s1, control)?;
+                let range = self.eval(arg(1), c, s0, s1, control)?;
+                Ok(crate::value::set_of_fcns(domain, range))
+            }
+            Builtin::SetOfRcds => {
+                let mut names = Vec::with_capacity(args.len());
+                let mut sets = Vec::with_capacity(args.len());
+                for i in 0..args.len() {
+                    let (name, set) = pair(&graph, arg(i));
+                    names.push(self.field_name(name));
+                    sets.push(self.eval(set, c, s0, s1, control)?);
+                }
+                crate::value::set_of_rcds(self, names, sets)
+            }
             Builtin::SetEnumerate => {
                 let mut elems = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
@@ -748,6 +808,15 @@ enum Builtin {
     BoundedChoose,
     SubsetOf,
     SetOfAll,
+    Cup,
+    Cap,
+    Setdiff,
+    Subseteq,
+    Subset,
+    Union,
+    CartesianProd,
+    SetOfFcns,
+    SetOfRcds,
     UnboundedChoose,
     UnboundedExists,
     UnboundedForall,
@@ -795,6 +864,15 @@ impl Builtin {
             "$BoundedExists" => Builtin::BoundedExists,
             "$BoundedChoose" => Builtin::BoundedChoose,
             "$SubsetOf" => Builtin::SubsetOf,
+            "\\union" => Builtin::Cup,
+            "\\intersect" => Builtin::Cap,
+            "\\" => Builtin::Setdiff,
+            "\\subseteq" => Builtin::Subseteq,
+            "SUBSET" => Builtin::Subset,
+            "UNION" => Builtin::Union,
+            "$CartesianProd" => Builtin::CartesianProd,
+            "$SetOfFcns" => Builtin::SetOfFcns,
+            "$SetOfRcds" => Builtin::SetOfRcds,
             "$SetOfAll" => Builtin::SetOfAll,
             "$UnboundedChoose" => Builtin::UnboundedChoose,
             "$UnboundedExists" => Builtin::UnboundedExists,

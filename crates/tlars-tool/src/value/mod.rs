@@ -21,8 +21,10 @@ mod fingerprint;
 mod function;
 mod order;
 mod print;
+mod sets;
 
 pub(crate) use function::{Except, warn};
+pub(crate) use sets::{lazy_cap, lazy_cup, lazy_diff, set_of_fcns, set_of_rcds, set_of_tuples, subset};
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
@@ -150,6 +152,18 @@ pub struct TupleValue {
 pub struct SetEnumValue {
     pub(crate) built: Box<[Value]>,
     pub(crate) norm: OnceLock<Box<[Value]>>,
+}
+
+impl SetEnumValue {
+    /// `this.elems`: the normalised array once `normalize()` has run, the constructed one
+    /// before. The eager set operators read it, which is why their result's order depends on
+    /// whether the operand had been normalised.
+    pub(crate) fn snapshot(&self) -> &[Value] {
+        match self.norm.get() {
+            Some(norm) => norm,
+            None => &self.built,
+        }
+    }
 }
 
 /// Fields as constructed; normalised = sorted by name token.
@@ -719,5 +733,13 @@ impl ValueVec {
 
     pub(crate) fn into_vec(self) -> Vec<Value> {
         self.elems
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.elems.len()
+    }
+
+    pub(crate) fn get(&self, index: usize) -> Value {
+        self.elems[index].clone()
     }
 }
