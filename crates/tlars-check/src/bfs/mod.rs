@@ -368,7 +368,10 @@ impl<'a> ModelChecker<'a> {
                 Ok(false) => {
                     if self.continue_after_violation {
                         self.out.error(Ec::TLC_INVARIANT_VIOLATED_BEHAVIOR, &[&name]);
-                        self.print_trace(ev, cur, Some(Succ::Complete(succ)));
+                        // `-continue` keeps checking, and `printTrace` is called without the
+                        // `printTraceAndStop` catch, so a failure here travels as the check's
+                        // own failure.
+                        self.print_trace(ev, cur, Some(Succ::Complete(succ)))?;
                         continue;
                     }
                     if self.set_err(ErrState::Invariant { id, pred: cur.clone(), state: succ.clone() }) {
@@ -403,7 +406,10 @@ impl<'a> ModelChecker<'a> {
                 Ok(false) => {
                     if self.continue_after_violation {
                         self.out.error(Ec::TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR, &[&name]);
-                        self.print_trace(ev, cur, Some(Succ::Complete(succ)));
+                        // `-continue` keeps checking, and `printTrace` is called without the
+                        // `printTraceAndStop` catch, so a failure here travels as the check's
+                        // own failure.
+                        self.print_trace(ev, cur, Some(Succ::Complete(succ)))?;
                         continue;
                     }
                     if self.set_err(ErrState::ImpliedAction { id, pred: cur.clone(), state: succ.clone() }) {
@@ -472,7 +478,10 @@ impl<'a> ModelChecker<'a> {
                 let label = ev.action_name(action);
                 self.out.error(Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_NEXT, &[&label, plural, &names]);
             }
-            self.print_trace(&mut ev, cur, Some(Succ::Partial(s1)));
+            if let Err(e) = self.print_trace(&mut ev, cur, Some(Succ::Partial(s1))) {
+                let body = tlars_msg::unexpected_exception(java_class(&e), &e.message);
+                self.out.error(Ec::GENERAL, &[&body]);
+            }
             self.queue.finish_all();
             self.post_condition_trace(&mut ev, cur, Some(Succ::Partial(s1)), false);
         }
@@ -597,7 +606,13 @@ impl<'a> ModelChecker<'a> {
 
     /// `printTraceAndStop`: the trace, then every worker is told to stop.
     fn print_trace_and_stop(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<&State>) {
-        self.print_trace(ev, cur, succ.map(Succ::Complete));
+        // `printTraceAndStop`'s `catch (final Throwable e) { MP.printError(EC.GENERAL, e); }`
+        // (`ModelChecker.java:686-693`): printing a state whose value cannot be fingerprinted
+        // fails, and the error is reported in place of the rest of the trace.
+        if let Err(e) = self.print_trace(ev, cur, succ.map(Succ::Complete)) {
+            let body = tlars_msg::unexpected_exception(java_class(&e), &e.message);
+            self.out.error(Ec::GENERAL, &[&body]);
+        }
         self.queue.finish_all();
     }
 
@@ -672,18 +687,18 @@ impl<'a> ModelChecker<'a> {
 
     /// `ConcurrentTLCTrace.printTrace(s1, s2)` (`TLCTrace.java:349-443`): 2121, then the
     /// reconstructed prefix, `s1` and `s2`, each printed as 2217.
-    fn print_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>) {
+    fn print_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>) -> Result<(), EvalError> {
         let fps = self.traces.fingerprints_to(cur.ptr);
         // An initial `s1` is printed as it stands, with no regeneration at all
         // (`TLCTrace.java:350-370`).
         if fps.len() <= 1 {
             self.out.error(Ec::TLC_BEHAVIOR_UP_TO_THIS_POINT, &[]);
             let step = tlars_tool::StateInfo { state: cur.state.clone(), action: None };
-            self.print_state(ev, &step, None, 1);
+            self.print_state(ev, &step, None, 1)?;
             if let Some(succ) = succ {
-                self.print_last(ev, &cur.state, cur.fp, succ, Some(&cur.state), 2);
+                self.print_last(ev, &cur.state, cur.fp, succ, Some(&cur.state), 2)?;
             }
-            return;
+            return Ok(());
         }
         // `getTrace(s1)` is the *argument* of the three-parameter `printTrace`
         // (`ConcurrentTLCTrace.java:208-214`), so the prefix is reconstructed before 2121 is
@@ -694,18 +709,15 @@ impl<'a> ModelChecker<'a> {
             Ok(Some(steps)) => steps,
             Ok(None) => {
                 self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
-                return;
+                return Ok(());
             }
-            Err(e) => {
-                self.out.error(Ec::GENERAL, &[&e.message]);
-                return;
-            }
+            Err(e) => return Err(e),
         };
         let mut printed: Option<State> = None;
         let mut number = 0;
         for step in prefix.iter() {
             number += 1;
-            self.print_state(ev, step, printed.as_ref(), number);
+            self.print_state(ev, step, printed.as_ref(), number)?;
             printed = Some(step.state.clone());
         }
         // `s1` itself is regenerated from the last prefix state only *after* that state has
@@ -714,12 +726,13 @@ impl<'a> ModelChecker<'a> {
         let pred = prefix.last().expect("a prefix of at least one state").state.clone();
         let pred_fp = fps[fps.len() - 2];
         number += 1;
-        if !self.print_successor(ev, &pred, pred_fp, Succ::Complete(&cur.state), printed.as_ref(), number) {
-            return;
+        if !self.print_successor(ev, &pred, pred_fp, Succ::Complete(&cur.state), printed.as_ref(), number)? {
+            return Ok(());
         }
         if let Some(succ) = succ {
-            self.print_last(ev, &cur.state, cur.fp, succ, Some(&cur.state), number + 1);
+            self.print_last(ev, &cur.state, cur.fp, succ, Some(&cur.state), number + 1)?;
         }
+        Ok(())
     }
 
     /// `getState(fp, pred)` followed by the state's own line: the action label is the first
@@ -736,7 +749,7 @@ impl<'a> ModelChecker<'a> {
         succ: Succ<'_>,
         printed: Option<&State>,
         number: usize,
-    ) -> bool {
+    ) -> Result<bool, EvalError> {
         let target = match succ {
             Succ::Complete(state) => tlars_tool::PartialState::from_state(state),
             Succ::Partial(s1) => s1.copy_out(),
@@ -746,7 +759,7 @@ impl<'a> ModelChecker<'a> {
                 match ev.complete(&state) {
                     Some(complete) => {
                         let step = tlars_tool::StateInfo { state: complete, action: Some(action) };
-                        self.print_state(ev, &step, printed, number);
+                        self.print_state(ev, &step, printed, number)?;
                     }
                     None => {
                         // An incomplete state has no fingerprint, so TLC prints `-1`.
@@ -755,16 +768,13 @@ impl<'a> ModelChecker<'a> {
                         self.out.state(Ec::TLC_STATE_PRINT2, &[&number.to_string(), &label, &shown, "-1"]);
                     }
                 }
-                true
+                Ok(true)
             }
             Ok(None) => {
                 self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
-                false
+                Ok(false)
             }
-            Err(e) => {
-                self.out.error(Ec::GENERAL, &[&e.message]);
-                false
-            }
+            Err(e) => Err(e),
         }
     }
 
@@ -776,39 +786,33 @@ impl<'a> ModelChecker<'a> {
         succ: Succ<'_>,
         printed: Option<&State>,
         number: usize,
-    ) -> bool {
+    ) -> Result<bool, EvalError> {
         let Succ::Complete(state) = succ else { unreachable!("only the last state may be incomplete") };
-        let fp = match ev.fingerprint(state) {
-            Ok(fp) => fp,
-            Err(e) => {
-                self.out.error(Ec::GENERAL, &[&e.message]);
-                return false;
-            }
-        };
+        let fp = ev.fingerprint(state)?;
         match ev.successor_from_fp(pred, pred_fp, fp) {
             Ok(Some(step)) => {
-                self.print_state(ev, &step, printed, number);
-                true
+                self.print_state(ev, &step, printed, number)?;
+                Ok(true)
             }
             Ok(None) => {
                 self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
-                false
+                Ok(false)
             }
-            Err(e) => {
-                self.out.error(Ec::GENERAL, &[&e.message]);
-                false
-            }
+            Err(e) => Err(e),
         }
     }
 
     /// `StatePrinter.printInvariantViolationStateTraceState`: 2217 with the state number, the
     /// action label, the state and its fingerprint.
-    fn print_state(&self, ev: &mut Ev<'_>, step: &tlars_tool::StateInfo, prev: Option<&State>, number: usize) {
+    fn print_state(&self, ev: &mut Ev<'_>, step: &tlars_tool::StateInfo, prev: Option<&State>, number: usize) -> Result<(), EvalError> {
         let difftrace = self.tool.globals().difftrace;
         let label = ev.state_label(step);
         let shown = ev.print_state(&step.state, if difftrace { prev } else { None });
-        let fp = ev.fingerprint(&step.state).map(|fp| fp.raw() as i64).unwrap_or(-1);
+        // `currentStateInfo.fingerPrint()` for the `fp:` field: a value a variable may not
+        // hold fails here, and the failure replaces the rest of the trace.
+        let fp = ev.fingerprint(&step.state)?.raw() as i64;
         self.out.state(Ec::TLC_STATE_PRINT2, &[&number.to_string(), &label, &shown, &fp.to_string()]);
+        Ok(())
     }
 }
 

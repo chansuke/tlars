@@ -477,6 +477,7 @@ tlc/checker/states/set_and_string_differ_as_states
 tlc/checker/states/set_of_tuples_vs_seq
 tlc/checker/states/set_vs_integer_invariant_fails_equality
 tlc/checker/states/state_with_infinite_value_fails_fingerprint
+tlc/checker/states/state_with_infinite_value_next
 tlc/checker/states/stuttering_counts
 tlc/checker/states/stuttering_is_not_invariant_rechecked
 tlc/checker/states/subset_vs_enumeration
