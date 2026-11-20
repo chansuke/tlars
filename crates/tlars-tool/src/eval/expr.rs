@@ -736,7 +736,7 @@ impl<'t> Ev<'t> {
                 Ok(Value::Bool(enabled))
             }
             Builtin::Nop => self.eval(arg(0), c, s0, s1, control),
-            Builtin::Cdot => Err(EvalError::unimplemented("action composition (A \\cdot B)".into())),
+            Builtin::Cdot => Err(super::enabled::cdot_unsupported(self, expr)),
             Builtin::Box | Builtin::TemporalExists | Builtin::TemporalForall => {
                 Err(EvalError::unimplemented("a temporal operator outside PROPERTY (M4)".into()))
             }

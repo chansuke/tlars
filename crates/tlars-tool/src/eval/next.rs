@@ -288,7 +288,7 @@ impl<'t> Ev<'t> {
             }
             Builtin::Unchanged => self.process_unchanged(a, arg(0), acts, c, s0, s1, sink),
             Builtin::Nop => self.next_impl(a, arg(0), acts, c, s0, s1, sink),
-            Builtin::Cdot => Err(EvalError::unimplemented("action composition (A \\cdot B)".into()).into()),
+            Builtin::Cdot => Err(super::enabled::cdot_unsupported(self, pred).into()),
             // Every other built-in operator is a boolean filter.
             _ => {
                 let v = self.eval(pred, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
