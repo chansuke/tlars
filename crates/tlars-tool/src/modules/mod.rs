@@ -93,6 +93,8 @@ natives! {
     "TLC" "PrintT" (V) tlc::print_t, "public static tlc2.value.impl.Value tlc2.module.TLC.PrintT(tlc2.value.impl.Value)";
     "TLC" "ToString" (V) tlc::to_string, "public static tlc2.value.impl.Value tlc2.module.TLC.ToString(tlc2.value.impl.Value)";
     "TLC" "Assert" (V, V) tlc::assert, "public static tlc2.value.impl.Value tlc2.module.TLC.Assert(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" ":>" (V, V) tlc::make_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.MakeFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" "@@" (V, V) tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
 }
 
 /// The `tlc2.module` classes. A module with one of these names has its own definitions
@@ -124,7 +126,20 @@ pub(crate) fn apply(ev: &mut Ev<'_>, id: NativeId, args: &[Value]) -> EvalResult
         }
     }
     match op.imp {
-        NativeImpl::Strict(f) => f(ev, args),
+        NativeImpl::Strict(f) => f(ev, args).map_err(|e| wrap(ev, op, e)),
         NativeImpl::Lazy(_) => unreachable!("lazy natives are applied with their argument expressions"),
     }
+}
+
+/// `MethodValue.eval`'s catch (`MethodValue.java:147-169`): an `EvalException` the method
+/// raised on purpose passes through, and anything else is rewrapped as
+/// `TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE` naming the Java method. A construct tlars does
+/// not implement is not one of TLC's failures, so it is not wrapped either.
+fn wrap(ev: &Ev<'_>, op: &NativeOp, e: EvalError) -> EvalError {
+    use crate::error::EvalErrorKind::{Eval, StackOverflow, Unimplemented};
+    if matches!(e.kind, Eval | Unimplemented | StackOverflow) {
+        return e;
+    }
+    let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[op.signature, &e.message]);
+    EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message)
 }
