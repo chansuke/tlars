@@ -62,10 +62,18 @@ impl Value {
         }
     }
 
-    /// `UserValue.compareTo` for `Nat` and `Int` (`Naturals.java:226-240`,
-    /// `Integers.java`): Nat < Int, both above model values.
+    /// `UserValue.compareTo` (`UserValue.java`): another special set is compared by the
+    /// receiver's `UserObj` (`Naturals.java:226-240`, `Integers.java`, `Strings.java`), a
+    /// model value is below, anything else is an error.
     fn user_compare(&self, ev: &mut Ev<'_>, other: &Value) -> EvalResult<Ordering> {
         let Value::User(u) = self else { unreachable!("user_compare on a user value") };
+        if !matches!(other, Value::User(_)) {
+            if matches!(other, Value::Model(_)) {
+                return Ok(Ordering::Greater);
+            }
+            let (a, b) = (self.ppr(ev)?, other.ppr(ev)?);
+            return Err(EvalError::detailed(format!("Attempted to compare overridden value {a} with non-overridden value:\n{b}"), None));
+        }
         let (rank, name) = match **u {
             UserValue::Nat => (0, "Nat"),
             UserValue::Int => (1, "Int"),

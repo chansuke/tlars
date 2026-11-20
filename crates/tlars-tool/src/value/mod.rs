@@ -379,7 +379,14 @@ impl Value {
     /// `deepNormalize()`: done before a state is fingerprinted / shared.
     pub(crate) fn deep_normalize(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
         match self {
-            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::Interval(_) => Ok(()),
+            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::Interval(_) | Value::User(_) => Ok(()),
+            // Elements first, then the set itself (`SetEnumValue.java:307-319`).
+            Value::SetEnum(set) => {
+                for e in set.built.iter() {
+                    e.deep_normalize(ev)?;
+                }
+                order::normalized(ev, set).map(|_| ())
+            }
             _ => Err(crate::error::EvalError::unimplemented("deepNormalize of compound values (M2 unit 3)".into())),
         }
     }
