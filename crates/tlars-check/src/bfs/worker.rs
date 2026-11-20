@@ -79,10 +79,16 @@ impl<'a> Worker<'a> {
                 mc.next_failed(&cur, None, e.clone());
             }
             // Deadlock = zero addElement calls, even if every successor was out of model.
-            if mc.check_deadlock && generated_before == self.sink.generated && mc.set_err(ErrState::Deadlock { state: cur.clone() }) {
-                mc.out.error(tlars_msg::Ec::TLC_DEADLOCK_REACHED, &[]);
+            // `doNextFailed` does not rethrow, so the check also runs after the next-state
+            // relation failed to evaluate; the error is already recorded then, which leaves
+            // `Worker.doNextSetErr` with nothing to print but still runs the postconditions.
+            if mc.check_deadlock && generated_before == self.sink.generated {
+                let first = mc.set_err(ErrState::Deadlock { state: cur.clone() });
                 let mut ev = mc.tool.ev(&mut self.locals, mc.out);
-                mc.print_trace_and_stop(&mut ev, &cur, None);
+                if first {
+                    mc.out.error(tlars_msg::Ec::TLC_DEADLOCK_REACHED, &[]);
+                    mc.print_trace_and_stop(&mut ev, &cur, None);
+                }
                 mc.post_condition_trace(&mut ev, &cur, None, false);
             }
             if let (Some(live), Some(succs)) = (mc.live.as_ref(), self.sink.live_successors.take()) {

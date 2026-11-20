@@ -158,6 +158,11 @@ impl<'a> ModelChecker<'a> {
             Err((ec, summary)) => {
                 if summary {
                     self.print_summary(false);
+                } else {
+                    // `doInit` recorded an error code rather than throwing: the
+                    // postconditions still run, over the error state as counterexample,
+                    // and whatever they report does not change the code (`:160-169`).
+                    self.run_postconditions(&mut locals, true);
                 }
                 return ec;
             }
@@ -193,6 +198,13 @@ impl<'a> ModelChecker<'a> {
         }
         let errored = self.err.first.lock().expect("error slot").is_some();
         if !errored {
+            // `result = tool.checkPostCondition()` before 2193: a failing postcondition is
+            // the run's result and `reportSuccess` is skipped (`ModelChecker.java:287-295`).
+            result = self.run_postconditions(&mut locals, false);
+            if result != Ec::NO_ERROR {
+                self.print_summary(false);
+                return result;
+            }
             self.report_success();
         } else if let Some(pred) = replay {
             result = self.replay_next_call_stack(&pred);
@@ -385,11 +397,13 @@ impl<'a> ModelChecker<'a> {
                         self.print_trace(ev, cur, Some(Succ::Complete(succ)))?;
                         continue;
                     }
+                    // `Worker.doNextSetErr`: only the message and the trace are gated on
+                    // being the first error; the postconditions always run.
                     if self.set_err(ErrState::Invariant { id, pred: cur.clone(), state: succ.clone() }) {
                         self.out.error(Ec::TLC_INVARIANT_VIOLATED_BEHAVIOR, &[&name]);
                         self.print_trace_and_stop(ev, cur, Some(succ));
-                        self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written);
                     }
+                    self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written);
                     return Err(Halt::Stop);
                 }
                 Err(e) if is_java_error(&e) => return Err(Halt::Eval(e)),
@@ -426,8 +440,8 @@ impl<'a> ModelChecker<'a> {
                     if self.set_err(ErrState::ImpliedAction { id, pred: cur.clone(), state: succ.clone() }) {
                         self.out.error(Ec::TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR, &[&name]);
                         self.print_trace_and_stop(ev, cur, Some(succ));
-                        self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written);
                     }
+                    self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written);
                     return Err(Halt::Stop);
                 }
                 Err(e) if is_java_error(&e) => return Err(Halt::Eval(e)),
@@ -477,9 +491,10 @@ impl<'a> ModelChecker<'a> {
 
     /// `TLC_STATE_NOT_COMPLETELY_SPECIFIED_NEXT` for `action` from `cur`.
     fn incomplete(&self, cur: &Queued, action: ActionId, s1: &PartialState) -> tlars_tool::Halt {
-        if self.set_err(ErrState::Incomplete { pred: cur.clone(), action }) {
-            let mut locals = WorkerLocals::new(0, self.seed);
-            let mut ev = self.tool.ev(&mut locals, self.out);
+        let first = self.set_err(ErrState::Incomplete { pred: cur.clone(), action });
+        let mut locals = WorkerLocals::new(0, self.seed);
+        let mut ev = self.tool.ev(&mut locals, self.out);
+        if first {
             let unassigned = ev.unassigned(s1);
             let plural = if unassigned.len() > 1 { "s are" } else { " is" };
             let names = unassigned.join(", ");
@@ -494,8 +509,8 @@ impl<'a> ModelChecker<'a> {
                 self.out.error(Ec::GENERAL, &[&body]);
             }
             self.queue.finish_all();
-            self.post_condition_trace(&mut ev, cur, Some(Succ::Partial(s1)), false);
         }
+        self.post_condition_trace(&mut ev, cur, Some(Succ::Partial(s1)), false);
         Halt::Stop
     }
 
@@ -634,6 +649,20 @@ impl<'a> ModelChecker<'a> {
     /// The rebuild regenerates states, so anything the initial predicate or the next-state
     /// relation prints is printed again.
     pub(crate) fn post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool) {
+        self.rebuild_post_condition_trace(ev, cur, succ, written);
+        // `tool.checkPostConditionWithCounterExample(new CounterExample(trace, isConsole))`.
+        // The code it reports never becomes the run's: the counterexample's does.
+        if ev.needs_counter_example() {
+            self.out.error(Ec::GENERAL, &["tlars does not implement TLCExt!CounterExample yet (M3 unit 6)"]);
+            return;
+        }
+        if let Err((ec, params)) = ev.check_postconditions() {
+            let params: Vec<&str> = params.iter().map(String::as_str).collect();
+            self.out.error(ec, &params);
+        }
+    }
+
+    fn rebuild_post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool) {
         let fps = self.traces.fingerprints_to(cur.ptr);
         let prefix_of_cur = |ev: &mut Ev<'_>| {
             // `tlc.getTraceInfo(curState)` followed by `tool.getState(curState, last)`.
@@ -665,6 +694,23 @@ impl<'a> ModelChecker<'a> {
                     prefix_of_cur(ev);
                 }
                 let _ = ev.successor_from_fp(&cur.state, cur.fp, fp);
+            }
+        }
+    }
+
+    /// `tool.checkPostCondition()` / `checkPostConditionWithCounterExample(..)` and the
+    /// `MP.printError` of whatever they report. Returns the code so the caller can make it
+    /// the run's result where TLC does.
+    fn run_postconditions(&self, locals: &mut WorkerLocals, counter_example: bool) -> Ec {
+        let mut ev = self.tool.ev(locals, self.out);
+        if counter_example && ev.needs_counter_example() {
+            return self.out.error(Ec::GENERAL, &["tlars does not implement TLCExt!CounterExample yet (M3 unit 6)"]);
+        }
+        match ev.check_postconditions() {
+            Ok(()) => Ec::NO_ERROR,
+            Err((ec, params)) => {
+                let params: Vec<&str> = params.iter().map(String::as_str).collect();
+                self.out.error(ec, &params)
             }
         }
     }

@@ -66,7 +66,16 @@ pub struct Tool {
     pub(crate) action_constraints: Box<[NamedCheck]>,
     pub(crate) view: Option<NamedCheck>,
     pub(crate) alias: Option<NamedCheck>,
+    /// `Spec.getPostConditionSpecs()`, resolved here because the lookups and the arity
+    /// checks are pure. TLC runs them when the search ends, so a bad name is reported after
+    /// the search, not at startup: [`Tool::postcondition_error`] holds that message.
     pub(crate) postconditions: Box<[NamedCheck]>,
+    /// The framed message of the `Assert.fail` that `getPostConditionSpecs` raises on the
+    /// first name it cannot resolve. It leaves TLC with no postconditions at all.
+    pub(crate) postcondition_error: Option<String>,
+    /// Whether `TLCExt!CounterExample` is in scope, which is what `getCounterExampleDef`
+    /// tests before it binds the counterexample for `checkPostConditionWithCounterExample`.
+    pub(crate) counter_example: bool,
     /// Closed permutation group of SYMMETRY (`MVPerms`), empty if none.
     pub(crate) symmetry: Box<[MvPerm]>,
     pub(crate) temporal: Temporal,

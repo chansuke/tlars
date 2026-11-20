@@ -348,9 +348,42 @@ impl<'t> Ev<'t> {
         };
         self.is_valid_in(expr, &ctx, crate::state::StateRef::Full(s), crate::state::StateRef::Empty)
     }
+    /// `Tool.checkPostConditionWithContext` (`Tool.java:3681-3712`): each POSTCONDITION is a
+    /// constant-level predicate, and the first one that is false or fails stops the loop.
+    /// `Err` is what `MP.printError` is given; the caller decides whether that code becomes
+    /// the run's.
     pub fn check_postconditions(&mut self) -> Result<(), (tlars_msg::Ec, Vec<String>)> {
-        debug_assert!(self.tool.postconditions.is_empty(), "POSTCONDITION is not processed yet");
+        // `getPostConditionSpecs()` is called outside the `try`, so a name it cannot resolve
+        // is an exception nobody meant to raise and no postcondition is checked.
+        if let Some(message) = &self.tool.postcondition_error {
+            let body = tlars_msg::unexpected_exception("java.lang.RuntimeException", message);
+            return Err((Ec::GENERAL, vec![body]));
+        }
+        let graph = self.tool.graph.clone();
+        for i in 0..self.tool.postconditions.len() {
+            let (expr, ctx, name) = {
+                let pc = &self.tool.postconditions[i];
+                (pc.expr, pc.ctx.clone(), graph.interner().text(pc.name).to_string())
+            };
+            let shown = graph.expr_tlc_text(expr);
+            match self.is_valid_const(expr, &ctx) {
+                Ok(true) => {}
+                Ok(false) => return Err((Ec::TLC_POSTCONDITION_FALSE, vec![name, shown])),
+                // `catch (Exception e)`, which a `java.lang.Error` escapes.
+                Err(e) if matches!(e.kind, crate::error::EvalErrorKind::StackOverflow | crate::error::EvalErrorKind::Assertion) => {
+                    let what = "a java.lang.Error raised while a POSTCONDITION is evaluated (M3)";
+                    return Err((Ec::GENERAL, vec![format!("tlars does not implement {what} yet")]));
+                }
+                Err(e) => return Err((Ec::TLC_POSTCONDITION_EVALUATION_ERROR, vec![name, shown, e.message])),
+            }
+        }
         Ok(())
+    }
+
+    /// Whether `checkPostConditionWithCounterExample` would have to bind
+    /// `TLCExt!CounterExample` instead of checking the postconditions plainly.
+    pub fn needs_counter_example(&self) -> bool {
+        self.tool.counter_example && !self.tool.postconditions.is_empty()
     }
 
     /// `Tool.isValid(action, s0, s1)`: the predicate must be a boolean.
@@ -562,7 +595,13 @@ impl<'t> Ev<'t> {
 
     /// `Tool.isValid(expr, Context.Empty)` (`:3626-3633`).
     fn is_valid(&mut self, expr: ExprId) -> EvalResult<bool> {
-        match self.eval(expr, &crate::ctx::Ctx::EMPTY, crate::state::StateRef::Empty, crate::state::StateRef::Empty, EvalControl::CONST)? {
+        self.is_valid_const(expr, &crate::ctx::Ctx::EMPTY)
+    }
+
+    /// `Tool.isValid(ExprNode, Context)` (`:3625-3632`), which evaluates with
+    /// `EvalControl.Const` and both states empty.
+    fn is_valid_const(&mut self, expr: ExprId, ctx: &crate::ctx::Ctx) -> EvalResult<bool> {
+        match self.eval(expr, ctx, crate::state::StateRef::Empty, crate::state::StateRef::Empty, EvalControl::CONST)? {
             crate::value::Value::Bool(b) => Ok(b),
             _ => {
                 // `Assert.fail(TLC_EXPECTED_VALUE, {"boolean", expr.toString()}, expr)`: the

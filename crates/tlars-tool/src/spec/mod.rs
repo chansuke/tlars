@@ -141,6 +141,8 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         view: None,
         alias: None,
         postconditions: Box::new([]),
+        postcondition_error: None,
+        counter_example: false,
         symmetry: Box::new([]),
         temporal: crate::tool::Temporal { fairness: Box::new([]), properties: Box::new([]) },
         fp64: crate::fp64::Fp64::new(globals.fp_index),
@@ -817,14 +819,13 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     if !config.possible.is_empty() {
         return Err(unimplemented("_POSSIBLE (M3 unit 5)"));
     }
-    if !config.postconditions.is_empty() {
-        return Err(unimplemented("POSTCONDITION (M3 unit 5)"));
-    }
     if config.alias.is_some() {
         return Err(unimplemented("ALIAS (M3 unit 5)"));
     }
     let view = config_view(config, tool, defns)?;
     let symmetry = config_symmetry(config, tool, unprocessed, out)?;
+    let (postconditions, postcondition_error) = config_postconditions(config, tool, defns, out);
+    let counter_example = defns.contains_key(&graph.interner().intern("CounterExample"));
 
     // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
     tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
@@ -837,6 +838,9 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     tool.action_constraints = action_constraints.into();
     tool.view = view;
     tool.symmetry = symmetry;
+    tool.postconditions = postconditions;
+    tool.postcondition_error = postcondition_error;
+    tool.counter_example = counter_example;
     tool.temporal = crate::tool::Temporal {
         fairness: temporals.into_iter().map(|p| (p.expr, p.ctx)).collect(),
         properties: Box::new([]),
@@ -1241,6 +1245,37 @@ fn named_checks(
         }
     }
     Ok(checks)
+}
+
+/// `Spec.getPostConditionSpecs` (`Spec.java:406-435`), which `checkPostCondition` calls
+/// when the search is over. Every name must be a 0-arity definition of `defns`; the first
+/// one that is not raises an `Assert.fail` that escapes `checkPostCondition`, so TLC then
+/// checks nothing at all. The lookups are pure, so they run here and the message waits.
+fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> (Box<[NamedCheck]>, Option<String>) {
+    let graph = tool.graph.clone();
+    let mut checks = Vec::new();
+    for name in &config.postconditions {
+        let fail = |ec: Ec| Some(out.text(ec, &["post condition", name]));
+        match defn_of(defns, &graph, name) {
+            None => return (Box::new([]), fail(Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED)),
+            Some(OpBinding::Replaced(d)) => {
+                if !graph.op_def(d).params.is_empty() {
+                    return (Box::new([]), fail(Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG));
+                }
+                let body = graph.op_def(d).body.expect("a user definition has a body");
+                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY });
+            }
+            // `processModuleOverrides` puts a `defns` entry only for a definition that has a
+            // matching Java method; tlars binds every definition of a `tlc2.module` class,
+            // so a name that lands here may well be an ordinary definition for TLC.
+            Some(OpBinding::Unimplemented) => {
+                let what = format!("the Java override of the POSTCONDITION {name} (M3 unit 6)");
+                return (Box::new([]), Some(format!("tlars does not implement {what} yet")));
+            }
+            Some(_) => return (Box::new([]), fail(Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT)),
+        }
+    }
+    (checks.into(), None)
 }
 
 /// `Tool.getSymmetryPerms` (`Tool.java:3836-3943`), the other half of what
