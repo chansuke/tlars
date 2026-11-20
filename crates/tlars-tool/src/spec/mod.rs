@@ -148,8 +148,11 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         globals,
     };
     let mut defns = defns;
+    // `SpecProcessor.snapshot`, taken before `processConstantDefns` and reached through
+    // `Spec.unprocessedDefns`: SYMMETRY resolves against it.
+    let unprocessed = defns.clone();
     fold_constant_defns(&mut tool, &mut defns, out)?;
-    process_config(&config, &mut tool, &defns, out)?;
+    process_config(&config, &mut tool, &defns, &unprocessed, out)?;
     Ok(tool)
 }
 
@@ -756,7 +759,7 @@ struct Pred {
 
 /// `processConfig` (`SpecProcessor.java:782-955`): INIT/NEXT/SPECIFICATION and the named
 /// checks. An empty cfg binds nothing, but a spec with variables still needs an INIT.
-fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dyn Report) -> Result<(), SpecError> {
+fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unprocessed: &Defns, out: &dyn Report) -> Result<(), SpecError> {
     let graph = tool.graph.clone();
     let mut pass = ConfigPass {
         init_preds: Vec::new(),
@@ -817,13 +820,11 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
     if !config.postconditions.is_empty() {
         return Err(unimplemented("POSTCONDITION (M3 unit 5)"));
     }
-    if config.symmetry.is_some() {
-        return Err(unimplemented("SYMMETRY (M3 unit 5)"));
-    }
     if config.alias.is_some() {
         return Err(unimplemented("ALIAS (M3 unit 5)"));
     }
     let view = config_view(config, tool, defns)?;
+    let symmetry = config_symmetry(config, tool, unprocessed, out)?;
 
     // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
     tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
@@ -835,6 +836,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
     tool.model_constraints = model_constraints.into();
     tool.action_constraints = action_constraints.into();
     tool.view = view;
+    tool.symmetry = symmetry;
     tool.temporal = crate::tool::Temporal {
         fairness: temporals.into_iter().map(|p| (p.expr, p.ctx)).collect(),
         properties: Box::new([]),
@@ -1239,6 +1241,134 @@ fn named_checks(
         }
     }
     Ok(checks)
+}
+
+/// `Tool.getSymmetryPerms` (`Tool.java:3836-3943`), the other half of what
+/// `TLCStateMut.setTool` computes. The name resolves against `unprocessedDefns`, the
+/// snapshot taken *before* `processConstantDefns`, so a constant-level symmetry definition
+/// is still a definition here — unlike VIEW and ALIAS.
+fn config_symmetry(
+    config: &ModelConfig,
+    tool: &Tool,
+    unprocessed: &Defns,
+    out: &dyn Report,
+) -> Result<Box<[crate::symmetry::MvPerm]>, SpecError> {
+    let Some(name) = config.symmetry.as_deref().filter(|s| !s.is_empty()) else { return Ok(Box::new([])) };
+    let graph = tool.graph.clone();
+    let d = match defn_of(unprocessed, &graph, name) {
+        None => {
+            return Err(SpecError::Config {
+                ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
+                params: vec!["symmetry function".to_string(), name.to_string()],
+            });
+        }
+        Some(OpBinding::Replaced(d)) => d,
+        // `Assert.fail(String)`: an exception nobody meant to raise, so `TLC.process`
+        // reports it as a `java.lang.RuntimeException`.
+        Some(_) => {
+            return Err(SpecError::Unexpected {
+                class: "java.lang.RuntimeException",
+                message: format!("The symmetry function {name} must specify a set of permutations."),
+            });
+        }
+    };
+    let body = graph.op_def(d).body.expect("a user definition has a body");
+    let mut locals = WorkerLocals::new(0, tool.globals.seed);
+    let mut ev = tool.ev(&mut locals, out);
+    let fcns = ev.eval(body, &Ctx::EMPTY, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR).map_err(uncaught)?;
+    // `!(fcns instanceof Enumerable) || !(fcns instanceof SetEnumValue)`.
+    let Value::SetEnum(set) = &fcns else {
+        return Err(SpecError::Unexpected {
+            class: "java.lang.RuntimeException",
+            message: "The symmetry operator must specify a set of functions.".to_string(),
+        });
+    };
+    let values = set.snapshot().to_vec();
+    let mut generators = Vec::with_capacity(values.len());
+    for v in &values {
+        let Value::FcnRcd(fcn) = v else {
+            return Err(SpecError::Unexpected {
+                class: "java.lang.RuntimeException",
+                message: "The symmetry values must be function records.".to_string(),
+            });
+        };
+        let (domain, images) = fcn.snapshot();
+        let Some(domain) = domain else {
+            return Err(unimplemented("a SYMMETRY function whose domain is an interval (TLC raises a NullPointerException)"));
+        };
+        let mut pairs = Vec::with_capacity(images.len());
+        for (dval, rval) in domain.iter().zip(images.iter()) {
+            match (dval, rval) {
+                (Value::Model(a), Value::Model(b)) => pairs.push((*a, *b)),
+                _ => {
+                    return Err(SpecError::Unexpected {
+                        class: "java.lang.RuntimeException",
+                        message: "Symmetry function must have model values as domain and range.".to_string(),
+                    });
+                }
+            }
+        }
+        generators.push(crate::symmetry::Generator { pairs });
+    }
+    // `argNodes.length >= values.size()`: as many permuted sets as permutations means every
+    // symmetry set holds at most one element, and TLC then warns and uses no symmetry at
+    // all. Naming the offending sets needs `SyntaxTreeNode.getHumanReadableImage`, which the
+    // frozen graph does not carry.
+    let arg_count = match graph.expr(body) {
+        ExprNode::OpAppl { args, .. } => args.len(),
+        // `(OpApplNode) opDef.getBody()` on another node kind.
+        _ => return Err(unimplemented("a SYMMETRY whose definition body is not an operator application")),
+    };
+    if arg_count >= values.len() {
+        return Err(unimplemented("the SYMMETRY too-small-set warning (2300), which needs SemanticNode.getHumanReadableImage (M3)"));
+    }
+    let subgroup = crate::symmetry::permutation_group(&mut ev, &generators, &tool.model_values).map_err(uncaught)?;
+    // The second offender check only looks at `Permutations(S)` where `S` is a name the cfg
+    // bound to a set, so it is also reachable only with an image to print.
+    let members: Vec<Atom> = subgroup.iter().flat_map(|p| p.images()).map(|mv| mv.name).collect();
+    for arg in permutation_set_args(tool, body) {
+        let elems = arg.snapshot().to_vec();
+        let found = elems.iter().any(|e| matches!(e, Value::Model(mv) if members.contains(&mv.name)));
+        if !found {
+            return Err(unimplemented("the SYMMETRY too-small-set warning (2300), which needs SemanticNode.getHumanReadableImage (M3)"));
+        }
+    }
+    Ok(subgroup.into())
+}
+
+/// `getSetEnumValueFromArgumentNode` over every argument of the symmetry definition's body
+/// (`Tool.java:3944-3971`): the set a `Permutations(S)` argument permutes, but only where
+/// `S` is a name whose tool object is a `SetEnumValue`, which is what a cfg `S = {..}`
+/// leaves behind. An inline `Permutations({A, B})` yields nothing.
+fn permutation_set_args(tool: &Tool, body: ExprId) -> Vec<std::sync::Arc<crate::value::SetEnumValue>> {
+    let graph = &tool.graph;
+    let ExprNode::OpAppl { args, .. } = graph.expr(body) else { return Vec::new() };
+    let mut sets = Vec::new();
+    for arg in args.iter() {
+        let ExprOrOpArg::Expr(node) = arg else { continue };
+        let ExprNode::OpAppl { op, args: operands, .. } = graph.expr(*node) else { continue };
+        let SymbolRef::OpDef(outer) = op else { continue };
+        if &*graph.interner().text(graph.op_def(*outer).name) != "Permutations" || operands.len() != 1 {
+            continue;
+        }
+        let ExprOrOpArg::Expr(inner) = &operands[0] else { continue };
+        let ExprNode::OpAppl { op: inner_op, .. } = graph.expr(*inner) else { continue };
+        let bound = match inner_op {
+            SymbolRef::Decl(dec) => match &tool.bindings.decls[dec.index()] {
+                Some(DeclBinding::Value(v)) => Some(v.clone()),
+                _ => None,
+            },
+            SymbolRef::OpDef(d) => match tool.bindings.op_def(*d) {
+                Some(OpBinding::Value(v)) => Some(v.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(Value::SetEnum(set)) = bound {
+            sets.push(set);
+        }
+    }
+    sets
 }
 
 /// `Spec.getViewSpec` (`Spec.java:243-272`), which `TLCStateMut.setTool` calls from the

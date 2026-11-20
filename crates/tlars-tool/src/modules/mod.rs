@@ -104,6 +104,7 @@ natives! {
     "TLC" "PrintT" (V) Strict tlc::print_t, "public static tlc2.value.impl.Value tlc2.module.TLC.PrintT(tlc2.value.impl.Value)";
     "TLC" "ToString" (V) Strict tlc::to_string, "public static tlc2.value.impl.Value tlc2.module.TLC.ToString(tlc2.value.impl.Value)";
     "TLC" "Assert" (V, V) Strict tlc::assert, "public static tlc2.value.impl.Value tlc2.module.TLC.Assert(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" "Permutations" (V) Strict tlc::permutations, "public static tlc2.value.impl.Value tlc2.module.TLC.Permutations(tlc2.value.impl.Value)";
     "TLC" ":>" (V, V) Strict tlc::make_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.MakeFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "@@" (V, V) Strict tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
 }

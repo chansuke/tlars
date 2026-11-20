@@ -238,34 +238,92 @@ impl<'t> Ev<'t> {
     /// the values' own fingerprints in `vars[]` order. Each value normalises itself on the
     /// way, which is why fingerprinting a state also leaves it shareable.
     pub fn fingerprint(&mut self, s: &State) -> EvalResult<Fp> {
-        if self.tool.has_symmetry() {
-            return Err(crate::error::EvalError::unimplemented("SYMMETRY fingerprints (M3 unit 5)".into()));
-        }
+        // `minVals`: `None` is TLC's `minVals == this.values`, the state as it stands.
+        let min_vals = self.symmetry_min(s)?;
         let mut fp = self.tool.fp64.new_fp();
         match &self.tool.view {
             // The values' own fingerprints in `vars[]` order. Each value normalises itself
-            // on the way, which is why fingerprinting a state also leaves it shareable.
+            // on the way, which is why fingerprinting a state also leaves it shareable --
+            // and why a state replaced by its representative is normalised separately.
             None => {
                 for i in 0..s.len() {
-                    let v = s.get(self.tool.vars.slot(i)).clone();
+                    let v = match &min_vals {
+                        Some(vals) => vals[i].clone(),
+                        None => s.get(self.tool.vars.slot(i)).clone(),
+                    };
                     fp = v.fingerprint(self, fp)?;
+                }
+                if min_vals.is_some() {
+                    for i in 0..s.len() {
+                        let v = s.get(self.tool.vars.slot(i)).clone();
+                        v.deep_normalize(self)?;
+                    }
                 }
                 Ok(fp)
             }
             // With a VIEW the state's own values are normalised explicitly, because only
-            // the view's value is fingerprinted (`TLCStateMut.java:261-281`).
+            // the view's value is fingerprinted, and the view is evaluated against the
+            // symmetry representative (`TLCStateMut.java:261-281`).
             Some(view) => {
                 let (expr, ctx) = (view.expr, view.ctx.clone());
                 for i in 0..s.len() {
                     let v = s.get(self.tool.vars.slot(i)).clone();
                     v.deep_normalize(self)?;
                 }
+                let state = match min_vals {
+                    Some(vals) => crate::state::State::of_values(vals),
+                    None => s.clone(),
+                };
                 self.with_fast_tool(|ev| {
-                    let val = ev.eval(expr, &ctx, crate::state::StateRef::Full(s), crate::state::StateRef::Empty, EvalControl::CLEAR)?;
+                    let val =
+                        ev.eval(expr, &ctx, crate::state::StateRef::Full(&state), crate::state::StateRef::Empty, EvalControl::CLEAR)?;
                     val.fingerprint(ev, fp)
                 })
             }
         }
+    }
+
+    /// The `perms != null` loop of `fingerPrint` (`TLCStateMut.java:201-247`): apply every
+    /// permutation of the group and keep the lexicographically smallest state, comparing
+    /// variable by variable in `vars[]` order. A permutation whose first differing value is
+    /// larger is abandoned, because `perms` is the cross product of the symmetry sets.
+    /// `None` means no permutation beat the state itself.
+    fn symmetry_min(&mut self, s: &State) -> EvalResult<Option<Vec<crate::value::Value>>> {
+        if self.tool.symmetry.is_empty() {
+            return Ok(None);
+        }
+        let sz = s.len();
+        // The group is frozen in the shared tool, whose borrow outlives `self`.
+        let tool: &'t Tool = self.tool;
+        let mut min_vals: Option<Vec<crate::value::Value>> = None;
+        for i in 0..tool.symmetry.len() {
+            let mut cmp = std::cmp::Ordering::Equal;
+            let mut vals: Vec<crate::value::Value> = Vec::with_capacity(sz);
+            let mut abandoned = false;
+            for j in 0..sz {
+                let own = s.get(self.tool.vars.slot(j)).clone();
+                let permuted = own.permute(self, &tool.symmetry[i])?.unwrap_or_else(|| own.clone());
+                vals.push(permuted);
+                if cmp == std::cmp::Ordering::Equal {
+                    let current = match &min_vals {
+                        Some(m) => m[j].clone(),
+                        None => own,
+                    };
+                    cmp = vals[j].clone().tlc_compare(self, &current)?;
+                    if cmp == std::cmp::Ordering::Greater {
+                        abandoned = true;
+                        break;
+                    }
+                }
+            }
+            if abandoned {
+                continue;
+            }
+            if cmp == std::cmp::Ordering::Less {
+                min_vals = Some(vals);
+            }
+        }
+        Ok(min_vals)
     }
     /// One INVARIANT, `Ok(false)` = violated.
     pub fn check_invariant(&mut self, id: CheckId<Invariant>, s: &State) -> EvalResult<bool> {

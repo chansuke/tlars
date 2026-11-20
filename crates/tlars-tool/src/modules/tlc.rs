@@ -81,6 +81,65 @@ fn pairs_of(ev: &mut Ev<'_>, f: &Value, which: &str) -> EvalResult<Vec<(Value, V
     Ok(keys.into_iter().zip(values.iter().cloned()).collect())
 }
 
+/// `Permutations(s)` (`TLC.java:304-379`): every bijection of the normalised `s` onto
+/// itself, as unnormalised function records in the order the index-array walk produces
+/// them. An empty set gives the set holding the empty function.
+pub(crate) fn permutations(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
+    let Some(set) = a[0].to_set_enum(ev)? else {
+        let shown = a[0].ppr(ev)?;
+        return Err(super::eval_exception(ev, Ec::TLC_MODULE_APPLYING_TO_WRONG_VALUE, &["Permutations", "a finite set", &shown]));
+    };
+    let domain = crate::value::order::normalized(ev, &set)?.to_vec();
+    let len = domain.len();
+    if len == 0 {
+        let empty = Value::FcnRcd(Value::fcn_rcd_arc(Vec::new(), Vec::new(), true));
+        return Ok(Value::SetEnum(crate::value::set_enum_arc(vec![empty], true)));
+    }
+    let mut idx_array: Vec<usize> = (0..len).collect();
+    let mut in_use = vec![true; len];
+    let mut fcns: Vec<Value> = Vec::new();
+    loop {
+        let vals: Vec<Value> = idx_array.iter().map(|&i| domain[i].clone()).collect();
+        fcns.push(Value::FcnRcd(Value::fcn_rcd_arc(domain.clone(), vals, true)));
+        let mut i = len;
+        let mut done = true;
+        for j in (0..len).rev() {
+            i = j;
+            let mut found = false;
+            for k in idx_array[j] + 1..len {
+                if !in_use[k] {
+                    in_use[k] = true;
+                    in_use[idx_array[j]] = false;
+                    idx_array[j] = k;
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                done = false;
+                break;
+            }
+            if j == 0 {
+                break;
+            }
+            in_use[idx_array[j]] = false;
+        }
+        if done {
+            break;
+        }
+        for j in i + 1..len {
+            for k in 0..len {
+                if !in_use[k] {
+                    in_use[k] = true;
+                    idx_array[j] = k;
+                    break;
+                }
+            }
+        }
+    }
+    Ok(Value::SetEnum(crate::value::set_enum_arc(fcns, false)))
+}
+
 pub(crate) fn assert(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
     if matches!(a[0], Value::Bool(true)) {
         return Ok(a[0].clone());
