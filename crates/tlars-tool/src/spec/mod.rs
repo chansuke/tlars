@@ -277,7 +277,7 @@ fn predefined(name: &str) -> Option<Value> {
     match name {
         "TRUE" => Some(Value::Bool(true)),
         "FALSE" => Some(Value::Bool(false)),
-        "BOOLEAN" => Some(Value::set_enum(vec![Value::Bool(false), Value::Bool(true)])),
+        "BOOLEAN" => Some(Value::set_enum_normalized(vec![Value::Bool(false), Value::Bool(true)])),
         // `Strings.STRING()`, the one method of `tlc2.module.Strings` (`:503-526`).
         "STRING" => Some(Value::User(std::sync::Arc::new(crate::value::UserValue::String))),
         _ => None,

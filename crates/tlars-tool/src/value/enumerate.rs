@@ -29,6 +29,7 @@ pub(crate) struct ValueEnumeration {
 
 enum EnumState {
     Interval { lo: i32, next: i64, hi: i64 },
+    Slice { elems: Box<[Value]>, next: usize },
 }
 
 impl ValueEnumeration {
@@ -42,6 +43,11 @@ impl ValueEnumeration {
                 *next += 1;
                 Ok(Some(v))
             }
+            EnumState::Slice { elems, next } => {
+                let v = elems.get(*next).cloned();
+                *next += 1;
+                Ok(v)
+            }
         }
     }
 
@@ -49,6 +55,7 @@ impl ValueEnumeration {
     pub(crate) fn reset(&mut self) {
         match &mut self.state {
             EnumState::Interval { lo, next, .. } => *next = i64::from(*lo),
+            EnumState::Slice { next, .. } => *next = 0,
         }
     }
 }
@@ -61,8 +68,24 @@ impl Value {
             Value::Interval(i) => {
                 Ok(Some(ValueEnumeration { state: EnumState::Interval { lo: i.lo, next: i64::from(i.lo), hi: i64::from(i.hi) } }))
             }
-            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::User(_) | Value::Undef => Ok(None),
-            _ => Err(EvalError::unimplemented(format!("enumerating {} (M2 unit 3)", self.kind_string()))),
+            // `SetEnumValue.Enumerator`: normalised order in every ordering but RANDOMIZED.
+            Value::SetEnum(set) => {
+                let elems: Box<[Value]> = super::order::normalized(ev, set)?.into();
+                Ok(Some(ValueEnumeration { state: EnumState::Slice { elems, next: 0 } }))
+            }
+            // `Enumerable` leaves out the scalars and the four function classes, so a
+            // quantifier over one of them reports a non-enumerable bound.
+            Value::Bool(_)
+            | Value::Int(_)
+            | Value::Str(_)
+            | Value::Model(_)
+            | Value::User(_)
+            | Value::Undef
+            | Value::Tuple(_)
+            | Value::Record(_)
+            | Value::FcnRcd(_)
+            | Value::FcnLambda(_) => Ok(None),
+            _ => Err(EvalError::unimplemented(format!("enumerating {} (M2 unit 5)", self.kind_string()))),
         }
     }
 
