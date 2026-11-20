@@ -551,7 +551,7 @@ impl<'a> ModelChecker<'a> {
                 let mut unseen = true;
                 if in_model {
                     let fp = ev.fingerprint(succ)?;
-                    unseen = self.fpset.put(fp.into()) == crate::fpset::Seen::New;
+                    unseen = self.fpset.put(fp) == crate::fpset::Seen::New;
                 }
                 if unseen {
                     self.check_invariants(&mut ev, cur, succ)?;
@@ -720,7 +720,7 @@ impl tlars_tool::InitSink for InitSink<'_, '_> {
         let mut seen = false;
         if in_model {
             let fp = ev.fingerprint(&state)?;
-            seen = mc.fpset.put(fp.into()) == crate::fpset::Seen::Old;
+            seen = mc.fpset.put(fp) == crate::fpset::Seen::Old;
             if !seen {
                 let ptr = mc.traces.append(0, None, fp);
                 mc.traces.record_level(0, 1);

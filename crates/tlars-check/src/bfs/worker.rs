@@ -118,7 +118,7 @@ struct SharedPut<'s>(&'s dyn FpSet);
 
 impl SeenOracle for SharedPut<'_> {
     fn seen(&mut self, fp: tlars_tool::Fp) -> Seen {
-        self.0.put(fp.into())
+        self.0.put(fp)
     }
 }
 
