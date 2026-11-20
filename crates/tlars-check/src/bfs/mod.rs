@@ -134,8 +134,13 @@ impl<'a> ModelChecker<'a> {
         self.out.message(Ec::TLC_COMPUTING_INIT, &[]);
         let mut result = match self.do_init() {
             Ok(()) => Ec::NO_ERROR,
-            Err(ec) => {
-                self.print_summary(false);
+            // `modelCheckImpl` returns an error code the functor recorded without printing
+            // the summary, and prints it only on the exception path
+            // (`ModelChecker.java:155-172` against `:219-221`).
+            Err((ec, summary)) => {
+                if summary {
+                    self.print_summary(false);
+                }
                 return ec;
             }
         };
@@ -181,7 +186,7 @@ impl<'a> ModelChecker<'a> {
     /// `doInit` + `DoInitFunctor`: for each initial state in generation order:
     /// isGoodState; if CONSTRAINT holds: fp, FPSet.put, if new: trace record, enqueue,
     /// liveCheck.addInitState; if new *or* out of model: invariants, then implied inits.
-    fn do_init(&mut self) -> Result<(), Ec> {
+    fn do_init(&mut self) -> Result<(), (Ec, bool)> {
         let mut locals = WorkerLocals::new(0, self.seed);
         let mut sink = InitSink { mc: self, result: Ec::NO_ERROR, stopped: false, force_checks: false, failed_state: None };
         let flow = {
@@ -218,11 +223,11 @@ impl<'a> ModelChecker<'a> {
                         self.out.error(Ec::GENERAL, &[&message]);
                     }
                 }
-                return Err(self.replay_init_call_stack(ec));
+                return Err((self.replay_init_call_stack(ec), true));
             }
         }
         if result != Ec::NO_ERROR {
-            return Err(result);
+            return Err((result, false));
         }
         Ok(())
     }

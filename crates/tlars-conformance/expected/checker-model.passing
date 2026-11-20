@@ -55,6 +55,7 @@ tlc/checker/constraints/action_not_on_initial
 tlc/checker/constraints/action_plural
 tlc/checker/constraints/all_initial_excluded
 tlc/checker/constraints/error_on_initial
+tlc/checker/constraints/excluded_initial_state_invariant_checked
 tlc/checker/constraints/excluded_state_not_fingerprinted
 tlc/checker/constraints/some_initial_excluded
 tlc/checker/constraints/state_constraint_constant_true
@@ -147,6 +148,7 @@ tlc/checker/init/fcn_apply_nonfunction_fast_path
 tlc/checker/init/fcn_apply_out_of_domain
 tlc/checker/init/fcn_apply_true
 tlc/checker/init/forall_assigns_single
+tlc/checker/init/forall_empty_alone_partial
 tlc/checker/init/forall_empty_continues
 tlc/checker/init/forall_nat
 tlc/checker/init/forall_two_instances_conflict
@@ -171,6 +173,7 @@ tlc/checker/init/if_guard_nonbool
 tlc/checker/init/if_guard_unassigned
 tlc/checker/init/if_true_branch_assigns
 tlc/checker/init/implies_false_rest_assigns
+tlc/checker/init/implies_false_skips
 tlc/checker/init/implies_nonbool
 tlc/checker/init/implies_true_assigns
 tlc/checker/init/in_after_assign_member
@@ -222,11 +225,16 @@ tlc/checker/init/or_evaluates_all_after_true
 tlc/checker/init/or_fast_path_short_circuit
 tlc/checker/init/or_generator_no_short_circuit
 tlc/checker/init/or_in_order
+tlc/checker/init/partial_conjunction
+tlc/checker/init/partial_first_disjunct
+tlc/checker/init/partial_no_assignment_guard
+tlc/checker/init/partial_second_disjunct
 tlc/checker/init/primed_variable_in_init
 tlc/checker/init/set_conjunct_unassigned
 tlc/checker/init/spec_init_after_box
 tlc/checker/init/spec_init_conjuncts
 tlc/checker/init/spec_init_order_across_operators
+tlc/checker/init/spec_unbound_variable_partial
 tlc/checker/init/string_init
 tlc/checker/init/subexpression_conjunct
 tlc/checker/init/subseteq_after_assign
@@ -243,6 +251,11 @@ tlc/checker/invariants/box_action_rejected
 tlc/checker/invariants/config_constant_value_nonbool
 tlc/checker/invariants/error_on_initial
 tlc/checker/invariants/initial_duplicate_not_rechecked
+tlc/checker/invariants/initial_violation
+tlc/checker/invariants/initial_violation_counts
+tlc/checker/invariants/initial_violation_disjunct_order
+tlc/checker/invariants/initial_violation_second_state
+tlc/checker/invariants/initial_violation_two_variables
 tlc/checker/invariants/non_boolean_on_initial
 tlc/checker/invariants/parameterized
 tlc/checker/invariants/successor_seen_not_rechecked
