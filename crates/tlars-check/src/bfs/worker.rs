@@ -70,7 +70,6 @@ impl<'a> Worker<'a> {
             if mc.live.is_some() {
                 self.sink.live_successors = Some(SetOfStates::with_capacity(16 * self.sink.live_multiplier as usize));
             }
-            self.locals.set_level(cur.level);
             let generated_before = self.sink.generated;
             let mut ev = mc.tool.ev(&mut self.locals, mc.out);
             let mut sink = WorkerSink { mc, worker: self.id, cur: &cur, st: &mut self.sink, seen: SharedPut(&*mc.fpset) };

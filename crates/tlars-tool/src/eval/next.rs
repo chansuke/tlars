@@ -60,7 +60,7 @@ impl<'t> Ev<'t> {
     }
 
     fn next_states_of_action(&mut self, s0: &State, action: &Action, sink: &mut dyn NextSink) -> Flow {
-        let mut s1 = PartialState::empty(s0.len());
+        let mut s1 = PartialState::successor_of(s0.len(), s0);
         self.next_impl(action, action.pred, Acts::Empty, &action.ctx, s0, &mut s1, sink)
     }
 

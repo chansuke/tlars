@@ -36,49 +36,72 @@ impl VarTable {
     }
 }
 
+/// `TLCState.INIT_LEVEL`: an initial state is at level 1, so that `TLCGet("level")` in the
+/// first evaluation of the next-state relation is 1 (`TLCState.java:32-38`).
+pub const INIT_LEVEL: u32 = 1;
+
 /// A complete state. Cheap to clone; shared across workers.
 #[derive(Clone)]
-pub struct State(Arc<[Value]>);
+pub struct State {
+    values: Arc<[Value]>,
+    /// `TLCState.level`, as `setPredecessor` maintains it: one more than the predecessor's.
+    /// `TLCGet("level")` is the only reader; no equality, fingerprint or printing sees it.
+    level: u32,
+}
 
 impl State {
     pub fn get(&self, slot: VarSlot) -> &Value {
-        &self.0[slot.index()]
+        &self.values[slot.index()]
     }
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.values.len()
+    }
+    /// `TLCState.getLevel()`.
+    pub fn level(&self) -> u32 {
+        self.level
     }
     pub(crate) fn values(&self) -> &[Value] {
-        &self.0
+        &self.values
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot(self.0.iter().map(|v| Some(v.clone())).collect())
+        Snapshot(self.values.iter().map(|v| Some(v.clone())).collect())
     }
 }
 
 /// The successor (or initial state) under construction. Generation binds a slot, recurses
 /// into the continuation, then unbinds: exactly `TLCState.bind` / `unbind`.
-pub struct PartialState(Box<[Option<Value>]>);
+pub struct PartialState {
+    slots: Box<[Option<Value>]>,
+    /// `TLCState.level`. `getNextStates` builds the successor as
+    /// `TLCState.Empty.createEmpty().setPredecessor(state)`, so it is the parent's level plus
+    /// one; the initial-state generator leaves it at `INIT_LEVEL`.
+    level: u32,
+}
 
 impl PartialState {
     pub(crate) fn empty(vars: usize) -> Self {
-        PartialState(vec![None; vars].into_boxed_slice())
+        PartialState { slots: vec![None; vars].into_boxed_slice(), level: INIT_LEVEL }
+    }
+    /// `TLCState.Empty.createEmpty().setPredecessor(s0)` (`TLCState.java:144-153`).
+    pub(crate) fn successor_of(vars: usize, s0: &State) -> Self {
+        PartialState { slots: vec![None; vars].into_boxed_slice(), level: s0.level.saturating_add(1) }
     }
     pub(crate) fn bind(&mut self, slot: VarSlot, v: Value) {
-        self.0[slot.index()] = Some(v);
+        self.slots[slot.index()] = Some(v);
     }
     pub(crate) fn unbind(&mut self, slot: VarSlot) {
-        self.0[slot.index()] = None;
+        self.slots[slot.index()] = None;
     }
     pub fn lookup(&self, slot: VarSlot) -> Option<&Value> {
-        self.0[slot.index()].as_ref()
+        self.slots[slot.index()].as_ref()
     }
     pub fn all_assigned(&self) -> bool {
-        self.0.iter().all(Option::is_some)
+        self.slots.iter().all(Option::is_some)
     }
     /// `TLCStateMut.getUnassigned()`, in the order it prints them: sorted by variable name.
     pub(crate) fn unassigned(&self, vars: &VarTable, interner: &tlars_sany::Interner) -> Vec<String> {
         let mut names: Vec<String> = self
-            .0
+            .slots
             .iter()
             .enumerate()
             .filter(|(_, v)| v.is_none())
@@ -92,20 +115,20 @@ impl PartialState {
         if !self.all_assigned() {
             return None;
         }
-        Some(State(self.0.iter().map(|v| v.clone().expect("all assigned")).collect()))
+        Some(State { values: self.slots.iter().map(|v| v.clone().expect("all assigned")).collect(), level: self.level })
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot(self.0.clone())
+        Snapshot(self.slots.clone())
     }
     pub(crate) fn copy(&self) -> PartialState {
-        PartialState(self.0.clone())
+        PartialState { slots: self.slots.clone(), level: self.level }
     }
     pub(crate) fn from_values(values: &[Value]) -> PartialState {
-        PartialState(values.iter().map(|v| Some(v.clone())).collect())
+        PartialState { slots: values.iter().map(|v| Some(v.clone())).collect(), level: INIT_LEVEL }
     }
     /// A complete state as the partial form the equality search compares.
     pub fn from_state(s: &State) -> PartialState {
-        PartialState::from_values(s.values())
+        PartialState { slots: s.values().iter().map(|v| Some(v.clone())).collect(), level: s.level }
     }
     /// `copy()` for a caller outside this crate.
     pub fn copy_out(&self) -> PartialState {
@@ -164,6 +187,16 @@ impl StateRef<'_> {
             StateRef::Full(s) => Some(s.get(slot)),
             StateRef::Partial(p) => p.lookup(slot),
             StateRef::Fun(f) => f.lookup(slot),
+        }
+    }
+
+    /// `s0.getLevel()`. `TLCState.Empty` and `TLCStateFun.Empty` are plain `TLCState`s whose
+    /// level field still holds the value it starts at.
+    pub(crate) fn level(&self) -> u32 {
+        match self {
+            StateRef::Full(s) => s.level(),
+            StateRef::Partial(p) => p.level,
+            StateRef::Empty | StateRef::Null | StateRef::Fun(_) => INIT_LEVEL,
         }
     }
 
