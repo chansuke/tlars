@@ -207,7 +207,7 @@ impl Value {
     /// `Values.ppr(v.toString())`: flat string re-parsed and wrapped at `TLCGlobals` width.
     pub(crate) fn ppr(&self, ev: &mut Ev<'_>) -> EvalResult<String> {
         let flat = self.to_tlc_string(ev)?;
-        ppr(ev, &flat)
+        Ok(ppr(ev, &flat))
     }
 }
 
@@ -288,13 +288,9 @@ fn is_parenthesized_subset(v: &Value) -> bool {
     )
 }
 
-/// `Values.ppr(String)`. A value that fits the width prints flat; wrapping is not ported yet.
-pub(crate) fn ppr(ev: &Ev<'_>, flat: &str) -> EvalResult<String> {
-    if flat.chars().count() <= ev.tool().globals().width {
-        Ok(flat.to_string())
-    } else {
-        Err(EvalError::unimplemented("Values.ppr of a value wider than the line (M2 unit 6)".into()))
-    }
+/// `Values.ppr(String)` (`Values.java:34-36`).
+pub(crate) fn ppr(ev: &Ev<'_>, flat: &str) -> String {
+    tlars_java::pretty_print(flat, ev.tool().globals().width)
 }
 
 /// `FcnRcdValue.snapshot()` materialised: the function's own arrays when it is normalised, a

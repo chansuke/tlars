@@ -291,8 +291,10 @@ tlc/expressions/functions/apply/enum_domain_missing_integer
 tlc/expressions/functions/apply/function_value_in_set
 tlc/expressions/functions/apply/interval_domain_non_integer
 tlc/expressions/functions/apply/interval_domain_outside
+tlc/expressions/functions/apply/lazy_outside_domain
 tlc/expressions/functions/apply/lazy_string_argument
 tlc/expressions/functions/apply/long_domain_binary_search_finds
+tlc/expressions/functions/apply/long_domain_binary_search_misses
 tlc/expressions/functions/apply/long_domain_compare_error
 tlc/expressions/functions/apply/record_key
 tlc/expressions/functions/apply/runtime_string_key
@@ -343,7 +345,11 @@ tlc/expressions/functions/lazy/select_field_of_string_function
 tlc/expressions/functions/multi_argument/comma_is_tuple
 tlc/expressions/functions/multi_argument/domain_is_set_of_tuples
 tlc/expressions/functions/multi_argument/lazy_extra_arguments_ignored
+tlc/expressions/functions/multi_argument/lazy_first_argument_outside
+tlc/expressions/functions/multi_argument/lazy_non_tuple_argument
+tlc/expressions/functions/multi_argument/lazy_second_argument_outside
 tlc/expressions/functions/multi_argument/lazy_too_few_arguments
+tlc/expressions/functions/multi_argument/lazy_tuple_argument_mismatch
 tlc/expressions/functions/multi_argument/multi_function_prints_as_function
 tlc/expressions/functions/multi_argument/record_function_three_arguments
 tlc/expressions/functions/multi_argument/record_function_wrong_arity
@@ -354,6 +360,7 @@ tlc/expressions/functions/multi_argument/three_bounds
 tlc/expressions/functions/multi_argument/tuple_binder_comma_application
 tlc/expressions/functions/multi_argument/tuple_binder_lazy
 tlc/expressions/functions/multi_argument/tuple_binder_lazy_accepts_function
+tlc/expressions/functions/multi_argument/tuple_binder_lazy_non_member
 tlc/expressions/functions/multi_argument/tuple_binder_single
 tlc/expressions/functions/multi_argument/tuple_binder_with_plain
 tlc/expressions/functions/multi_argument/tuple_with_comma_application
@@ -388,6 +395,7 @@ tlc/expressions/functions/recursive/not_tuple_when_low_not_one
 tlc/expressions/functions/recursive/over_nat
 tlc/expressions/functions/recursive/recursive_in_let_captures_binding
 tlc/expressions/functions/recursive/repeated_application_reruns_before_conversion
+tlc/expressions/functions/recursive/self_application_outside_domain
 tlc/expressions/functions/recursive/tuple_binder
 tlc/expressions/functions/recursive/two_arguments
 tlc/expressions/functions/recursive/unused_branch_stays_unevaluated
@@ -518,6 +526,10 @@ tlc/expressions/ordering/print/map_prints_normalized
 tlc/expressions/ordering/print/print_is_deeply_normalized
 tlc/expressions/ordering/print/print_short_value_stays_on_one_line
 tlc/expressions/ordering/print/print_tuple_width_77_stays_on_one_line
+tlc/expressions/ordering/print/print_tuple_width_81_wraps
+tlc/expressions/ordering/print/print_wraps_long_record
+tlc/expressions/ordering/print/print_wraps_long_set
+tlc/expressions/ordering/print/print_wraps_long_tuple
 tlc/expressions/ordering/print/records_by_name_token
 tlc/expressions/ordering/print/records_by_size
 tlc/expressions/ordering/print/records_by_values

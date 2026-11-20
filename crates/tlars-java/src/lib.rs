@@ -18,7 +18,8 @@
 //! | JVM exception messages        | the casts and array reads TLC lets escape          |
 //!
 //! Golden files under `tests/golden` come from `tools/golden/JavaGolden.java` run on the
-//! pinned JDK 21.
+//! pinned JDK 21, with `$TLA2TOOLS_JAR` on the class path for the one corpus that asks TLC
+//! itself rather than the JDK (`pprint.txt`).
 
 mod exception;
 mod hashmap;

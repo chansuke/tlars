@@ -1,5 +1,6 @@
-// Writes golden files for crates/tlars-java from the running JDK.
-// Usage: java tools/golden/JavaGolden.java crates/tlars-java/tests/golden
+// Writes golden files for crates/tlars-java from the running JDK and from TLC's pprint.
+// Usage (inside `nix develop`):
+//   java -cp "$TLA2TOOLS_JAR" tools/golden/JavaGolden.java crates/tlars-java/tests/golden
 // The oracle JDK is pinned to 21 (docs/DESIGN.md): Double.toString changed in JDK 19.
 
 import java.io.IOException;
@@ -16,6 +17,8 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Random;
 import java.util.TimeZone;
+import java.util.TreeSet;
+import tlc2.pprint.PrettyPrint;
 
 public class JavaGolden {
     public static void main(String[] args) throws IOException {
@@ -30,6 +33,118 @@ public class JavaGolden {
         dates(dir.resolve("date_format.txt"));
         intHashSet(dir.resolve("int_hashset.txt"));
         hashMap(dir.resolve("hashmap.txt"));
+        pprint(dir.resolve("pprint.txt"));
+    }
+
+    // "<width>\t<flat value>\t<PrettyPrint.mypp(value, width)>", with backslash, tab, newline
+    // and carriage return written as \\, \t, \n and \r. The values cover every Parse and
+    // Format path; each one is printed at a fixed set of widths plus its own length minus
+    // one, its length and its length plus one, which is where flat turns into broken.
+    static void pprint(Path p) throws IOException {
+        String[] values = {
+            // constants, including the ones Parse has a branch for
+            "", "TRUE", "FALSE", "42", "-7", "-", "1..5", "0..2147483647", "1..", "mv1",
+            "\"\"", "\"abc\"", "aLongModelValueName", "123456789012345678901234567890",
+            "\"a string constant that is much wider than any of the widths below\"",
+            // string escapes StringValue.PrintVersion writes: \t \n \f \r \\ and \"
+            "{\"a\\tb\", \"c\\nd\", \"e\\fg\", \"h\\ri\", 1}",
+            "{\"a\\\\b\", \"cccccccccc\", \"dddddddddd\", \"eeeeeeeeee\", \"ffffffffff\"}",
+            "{\"a\\\"b\", \"cccccccccc\", \"dddddddddd\", \"eeeeeeeeee\", \"ffffffffff\"}",
+            // sets
+            "{}", "{1}", "{1, 2, 3}", "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}",
+            "{\"aaaaaaaaaa\", \"bbbbbbbbbb\", \"cccccccccc\", \"dddddddddd\", \"eeeeeeeeee\"}",
+            "{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}",
+            "{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}, {{9, 10}, {11, 12}}, {{13, 14}, {15, 16}}}",
+            "{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, 13, {14, 15, 16, 17, 18, 19, 20, 21}}",
+            "{-1, -22, -333, -4444, -55555, -666666, -7777777, -88888888, -999999999, 0}",
+            "{1..5, 6..10, 11..15, 16..20, 21..25, 26..30, 31..35, 36..40, 41..45, 46..50}",
+            // sequences
+            "<<>>", "<<1>>", "<<1, 2, 3>>", "<<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13>>",
+            "<<<<1, 2, 3>>, <<4, 5, 6>>, <<7, 8, 9>>, <<10, 11, 12>>, <<13, 14, 15>>>>",
+            "<<{1, 2, 3, 4, 5, 6, 7, 8}, [a |-> 1, b |-> 2], (1 :> 2 @@ 3 :> 4), \"xy\">>",
+            // records: value on its own line, and a field name too wide for the line
+            "[a |-> 1]", "[a |-> 1, b |-> 2]",
+            "[aaaaaaaaaa |-> 1, bbbbbbbbbb |-> 2, cccccccccc |-> 3, dddddddddd |-> 4]",
+            "[a |-> {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, b |-> <<13, 14, 15, 16, 17>>]",
+            "[aLongFieldNameThatDoesNotFitOnOneLineAtAll |-> {1, 2, 3, 4, 5, 6, 7, 8, 9}]",
+            "[a |-> [b |-> [c |-> [d |-> {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}]]]]",
+            // functions: both halves plain, a wide range, and a domain that must break too
+            "(1 :> 2)", "(1 :> 2 @@ 3 :> 4)",
+            "(1 :> {1, 2, 3, 4, 5, 6, 7, 8, 9, 10} @@ 2 :> {11, 12, 13, 14, 15, 16, 17})",
+            "({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11} :> {12, 13, 14, 15, 16, 17, 18, 19, 20})",
+            "(\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" :> <<1, 2, 3, 4, 5, 6, 7, 8>>)",
+            "({1, 2} :> (3 :> 4 @@ 5 :> 6) @@ [a |-> 7] :> <<8, 9, 10, 11, 12, 13, 14>>)",
+            // SUBSET, whose pad is one space while its open delimiter is seven characters
+            "SUBSET {1, 2}", "SUBSET {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}",
+            "SUBSET SUBSET {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}",
+            "{SUBSET {1, 2, 3, 4, 5}, SUBSET {6, 7, 8, 9, 10}, SUBSET {11, 12, 13, 14}}",
+            // the terse texts of the lazy set classes, none of which Parse accepts
+            "SUBSET (1..5)", "UNION({{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15}})",
+            "[{1, 2, 3, 4, 5, 6, 7, 8, 9} -> {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}]",
+            "[a: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, b: {11, 12, 13, 14, 15, 16, 17, 18, 19}]",
+            "({1, 2, 3, 4, 5, 6, 7, 8, 9, 10} \\X {11, 12, 13, 14, 15, 16, 17, 18, 19, 20})",
+            "({1, 2, 3, 4, 5, 6, 7, 8, 9, 10} \\cup {11, 12, 13, 14, 15, 16, 17, 18, 19})",
+            "{x \\in {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} : <expression x > 2 /\\ x < 9>}",
+            "[x \\in 1..10 |-> <expression x + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10>]",
+            // identifiers Parse cannot read, and text that stops short or runs off the end
+            "{a_b, cccccccccc, dddddddddd, eeeeeeeeee, ffffffffff, gggggggggg, hhhhhhhh}",
+            "[a_b |-> 1, cccccccccc |-> 2, dddddddddd |-> 3, eeeeeeeeee |-> 4, ff |-> 5]",
+            "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,",
+            "{", "}", "{1,,2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}",
+            "{1 @@ 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}",
+            "(1 :> 2, 3 :> 4, 5 :> 6, 7 :> 8, 9 :> 10, 11 :> 12, 13 :> 14, 15 :> 16, 17)",
+            "<<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21>",
+            "\"an unterminated string constant that is wider than most of the widths here",
+            // whitespace: extra spaces, a tab and a newline between elements, and a trailing
+            // space, which stops the parse one character short of the end
+            "{ 1 ,  2 ,  3 ,  4 ,  5 ,  6 ,  7 ,  8 ,  9 ,  10 ,  11 ,  12 ,  13 ,  14 }",
+            "{1,\t2,\t3,\t4,\t5,\t6,\t7,\t8,\t9,\t10,\t11,\t12,\t13,\t14,\t15,\t16,\t17,\t18}",
+            "{1,\n2,\n3,\n4,\n5,\n6,\n7,\n8,\n9,\n10,\n11,\n12,\n13,\n14,\n15,\n16,\n17,\n18}",
+            " {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}",
+            "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21} ",
+            // whitespace that is not a plain space: Character.isWhitespace takes the file
+            // separator, the en quad and the ideographic space but not the next-line
+            // character, the no-break space, the figure space or the narrow no-break space
+            "{1,\u001c2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}",
+            "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}",
+            "{1,　2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}",
+            "{1,\u00852, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}",
+            "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}",
+            "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}",
+            "{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}",
+            // a character outside the BMP counts twice in a length, and neither of its two
+            // UTF-16 code units is a letter, so a bare one cannot start a constant
+            "{\"café\", \"naïve\"}", "[café |-> 1, naïve |-> 2]",
+            "{\"𝐀\", \"b\"}", "[𝐀 |-> 1, b |-> 2]",
+            // a field name may hold any letter or digit, and isDigit covers every decimal
+            // digit, not just the ASCII ones
+            "[١a |-> 1, bbbbbbbbbb |-> 2, cccccccccc |-> 3, dddddddddd |-> 4444444]",
+            "[café |-> {1, 2, 3, 4, 5, 6, 7, 8}, naïve |-> <<9, 10, 11, 12, 13>>]",
+        };
+        try (PrintWriter w = open(p)) {
+            for (String v : values) {
+                TreeSet<Integer> widths = new TreeSet<>(List.of(0, 1, 2, 3, 7, 8, 10, 20, 40, 79, 80, 81));
+                for (int d = -1; d <= 1; d++) widths.add(Math.max(0, v.length() + d));
+                for (int width : widths) {
+                    w.println(width + "\t" + esc(v) + "\t" + esc(PrettyPrint.mypp(v, width)));
+                }
+            }
+        }
+    }
+
+    static String esc(String s) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\': b.append("\\\\"); break;
+                case '\n': b.append("\\n"); break;
+                case '\t': b.append("\\t"); break;
+                case '\r': b.append("\\r"); break;
+                default: b.append(c);
+            }
+        }
+        return b.toString();
     }
 
     // "<start>\t<ops>\t<keys in iteration order>". start: "new", "cap N", or "set k;k;..."
