@@ -396,7 +396,7 @@ impl FcnRcdValue {
     /// `toTuple()` (`FcnRcdValue.java:620-642`); reads the snapshot, so it does not sort.
     fn to_tuple(&self) -> Option<Arc<TupleValue>> {
         if let FcnDomain::Interval(iv) = self.domain {
-            if iv.lo != 1 && iv.size() != 0 {
+            if iv.lo != 1 && !iv.is_empty() {
                 return None;
             }
             return Some(Arc::new(TupleValue { elems: self.values.clone() }));
@@ -454,13 +454,15 @@ impl FcnRcdValue {
         let domain = domain.expect("an explicit domain");
         if self.is_normalized() && domain.len() >= LINEAR_SEARCH_THRESHOLD {
             // `Arrays.binarySearch(domain, arg, Value::compareTo)`: the domain element is the
-            // receiver, and the hit is confirmed with `equals` (`FcnRcdValue.java:433-455`).
-            let (mut lo, mut hi) = (0usize, domain.len());
-            while lo < hi {
-                let mid = lo + (hi - lo) / 2;
+            // receiver, the bounds are inclusive (so the first probe of an even-sized domain
+            // is below the middle), and the hit is confirmed with `equals`
+            // (`FcnRcdValue.java:433-455`).
+            let (mut lo, mut hi) = (0i64, domain.len() as i64 - 1);
+            while lo <= hi {
+                let mid = ((lo + hi) >> 1) as usize;
                 match domain[mid].tlc_compare(ev, arg)? {
-                    Ordering::Less => lo = mid + 1,
-                    Ordering::Greater => hi = mid,
+                    Ordering::Less => lo = mid as i64 + 1,
+                    Ordering::Greater => hi = mid as i64 - 1,
                     Ordering::Equal => {
                         return Ok(if domain[mid].tlc_equals(ev, arg)? { Some(values[mid].clone()) } else { None });
                     }
@@ -671,7 +673,7 @@ impl FcnLambdaValue {
         }
         let elems = match &self.params[0].2 {
             Value::Interval(iv) => {
-                let sz = iv.size();
+                let sz = iv.size(ev)?;
                 if iv.lo != 1 && sz != 0 {
                     return Ok(None);
                 }
@@ -981,7 +983,7 @@ impl ParamEnum {
                         *done = true;
                         break;
                     }
-                    enums[i].reset();
+                    enums[i].reset(ev)?;
                     current[i] = enums[i].next(ev)?.expect("a reset enumeration of a non-empty set has an element");
                 }
                 Ok(Some(Value::tuple(elems)))

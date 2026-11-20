@@ -8,7 +8,8 @@ use tlars_msg::Ec;
 /// `deepCopy`, `deepNormalize`, then `Values.ppr(toStringUnchecked())`.
 fn shown(ev: &mut Ev<'_>, v: &Value) -> EvalResult<String> {
     v.deep_normalize(ev)?;
-    v.ppr(ev)
+    let flat = v.to_tlc_string_unchecked(ev)?;
+    crate::value::print::ppr(ev, &flat)
 }
 
 /// Prints `v1  v2` to `ToolIO.out` and returns `v2` (`TLC.java:63-78`).
@@ -27,7 +28,7 @@ pub(crate) fn print_t(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
 
 /// `new StringValue(v.toStringUnchecked())`.
 pub(crate) fn to_string(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
-    let text = a[0].to_tlc_string(ev)?;
+    let text = a[0].to_tlc_string_unchecked(ev)?;
     Ok(Value::Str(ev.tool().graph().interner().intern(&text)))
 }
 

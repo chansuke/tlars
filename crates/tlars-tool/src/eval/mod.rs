@@ -10,7 +10,7 @@
 //! - `replay`  `getState(fp)`, `getState(fp, pred)` (3719-3805)
 
 mod enabled;
-mod expr;
+pub(crate) mod expr;
 mod init;
 mod next;
 mod replay;

@@ -20,9 +20,11 @@ pub(crate) mod enumerate;
 mod fingerprint;
 mod function;
 mod order;
-mod print;
+pub(crate) mod print;
+mod sets;
 
 pub(crate) use function::{Except, warn};
+pub(crate) use sets::{lazy_cap, lazy_cup, lazy_diff, set_of_fcns, set_of_rcds, set_of_tuples, subset};
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
@@ -109,9 +111,26 @@ pub struct IntervalValue {
 }
 
 impl IntervalValue {
-    /// `IntervalValue.size()`; TLC's int arithmetic, which a full-range interval overflows.
-    pub(crate) fn size(&self) -> i32 {
-        if self.hi < self.lo { 0 } else { self.hi.wrapping_sub(self.lo).wrapping_add(1) }
+    /// `IntervalValue.size()` (`IntervalValue.java:120-137`): counted in `long`, so an
+    /// interval of more than `Integer.MAX_VALUE` elements fails instead of wrapping.
+    pub(crate) fn size(&self, ev: &mut Ev<'_>) -> EvalResult<i32> {
+        if self.hi < self.lo {
+            return Ok(0);
+        }
+        let sz = i64::from(self.hi) - i64::from(self.lo) + 1;
+        if sz > i64::from(i32::MAX) {
+            let shown = crate::value::print::ppr(ev, &format!("{}..{}", self.lo, self.hi))?;
+            return Err(EvalError::detailed(
+                format!("Size of interval value exceeds the maximum representable size (32bits): {shown}."),
+                None,
+            ));
+        }
+        Ok(sz as i32)
+    }
+
+    /// `high < low`, which every caller of `size()` that only asks about emptiness uses.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.hi < self.lo
     }
 
     /// `toSetEnum()`: the elements in order, already normalised.
@@ -133,6 +152,18 @@ pub struct TupleValue {
 pub struct SetEnumValue {
     pub(crate) built: Box<[Value]>,
     pub(crate) norm: OnceLock<Box<[Value]>>,
+}
+
+impl SetEnumValue {
+    /// `this.elems`: the normalised array once `normalize()` has run, the constructed one
+    /// before. The eager set operators read it, which is why their result's order depends on
+    /// whether the operand had been normalised.
+    pub(crate) fn snapshot(&self) -> &[Value] {
+        match self.norm.get() {
+            Some(norm) => norm,
+            None => &self.built,
+        }
+    }
 }
 
 /// Fields as constructed; normalised = sorted by name token.
@@ -380,33 +411,138 @@ impl Value {
 
     /// A SetEnum built normalised (`new SetEnumValue(elems, true)`).
     pub(crate) fn set_enum_normalized(elems: Vec<Value>) -> Value {
-        let elems = elems.into_boxed_slice();
-        let norm = OnceLock::new();
-        let _ = norm.set(elems.clone());
-        Value::SetEnum(Arc::new(SetEnumValue { built: elems, norm }))
+        Value::set_enum_of(elems, true)
+    }
+
+    /// `new SetEnumValue(vals, isNorm)`.
+    pub(crate) fn set_enum_of(elems: Vec<Value>, is_norm: bool) -> Value {
+        Value::SetEnum(set_enum_arc(elems, is_norm))
     }
 
     /// Unnormalised SetEnum, as `{e : x \in S}` and cfg `{...}` produce.
     pub(crate) fn set_enum(elems: Vec<Value>) -> Value {
-        Value::SetEnum(Arc::new(SetEnumValue { built: elems.into_boxed_slice(), norm: OnceLock::new() }))
+        Value::set_enum_of(elems, false)
     }
 
-    /// `toSetEnum()`: `None` if this value is not an enumerable set.
+    /// `toSetEnum()`: `None` if this value is not an enumerable set. A lazy set answers its
+    /// cache when it has one, and otherwise enumerates itself *without* caching, as TLC's
+    /// `toSetEnum` does; only `convertAndCache` publishes.
     pub(crate) fn to_set_enum(&self, ev: &mut Ev<'_>) -> EvalResult<Option<Arc<SetEnumValue>>> {
+        let cache = match self {
+            Value::SetEnum(s) => return Ok(Some(s.clone())),
+            Value::Interval(i) => return Ok(Some(i.to_set_enum_arc())),
+            Value::Subset(s) => s.converted.get(),
+            Value::KSubset(s) => s.converted.get(),
+            Value::SetOfFcns(s) => s.converted.get(),
+            Value::SetOfRcds(s) => s.converted.get(),
+            Value::SetOfTuples(s) => s.converted.get(),
+            Value::Union(s) => s.converted.get(),
+            Value::SetCup(s) | Value::SetCap(s) | Value::SetDiff(s) => s.converted.get(),
+            Value::SetPred(s) => s.converted.get(),
+            _ => return Ok(None),
+        };
+        if let Some(set) = cache {
+            return Ok(Some(set.clone()));
+        }
+        // The `isNorm` each class passes to the SetEnum it builds: its own order is
+        // normalised exactly when its operands' are.
+        let is_norm = match self {
+            Value::Subset(_) | Value::KSubset(_) => true,
+            Value::SetCup(_) | Value::Union(_) => false,
+            Value::SetCap(s) => s.left.is_normalized() && s.right.is_normalized(),
+            Value::SetDiff(s) => s.left.is_normalized(),
+            Value::SetOfFcns(s) => s.domain.is_normalized() && s.range.is_normalized(),
+            Value::SetOfRcds(s) => s.sets.iter().all(Value::is_normalized),
+            Value::SetOfTuples(s) => s.sets.iter().all(Value::is_normalized),
+            Value::SetPred(s) => s.inner.is_normalized(),
+            _ => unreachable!("only the lazy set classes reach this"),
+        };
+        // `SubsetValue.toSetEnum` sizes its array up front, which is how a power set may
+        // exceed `setBound`; the others start at the default capacity and so cannot.
+        let mut vals = match self {
+            Value::Subset(_) => {
+                let capacity = self.size(ev)?.max(0) as usize;
+                ValueVec::with_capacity(ev, capacity)
+            }
+            _ => ValueVec::new(ev),
+        };
+        let mut elems = self.elements(ev, enumerate::EnumOrder::Native)?.expect("an enumerable value enumerates");
+        while let Some(v) = elems.next(ev)? {
+            vals.push(v)?;
+        }
+        Ok(Some(set_enum_arc(vals.into_vec(), is_norm)))
+    }
+
+    /// `convertAndCache()`: the enumerated, deep-normalised set, published once. Comparison,
+    /// equality, cardinality and fingerprinting of a lazy set all go through it, which is
+    /// why they leave the set in normalised order.
+    pub(crate) fn convert_and_cache(&self, ev: &mut Ev<'_>) -> EvalResult<Arc<SetEnumValue>> {
+        let cache = match self {
+            Value::Subset(s) => &s.converted,
+            Value::KSubset(s) => &s.converted,
+            Value::SetOfFcns(s) => &s.converted,
+            Value::SetOfRcds(s) => &s.converted,
+            Value::SetOfTuples(s) => &s.converted,
+            Value::Union(s) => &s.converted,
+            Value::SetCup(s) | Value::SetCap(s) | Value::SetDiff(s) => &s.converted,
+            Value::SetPred(s) => &s.converted,
+            _ => unreachable!("convert_and_cache is for the lazy set classes"),
+        };
+        if let Some(set) = cache.get() {
+            return Ok(set.clone());
+        }
+        let set = self.to_set_enum(ev)?.expect("a lazy set converts");
+        // `SetPredValue.convertAndCache` normalises without descending; the others
+        // deep-normalise.
+        if matches!(self, Value::SetPred(_)) {
+            order::normalized(ev, &set)?;
+        } else {
+            Value::SetEnum(set.clone()).deep_normalize(ev)?;
+        }
+        let _ = cache.set(set.clone());
+        Ok(cache.get().expect("just published").clone())
+    }
+
+    /// `isNormalized()`.
+    pub(crate) fn is_normalized(&self) -> bool {
         match self {
-            Value::SetEnum(s) => Ok(Some(s.clone())),
-            Value::Interval(i) => Ok(Some(i.to_set_enum_arc())),
-            Value::Subset(_)
-            | Value::KSubset(_)
-            | Value::SetOfFcns(_)
-            | Value::SetOfRcds(_)
-            | Value::SetOfTuples(_)
-            | Value::Union(_)
-            | Value::SetCup(_)
-            | Value::SetCap(_)
-            | Value::SetDiff(_)
-            | Value::SetPred(_) => Err(crate::error::EvalError::unimplemented(format!("toSetEnum of {} (M2 unit 3)", self.kind_string()))),
-            _ => Ok(None),
+            Value::SetEnum(s) => s.norm.get().is_some(),
+            Value::Record(r) => r.is_normalized(),
+            Value::FcnRcd(f) => f.is_normalized(),
+            Value::FcnLambda(f) => f.converted.get().is_some_and(|r| r.is_normalized()),
+            // `SetPredValue` replaces `inVal` with the converted set, so once converted it
+            // reports that set's flag (`SetPredValue.java:220-222`).
+            Value::SetPred(s) => match s.converted.get() {
+                Some(set) => set.norm.get().is_some(),
+                None => s.inner.is_normalized(),
+            },
+            // A cache that exists was deep-normalised; without one these classes report
+            // their operands', and SetCup/Subset/Union report false.
+            Value::SetCap(s) => match s.converted.get() {
+                Some(set) => set.norm.get().is_some(),
+                None => s.left.is_normalized() && s.right.is_normalized(),
+            },
+            Value::SetDiff(s) => match s.converted.get() {
+                Some(set) => set.norm.get().is_some(),
+                None => s.left.is_normalized(),
+            },
+            Value::SetOfFcns(s) => match s.converted.get() {
+                Some(set) => set.norm.get().is_some(),
+                None => s.domain.is_normalized() && s.range.is_normalized(),
+            },
+            Value::SetOfRcds(s) => match s.converted.get() {
+                Some(set) => set.norm.get().is_some(),
+                None => s.sets.iter().all(Value::is_normalized),
+            },
+            Value::SetOfTuples(s) => match s.converted.get() {
+                Some(set) => set.norm.get().is_some(),
+                None => s.sets.iter().all(Value::is_normalized),
+            },
+            Value::SetCup(s) => s.converted.get().is_some_and(|set| set.norm.get().is_some()),
+            Value::Subset(s) => s.converted.get().is_some_and(|set| set.norm.get().is_some()),
+            Value::KSubset(s) => s.converted.get().is_some_and(|set| set.norm.get().is_some()),
+            Value::Union(s) => s.converted.get().is_some_and(|set| set.norm.get().is_some()),
+            _ => true,
         }
     }
 
@@ -415,10 +551,60 @@ impl Value {
         matches!(self, Value::Interval(_) | Value::SetEnum(_))
     }
 
+    /// `instanceof Enumerable`: the set classes. TLC tests the class, not whether the
+    /// enumeration succeeds, so `SUBSET Nat` is enumerable and fails while enumerating.
+    pub(crate) fn is_enumerable(&self) -> bool {
+        matches!(
+            self,
+            Value::SetEnum(_)
+                | Value::Interval(_)
+                | Value::Subset(_)
+                | Value::KSubset(_)
+                | Value::SetOfFcns(_)
+                | Value::SetOfRcds(_)
+                | Value::SetOfTuples(_)
+                | Value::Union(_)
+                | Value::SetCup(_)
+                | Value::SetCap(_)
+                | Value::SetDiff(_)
+                | Value::SetPred(_)
+        )
+    }
+
+    /// `normalize()`: the in-place sort TLC runs before a value is compared or printed. Here
+    /// it publishes the `OnceLock`, after which only the normalised form is read.
+    pub(crate) fn normalize(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
+        match self {
+            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::Interval(_) | Value::User(_) | Value::Undef => Ok(()),
+            Value::Tuple(_) => Ok(()),
+            Value::SetEnum(s) => order::normalized(ev, s).map(|_| ()),
+            Value::Record(r) => order::record_normalized(ev, r).map(|_| ()),
+            Value::FcnRcd(f) => f.normalize(ev).map(|_| ()),
+            Value::FcnLambda(f) => match f.converted.get() {
+                Some(r) => r.normalize(ev).map(|_| ()),
+                None => Ok(()),
+            },
+            // A lazy set with a cache normalises the cache; without one it normalises the
+            // operands it reads its own `isNormalized` from, and nothing else.
+            Value::SetCup(s) => cached_or(ev, s.converted.get(), &[]),
+            Value::Union(u) => cached_or(ev, u.converted.get(), &[]),
+            Value::SetCap(s) | Value::SetDiff(s) => cached_or(ev, s.converted.get(), &[s.left.clone(), s.right.clone()]),
+            Value::Subset(s) => cached_or(ev, s.converted.get(), std::slice::from_ref(&s.base)),
+            Value::KSubset(s) => cached_or(ev, s.converted.get(), std::slice::from_ref(&s.base)),
+            Value::SetOfFcns(s) => cached_or(ev, s.converted.get(), &[s.domain.clone(), s.range.clone()]),
+            Value::SetOfRcds(s) => cached_or(ev, s.converted.get(), &s.sets),
+            Value::SetOfTuples(s) => cached_or(ev, s.converted.get(), &s.sets),
+            Value::SetPred(s) => match s.converted.get() {
+                Some(set) => order::normalized(ev, set).map(|_| ()),
+                None => s.inner.normalize(ev),
+            },
+        }
+    }
+
     /// `deepNormalize()`: done before a state is fingerprinted / shared.
     pub(crate) fn deep_normalize(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
         match self {
-            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::Interval(_) | Value::User(_) => Ok(()),
+            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::Interval(_) | Value::User(_) | Value::Undef => Ok(()),
             // Elements first, then the set itself (`SetEnumValue.java:307-319`).
             Value::SetEnum(set) => {
                 for e in set.built.iter() {
@@ -461,12 +647,100 @@ impl Value {
                     Ok(())
                 }
             },
-            _ => Err(EvalError::unimplemented("deepNormalize of this value (M2 unit 5)".into())),
+            // A lazy set descends into its operands and leaves itself lazy
+            // (`SetCupValue.java:150-160`).
+            Value::SetCup(s) | Value::SetCap(s) | Value::SetDiff(s) => {
+                s.left.deep_normalize(ev)?;
+                s.right.deep_normalize(ev)
+            }
+            Value::Subset(s) => s.base.deep_normalize(ev),
+            Value::KSubset(s) => s.base.deep_normalize(ev),
+            Value::Union(u) => u.set.deep_normalize(ev),
+            Value::SetOfFcns(s) => {
+                s.domain.deep_normalize(ev)?;
+                s.range.deep_normalize(ev)
+            }
+            Value::SetOfRcds(s) => s.sets.iter().try_for_each(|v| v.deep_normalize(ev)),
+            Value::SetOfTuples(s) => s.sets.iter().try_for_each(|v| v.deep_normalize(ev)),
+            Value::SetPred(s) => match s.converted.get() {
+                Some(set) => Value::SetEnum(set.clone()).deep_normalize(ev),
+                None => s.inner.deep_normalize(ev),
+            },
         }
     }
 
     /// `permute(MVPerm)`.
     pub(crate) fn permute(&self, ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm) -> EvalResult<Value> {
         todo!()
+    }
+}
+
+/// `new SetEnumValue(vals, isNorm)` as an `Arc`.
+pub(crate) fn set_enum_arc(elems: Vec<Value>, is_norm: bool) -> Arc<SetEnumValue> {
+    let elems = elems.into_boxed_slice();
+    let norm = OnceLock::new();
+    if is_norm {
+        let _ = norm.set(elems.clone());
+    }
+    Arc::new(SetEnumValue { built: elems, norm })
+}
+
+/// `normalize()` of a lazy set: the cached SetEnum if it has one, else the given operands.
+fn cached_or(ev: &mut Ev<'_>, cached: Option<&Arc<SetEnumValue>>, operands: &[Value]) -> EvalResult<()> {
+    match cached {
+        Some(set) => order::normalized(ev, set).map(|_| ()),
+        None => operands.iter().try_for_each(|v| v.normalize(ev)),
+    }
+}
+
+/// `tlc2.value.impl.ValueVec`: the array a set class fills element by element. The single
+/// owner of "a set built one element at a time holds at most `TLCGlobals.setBound` of them":
+/// the array refuses to grow past the bound, which an initial capacity may still exceed
+/// (`ValueVec.java:90-108`), so `SUBSET S` of a 20-element S is built without complaint.
+pub(crate) struct ValueVec {
+    elems: Vec<Value>,
+    capacity: usize,
+    bound: usize,
+}
+
+impl ValueVec {
+    /// `new ValueVec()`.
+    pub(crate) fn new(ev: &Ev<'_>) -> ValueVec {
+        ValueVec::with_capacity(ev, 10)
+    }
+
+    /// `new ValueVec(initialCapacity)`.
+    pub(crate) fn with_capacity(ev: &Ev<'_>, capacity: usize) -> ValueVec {
+        ValueVec { elems: Vec::new(), capacity, bound: ev.tool().globals().max_set_size.max(0) as usize }
+    }
+
+    /// `addElement(val)`, which grows the array when it is full.
+    pub(crate) fn push(&mut self, value: Value) -> EvalResult<()> {
+        if self.elems.len() == self.capacity {
+            if self.capacity >= self.bound {
+                let bound = self.bound;
+                return Err(EvalError::runtime(
+                    tlars_msg::Ec::GENERAL,
+                    format!("Attempted to construct a set with too many elements (>{bound})."),
+                ));
+            }
+            let doubled = (self.capacity as i64 * 2).min(i64::from(i32::MAX) - 8);
+            self.capacity = doubled.max(self.elems.len() as i64 + 1).min(self.bound as i64) as usize;
+        }
+        self.elems.push(value);
+        Ok(())
+    }
+
+    pub(crate) fn into_vec(self) -> Vec<Value> {
+        self.elems
+    }
+
+    /// `size()`.
+    pub(crate) fn size(&self) -> usize {
+        self.elems.len()
+    }
+
+    pub(crate) fn get(&self, index: usize) -> Value {
+        self.elems[index].clone()
     }
 }

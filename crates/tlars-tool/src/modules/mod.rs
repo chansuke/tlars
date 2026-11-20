@@ -8,6 +8,7 @@
 //! only*; SANY still level-checks the TLA+ text. User `.class` overrides are not supported
 //! in v1 (see DESIGN.md).
 
+mod finite_sets;
 mod naturals;
 mod sequences;
 mod tlc;
@@ -55,46 +56,56 @@ pub(crate) struct NativeOp {
 use JavaParam::{IntValue as I, Value as V};
 
 macro_rules! natives {
-    ($( $class:literal $name:literal ($($p:ident),*) $imp:expr, $sig:literal; )*) => {
+    ($( $class:literal $name:literal ($($p:ident),*) $kind:ident $imp:expr, $sig:literal; )*) => {
         pub(crate) static REGISTRY: &[NativeOp] = &[
-            $( NativeOp { module: $class, tla_name: $name, params: &[$($p),*], imp: NativeImpl::Strict($imp), signature: $sig }, )*
+            $( NativeOp { module: $class, tla_name: $name, params: &[$($p),*], imp: NativeImpl::$kind($imp), signature: $sig }, )*
         ];
     };
 }
 
 natives! {
-    "Naturals" "Nat" () naturals::nat, "public static tlc2.value.impl.Value tlc2.module.Naturals.Nat()";
-    "Naturals" "+" (I, I) naturals::plus, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Plus(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Naturals" "-" (I, I) naturals::minus, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Minus(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Naturals" "*" (I, I) naturals::times, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Times(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Naturals" "<" (V, V) naturals::lt, "public static tlc2.value.IBoolValue tlc2.module.Naturals.LT(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "Naturals" "\\leq" (V, V) naturals::le, "public static tlc2.value.IBoolValue tlc2.module.Naturals.LE(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "Naturals" ">" (V, V) naturals::gt, "public static tlc2.value.IBoolValue tlc2.module.Naturals.GT(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "Naturals" "\\geq" (V, V) naturals::geq_naturals, "public static tlc2.value.IBoolValue tlc2.module.Naturals.GEQ(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "Naturals" ".." (I, I) naturals::dot_dot, "public static tlc2.value.impl.IntervalValue tlc2.module.Naturals.DotDot(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Naturals" "\\div" (I, I) naturals::divide_naturals, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Divide(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Naturals" "%" (I, I) naturals::modulo, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Mod(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Naturals" "^" (I, I) naturals::expt, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Expt(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Integers" "Int" () naturals::int, "public static tlc2.value.impl.Value tlc2.module.Integers.Int()";
-    "Integers" "Nat" () naturals::nat, "public static tlc2.value.impl.Value tlc2.module.Integers.Nat()";
-    "Integers" "+" (I, I) naturals::plus, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Plus(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Integers" "-" (I, I) naturals::minus, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Minus(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Integers" "*" (I, I) naturals::times, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Times(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Integers" "<" (V, V) naturals::lt, "public static tlc2.value.IBoolValue tlc2.module.Integers.LT(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "Integers" "\\leq" (V, V) naturals::le, "public static tlc2.value.IBoolValue tlc2.module.Integers.LE(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "Integers" ">" (V, V) naturals::gt, "public static tlc2.value.impl.BoolValue tlc2.module.Integers.GT(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "Integers" "\\geq" (V, V) naturals::geq_integers, "public static tlc2.value.IBoolValue tlc2.module.Integers.GEQ(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "Integers" ".." (I, I) naturals::dot_dot, "public static tlc2.value.impl.IntervalValue tlc2.module.Integers.DotDot(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Integers" "-." (I) naturals::neg, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Neg(tlc2.value.impl.IntValue)";
-    "Integers" "\\div" (I, I) naturals::divide_integers, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Divide(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Integers" "%" (I, I) naturals::modulo, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Mod(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "Integers" "^" (I, I) naturals::expt, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Expt(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
-    "TLC" "Print" (V, V) tlc::print, "public static tlc2.value.impl.Value tlc2.module.TLC.Print(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "TLC" "PrintT" (V) tlc::print_t, "public static tlc2.value.impl.Value tlc2.module.TLC.PrintT(tlc2.value.impl.Value)";
-    "TLC" "ToString" (V) tlc::to_string, "public static tlc2.value.impl.Value tlc2.module.TLC.ToString(tlc2.value.impl.Value)";
-    "TLC" "Assert" (V, V) tlc::assert, "public static tlc2.value.impl.Value tlc2.module.TLC.Assert(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "TLC" ":>" (V, V) tlc::make_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.MakeFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
-    "TLC" "@@" (V, V) tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Naturals" "Nat" () Strict naturals::nat, "public static tlc2.value.impl.Value tlc2.module.Naturals.Nat()";
+    "Naturals" "+" (I, I) Strict naturals::plus, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Plus(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Naturals" "-" (I, I) Strict naturals::minus, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Minus(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Naturals" "*" (I, I) Strict naturals::times, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Times(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Naturals" "<" (V, V) Strict naturals::lt, "public static tlc2.value.IBoolValue tlc2.module.Naturals.LT(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Naturals" "\\leq" (V, V) Strict naturals::le, "public static tlc2.value.IBoolValue tlc2.module.Naturals.LE(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Naturals" ">" (V, V) Strict naturals::gt, "public static tlc2.value.IBoolValue tlc2.module.Naturals.GT(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Naturals" "\\geq" (V, V) Strict naturals::geq_naturals, "public static tlc2.value.IBoolValue tlc2.module.Naturals.GEQ(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Naturals" ".." (I, I) Strict naturals::dot_dot, "public static tlc2.value.impl.IntervalValue tlc2.module.Naturals.DotDot(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Naturals" "\\div" (I, I) Strict naturals::divide_naturals, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Divide(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Naturals" "%" (I, I) Strict naturals::modulo, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Mod(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Naturals" "^" (I, I) Strict naturals::expt, "public static tlc2.value.impl.IntValue tlc2.module.Naturals.Expt(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Integers" "Int" () Strict naturals::int, "public static tlc2.value.impl.Value tlc2.module.Integers.Int()";
+    "Integers" "Nat" () Strict naturals::nat, "public static tlc2.value.impl.Value tlc2.module.Integers.Nat()";
+    "Integers" "+" (I, I) Strict naturals::plus, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Plus(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Integers" "-" (I, I) Strict naturals::minus, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Minus(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Integers" "*" (I, I) Strict naturals::times, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Times(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Integers" "<" (V, V) Strict naturals::lt, "public static tlc2.value.IBoolValue tlc2.module.Integers.LT(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Integers" "\\leq" (V, V) Strict naturals::le, "public static tlc2.value.IBoolValue tlc2.module.Integers.LE(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Integers" ">" (V, V) Strict naturals::gt, "public static tlc2.value.impl.BoolValue tlc2.module.Integers.GT(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Integers" "\\geq" (V, V) Strict naturals::geq_integers, "public static tlc2.value.IBoolValue tlc2.module.Integers.GEQ(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Integers" ".." (I, I) Strict naturals::dot_dot, "public static tlc2.value.impl.IntervalValue tlc2.module.Integers.DotDot(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Integers" "-." (I) Strict naturals::neg, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Neg(tlc2.value.impl.IntValue)";
+    "Integers" "\\div" (I, I) Strict naturals::divide_integers, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Divide(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Integers" "%" (I, I) Strict naturals::modulo, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Mod(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Integers" "^" (I, I) Strict naturals::expt, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Expt(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Sequences" "Seq" (V) Strict sequences::seq, "public static tlc2.value.impl.Value tlc2.module.Sequences.Seq(tlc2.value.impl.Value)";
+    "Sequences" "Len" (V) Strict sequences::len, "public static tlc2.value.impl.IntValue tlc2.module.Sequences.Len(tlc2.value.impl.Value)";
+    "Sequences" "Head" (V) Strict sequences::head, "public static tlc2.value.impl.Value tlc2.module.Sequences.Head(tlc2.value.impl.Value)";
+    "Sequences" "Tail" (V) Strict sequences::tail, "public static tlc2.value.impl.Value tlc2.module.Sequences.Tail(tlc2.value.impl.Value)";
+    "Sequences" "Append" (V, V) Strict sequences::append, "public static tlc2.value.impl.Value tlc2.module.Sequences.Append(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Sequences" "\\o" (V, V) Strict sequences::concat, "public static tlc2.value.impl.Value tlc2.module.Sequences.Concat(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Sequences" "SubSeq" (V, V, V) Strict sequences::sub_seq, "public static tlc2.value.impl.Value tlc2.module.Sequences.SubSeq(tlc2.value.impl.Value,tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Sequences" "SelectSeq" (V, V) Lazy sequences::select_seq, "public static tlc2.value.impl.Value tlc2.module.Sequences.SelectSeq(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "FiniteSets" "IsFiniteSet" (V) Strict finite_sets::is_finite_set, "public static tlc2.value.IBoolValue tlc2.module.FiniteSets.IsFiniteSet(tlc2.value.impl.Value)";
+    "FiniteSets" "Cardinality" (V) Strict finite_sets::cardinality, "public static tlc2.value.impl.IntValue tlc2.module.FiniteSets.Cardinality(tlc2.value.impl.Value)";
+    "TLC" "Print" (V, V) Strict tlc::print, "public static tlc2.value.impl.Value tlc2.module.TLC.Print(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" "PrintT" (V) Strict tlc::print_t, "public static tlc2.value.impl.Value tlc2.module.TLC.PrintT(tlc2.value.impl.Value)";
+    "TLC" "ToString" (V) Strict tlc::to_string, "public static tlc2.value.impl.Value tlc2.module.TLC.ToString(tlc2.value.impl.Value)";
+    "TLC" "Assert" (V, V) Strict tlc::assert, "public static tlc2.value.impl.Value tlc2.module.TLC.Assert(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" ":>" (V, V) Strict tlc::make_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.MakeFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" "@@" (V, V) Strict tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
 }
 
 /// The `tlc2.module` classes. A module with one of these names has its own definitions
@@ -113,6 +124,11 @@ impl NativeId {
     pub(crate) fn op(self) -> &'static NativeOp {
         &REGISTRY[self.0 as usize]
     }
+}
+
+/// Whether this native receives its arguments evaluated.
+pub(crate) fn imp(id: NativeId) -> NativeImpl {
+    id.op().imp
 }
 
 /// `MethodValue.eval(args)`: the arguments are cast to the method's parameter types first.

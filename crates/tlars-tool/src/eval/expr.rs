@@ -157,12 +157,19 @@ impl<'t> Ev<'t> {
                     }
                 }
                 Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
-                    // `MethodValue.eval(tool, args, ...)`: the arguments are evaluated first.
-                    let mut vals = Vec::with_capacity(args.len());
-                    for &a in args {
-                        vals.push(self.eval(a.expect_expr(), c, s0, s1, control)?);
-                    }
-                    return crate::modules::apply(self, id, &vals);
+                    // `MethodValue.eval(tool, args, ...)`: the arguments are evaluated first,
+                    // except where the Java method takes an operator and tlars has to see the
+                    // argument node to resolve it.
+                    return match crate::modules::imp(id) {
+                        crate::modules::NativeImpl::Lazy(f) => f(self, args, c, s0, s1, control),
+                        crate::modules::NativeImpl::Strict(_) => {
+                            let mut vals = Vec::with_capacity(args.len());
+                            for &a in args {
+                                vals.push(self.eval(a.expect_expr(), c, s0, s1, control)?);
+                            }
+                            crate::modules::apply(self, id, &vals)
+                        }
+                    };
                 }
                 Resolved::Binding(Binding::Lambda(_) | Binding::ExceptAt(_)) => {
                     return Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()));
@@ -321,6 +328,188 @@ impl<'t> Ev<'t> {
                 }
                 Ok(Value::Bool(forall))
             }
+            Builtin::BoundedChoose => {
+                let bound = bound.expect("a bounded CHOOSE has a bound");
+                let list = &bound.lists[0];
+                let in_val = self.eval(list.domain, c, s0, s1, control)?;
+                if !in_val.is_enumerable() {
+                    let reason = format!(
+                        "Attempted to compute the value of an expression of\nform CHOOSE x \\in S: P, but S was not enumerable.\n{}",
+                        text(self, expr)
+                    );
+                    return Err(not_boolean(self, reason, expr));
+                }
+                in_val.normalize(self)?;
+                let mut elems = in_val.elements(self, EnumOrder::Normalized)?.expect("an enumerable value enumerates");
+                let pred = arg(0);
+                while let Some(val) = elems.next(self)? {
+                    let mut c1 = c.clone();
+                    if list.tuple {
+                        let cnt = list.vars.len();
+                        let tuple = val.to_tuple(self)?.filter(|t| t.elems.len() == cnt);
+                        let Some(tuple) = tuple else {
+                            let reason = format!(
+                                "Attempted to compute the value of an expression of form\nCHOOSE <<x1, ... , xN>> \\in S: P, but S was not a set\nof N-tuples.\n{}",
+                                text(self, expr)
+                            );
+                            return Err(not_boolean(self, reason, expr));
+                        };
+                        for (&id, e) in list.vars.iter().zip(tuple.elems.iter()) {
+                            c1 = c1.cons(SymbolRef::Param(id), Binding::Value(e.clone()));
+                        }
+                    } else {
+                        c1 = c1.cons(SymbolRef::Param(list.vars[0]), Binding::Value(val.clone()));
+                    }
+                    let bval = self.eval(pred, &c1, s0, s1, control)?;
+                    let Value::Bool(b) = bval else {
+                        let message = self.out().text(Ec::TLC_EXPECTED_VALUE, &["boolean", &text(self, expr)]);
+                        return Err(EvalError { loc: Some(graph.loc(pred)), ..EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message) });
+                    };
+                    if b {
+                        return Ok(val);
+                    }
+                }
+                let reason = format!(
+                    "Attempted to compute the value of an expression of form\nCHOOSE x \\in S: P, but no element of S satisfied P.\n{}",
+                    text(self, expr)
+                );
+                Err(not_boolean(self, reason, expr))
+            }
+            Builtin::UnboundedChoose | Builtin::UnboundedExists | Builtin::UnboundedForall => {
+                let what = match builtin {
+                    Builtin::UnboundedChoose => ("CHOOSE", "CHOOSE x \\in S: P(x)"),
+                    Builtin::UnboundedExists => ("\\E", "\\E x \\in S: P(x)"),
+                    _ => ("\\A", "\\A x \\in S: P(x)"),
+                };
+                let reason = format!(
+                    "TLC attempted to evaluate an unbounded {}.\nMake sure that the expression is of form {}.\n{}",
+                    what.0,
+                    what.1,
+                    text(self, expr)
+                );
+                Err(not_boolean(self, reason, expr))
+            }
+            // `{x \in S : P}`: filtered eagerly over a Reducible S, kept as a SetPredValue
+            // otherwise (`Tool.java:2466-2512`).
+            Builtin::SubsetOf => {
+                let bound = bound.expect("a set filter has a bound");
+                let list = &bound.lists[0];
+                let in_val = self.eval(list.domain, c, s0, s1, control)?;
+                let pred = arg(0);
+                if !in_val.is_reducible() {
+                    return Ok(Value::SetPred(Arc::new(crate::value::SetPredValue {
+                        vars: list.vars.clone(),
+                        tuple: list.tuple,
+                        inner: in_val,
+                        pred,
+                        env: Closure::capture(c, s0, s1, control)?,
+                        converted: std::sync::OnceLock::new(),
+                    })));
+                }
+                let is_norm = in_val.is_normalized();
+                let mut elems = in_val.elements(self, EnumOrder::Native)?.expect("a Reducible value enumerates");
+                let mut vals = crate::value::ValueVec::new(self);
+                while let Some(elem) = elems.next(self)? {
+                    let mut c1 = c.clone();
+                    if list.tuple {
+                        // TLC casts the element to a tuple and reads its components without
+                        // checking the length (`Tool.java:2475-2478`).
+                        let Value::Tuple(t) = &elem else { return Err(EvalError::class_cast(elem.java_class(), "TupleValue")) };
+                        for (i, &id) in list.vars.iter().enumerate() {
+                            let Some(v) = t.elems.get(i) else { return Err(EvalError::index_out_of_bounds(i, t.elems.len())) };
+                            c1 = c1.cons(SymbolRef::Param(id), Binding::Value(v.clone()));
+                        }
+                    } else {
+                        c1 = c1.cons(SymbolRef::Param(list.vars[0]), Binding::Value(elem.clone()));
+                    }
+                    let bval = self.eval(pred, &c1, s0, s1, control)?;
+                    let Value::Bool(b) = bval else {
+                        let reason = format!(
+                            "Attempted to evaluate an expression of form {{x \\in S : P(x)}} when P was {}.\n{}",
+                            bval.kind_string(),
+                            text(self, pred)
+                        );
+                        return Err(not_boolean(self, reason, pred));
+                    };
+                    if b {
+                        vals.push(elem)?;
+                    }
+                }
+                Ok(Value::set_enum_of(vals.into_vec(), is_norm))
+            }
+            // `{e : x \in S}`: always eager, and the result keeps the order the body
+            // produced (`Tool.java:2436-2449`).
+            Builtin::SetOfAll => {
+                let bound = bound.expect("a set map has a bound");
+                let mut contexts = self.contexts(bound, c, s0, s1, control)?;
+                let body = arg(0);
+                let mut vals = crate::value::ValueVec::new(self);
+                while let Some(c1) = contexts.next(self)? {
+                    let v = self.eval(body, &c1, s0, s1, control)?;
+                    vals.push(v)?;
+                }
+                Ok(Value::set_enum(vals.into_vec()))
+            }
+            // The eager form is the receiver's, so TLC swaps the operands when only the
+            // right one reduces: `SUBSET {} \cup {1}` is built from `{1}`
+            // (`Tool.java:2673-2719`).
+            Builtin::Cup | Builtin::Cap | Builtin::Setdiff => {
+                let a1 = self.eval(arg(0), c, s0, s1, control)?;
+                let a2 = self.eval(arg(1), c, s0, s1, control)?;
+                match builtin {
+                    Builtin::Cup if a1.is_reducible() => a1.cup(self, &a2),
+                    Builtin::Cup if a2.is_reducible() => a2.cup(self, &a1),
+                    Builtin::Cup => Ok(crate::value::lazy_cup(a1, a2)),
+                    Builtin::Cap if a1.is_reducible() => a1.cap(self, &a2),
+                    Builtin::Cap if a2.is_reducible() => a2.cap(self, &a1),
+                    Builtin::Cap => Ok(crate::value::lazy_cap(a1, a2)),
+                    // Only the left side of `\` may reduce: the right one is not enumerated.
+                    _ if a1.is_reducible() => a1.diff(self, &a2),
+                    _ => Ok(crate::value::lazy_diff(a1, a2)),
+                }
+            }
+            Builtin::Subseteq => {
+                let a1 = self.eval(arg(0), c, s0, s1, control)?;
+                let a2 = self.eval(arg(1), c, s0, s1, control)?;
+                if !a1.is_enumerable() {
+                    let reason = format!(
+                        "Attempted to evaluate an expression of form S \\subseteq T, but S was not enumerable.\n{}",
+                        text(self, expr)
+                    );
+                    return Err(not_boolean(self, reason, expr));
+                }
+                Ok(Value::Bool(a1.is_subset_eq(self, &a2)?))
+            }
+            Builtin::Subset => {
+                let v = self.eval(arg(0), c, s0, s1, control)?;
+                Ok(crate::value::subset(v))
+            }
+            Builtin::Union => {
+                let v = self.eval(arg(0), c, s0, s1, control)?;
+                v.union(self)
+            }
+            Builtin::CartesianProd => {
+                let mut sets = Vec::with_capacity(args.len());
+                for i in 0..args.len() {
+                    sets.push(self.eval(arg(i), c, s0, s1, control)?);
+                }
+                Ok(crate::value::set_of_tuples(sets))
+            }
+            Builtin::SetOfFcns => {
+                let domain = self.eval(arg(0), c, s0, s1, control)?;
+                let range = self.eval(arg(1), c, s0, s1, control)?;
+                Ok(crate::value::set_of_fcns(domain, range))
+            }
+            Builtin::SetOfRcds => {
+                let mut names = Vec::with_capacity(args.len());
+                let mut sets = Vec::with_capacity(args.len());
+                for i in 0..args.len() {
+                    let (name, set) = pair(&graph, arg(i));
+                    names.push(self.field_name(name));
+                    sets.push(self.eval(set, c, s0, s1, control)?);
+                }
+                crate::value::set_of_rcds(self, names, sets)
+            }
             Builtin::SetEnumerate => {
                 let mut elems = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
@@ -454,7 +643,7 @@ impl<'t> Ev<'t> {
         tool.graph.op_def(d).body.and_then(|b| tool.bindings.body_chain(&tool.graph, b))
     }
 
-    fn symbol_name(&self, sym: SymbolRef) -> String {
+    pub(crate) fn symbol_name(&self, sym: SymbolRef) -> String {
         let graph = &self.tool().graph;
         let name = match sym {
             SymbolRef::OpDef(d) => graph.op_def(d).name,
@@ -464,6 +653,53 @@ impl<'t> Ev<'t> {
             SymbolRef::Module(m) => graph.module(m).name,
         };
         graph.interner().text(name).to_string()
+    }
+
+    /// `evalImplOpArgKind` (`Tool.java:1884-1892`): an operator argument evaluated as a
+    /// value, which TLC wraps in an `OpLambdaValue` carrying the context of the *use* site.
+    /// `None` = the argument does not name an operator.
+    pub(crate) fn op_arg_value(&mut self, arg: ExprOrOpArg, c: &Ctx, control: EvalControl) -> EvalResult<Option<OpArgValue>> {
+        let ExprOrOpArg::OpArg(sym) = arg else { return Ok(None) };
+        Ok(match self.lookup(sym, c, StateRef::Empty, false) {
+            Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
+                Some(OpArgValue::Op { def: d, ctx: c.clone(), control })
+            }
+            Resolved::Binding(Binding::Native(id)) | Resolved::Native(id) => Some(OpArgValue::Native(id)),
+            _ => None,
+        })
+    }
+
+    /// `Values.ppr(op.toString())` of an operator argument: `<Operator name>` for a
+    /// definition, which for a LAMBDA is named `LAMBDA`, and the Java signature for an
+    /// override (`OpLambdaValue.java:189-193`, `MethodValue.java:249-252`).
+    pub(crate) fn op_arg_text(&mut self, arg: ExprOrOpArg, op: Option<&OpArgValue>) -> EvalResult<String> {
+        if let Some(OpArgValue::Native(id)) = op {
+            return Ok(format!("<Java Method: {}>", id.op().signature));
+        }
+        let ExprOrOpArg::OpArg(sym) = arg else {
+            return Err(EvalError::unimplemented("the printed form of a non-operator module argument".into()));
+        };
+        Ok(format!("<Operator {}>", self.symbol_name(sym)))
+    }
+
+    /// `OpLambdaValue.eval(args, control)` (`OpLambdaValue.java:100-119`) and
+    /// `MethodValue.eval(args)`: the body runs in the captured context, and the captured
+    /// control contributes only its Enabled bit.
+    pub(crate) fn apply_operator(&mut self, op: &OpArgValue, args: &[Value], control: EvalControl) -> EvalResult<Value> {
+        match op {
+            OpArgValue::Native(id) => crate::modules::apply(self, *id, args),
+            OpArgValue::Op { def, ctx, control: captured } => {
+                let def = *def;
+                let params = self.tool().graph.op_def(def).params.clone();
+                let body = self.tool().graph.op_def(def).body.expect("a definition has a body");
+                let mut c1 = ctx.clone();
+                for (&p, v) in params.iter().zip(args) {
+                    c1 = c1.cons(SymbolRef::Param(p), Binding::Value(v.clone()));
+                }
+                let control = if captured.has(EvalControl::ENABLED) { control.with(EvalControl::ENABLED) } else { control };
+                self.eval(body, &c1, StateRef::Empty, StateRef::Empty, control)
+            }
+        }
     }
 
     /// `BuiltInOPs.getOpCode(name)` for a built-in operator; `None` for everything else
@@ -522,6 +758,13 @@ impl<'t> Ev<'t> {
     pub(crate) fn not_boolean_next(&mut self, pred: ExprId, c: &Ctx) -> EvalError {
         todo!("'The next state relation is not a boolean expression.' with location")
     }
+}
+
+/// What an operator argument of a Java module resolves to: `OpLambdaValue` for a definition,
+/// `MethodValue` for another module's override.
+pub(crate) enum OpArgValue {
+    Op { def: OpDefId, ctx: Ctx, control: EvalControl },
+    Native(crate::modules::NativeId),
 }
 
 /// The two operands of a `$Pair` node, which SANY uses for record fields, CASE arms and
@@ -595,7 +838,7 @@ impl Contexts {
                 self.done = true;
                 break;
             }
-            self.vars[i].1.reset();
+            self.vars[i].1.reset(ev)?;
             self.current[i] = self.vars[i].1.next(ev)?.expect("a reset enumeration of a non-empty set has an element");
         }
         if self.vars.is_empty() {
@@ -623,6 +866,21 @@ enum Builtin {
     Case,
     BoundedForall,
     BoundedExists,
+    BoundedChoose,
+    SubsetOf,
+    SetOfAll,
+    Cup,
+    Cap,
+    Setdiff,
+    Subseteq,
+    Subset,
+    Union,
+    CartesianProd,
+    SetOfFcns,
+    SetOfRcds,
+    UnboundedChoose,
+    UnboundedExists,
+    UnboundedForall,
     SetEnumerate,
     Tuple,
     RcdConstructor,
@@ -665,6 +923,21 @@ impl Builtin {
             "$Case" => Builtin::Case,
             "$BoundedForall" => Builtin::BoundedForall,
             "$BoundedExists" => Builtin::BoundedExists,
+            "$BoundedChoose" => Builtin::BoundedChoose,
+            "$SubsetOf" => Builtin::SubsetOf,
+            "\\union" => Builtin::Cup,
+            "\\intersect" => Builtin::Cap,
+            "\\" => Builtin::Setdiff,
+            "\\subseteq" => Builtin::Subseteq,
+            "SUBSET" => Builtin::Subset,
+            "UNION" => Builtin::Union,
+            "$CartesianProd" => Builtin::CartesianProd,
+            "$SetOfFcns" => Builtin::SetOfFcns,
+            "$SetOfRcds" => Builtin::SetOfRcds,
+            "$SetOfAll" => Builtin::SetOfAll,
+            "$UnboundedChoose" => Builtin::UnboundedChoose,
+            "$UnboundedExists" => Builtin::UnboundedExists,
+            "$UnboundedForall" => Builtin::UnboundedForall,
             "$SetEnumerate" => Builtin::SetEnumerate,
             "$Tuple" => Builtin::Tuple,
             "$RcdConstructor" => Builtin::RcdConstructor,

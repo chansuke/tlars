@@ -13,8 +13,19 @@ use crate::eval::Ev;
 use std::sync::Arc;
 
 impl Value {
-    /// `toString()` (flat).
+    /// `toString()` (flat): a failure while expanding a lazy value is swallowed and the
+    /// symbolic form printed instead.
     pub(crate) fn to_tlc_string(&self, ev: &mut Ev<'_>) -> EvalResult<String> {
+        self.to_string_impl(ev, true)
+    }
+
+    /// `toStringUnchecked()`: the same, but such a failure surfaces. `TLC!Print`, `PrintT`
+    /// and `ToString` print this way, while every message built with `Values.ppr` does not.
+    pub(crate) fn to_tlc_string_unchecked(&self, ev: &mut Ev<'_>) -> EvalResult<String> {
+        self.to_string_impl(ev, false)
+    }
+
+    fn to_string_impl(&self, ev: &mut Ev<'_>, swallow: bool) -> EvalResult<String> {
         let interner = ev.tool().graph().interner().clone();
         Ok(match self {
             Value::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
@@ -31,7 +42,7 @@ impl Value {
                     if i > 0 {
                         out.push_str(", ");
                     }
-                    out.push_str(&e.to_tlc_string(ev)?);
+                    out.push_str(&e.to_string_impl(ev, swallow)?);
                 }
                 out.push('}');
                 out
@@ -42,7 +53,7 @@ impl Value {
                     if i > 0 {
                         out.push_str(", ");
                     }
-                    out.push_str(&e.to_tlc_string(ev)?);
+                    out.push_str(&e.to_string_impl(ev, swallow)?);
                 }
                 out.push_str(">>");
                 out
@@ -59,18 +70,19 @@ impl Value {
                     }
                     out.push_str(&interner.text(*n));
                     out.push_str(" |-> ");
-                    out.push_str(&v.to_tlc_string(ev)?);
+                    out.push_str(&v.to_string_impl(ev, swallow)?);
                 }
                 out.push(']');
                 out
             }
-            Value::FcnRcd(f) => fcn_rcd_string(ev, f)?,
+            Value::FcnRcd(f) => fcn_rcd_string(ev, f, swallow)?,
             Value::FcnLambda(f) => {
                 if ev.tool().globals().expand {
                     match f.to_fcn_rcd(ev).and_then(|r| Value::FcnRcd(r).to_tlc_string(ev)) {
                         Ok(s) => return Ok(s),
-                        // TLC swallows any Throwable here and falls back to the symbolic form
-                        // (`FcnLambdaValue.java:785-791`). An unimplemented construct is not
+                        // TLC swallows any Throwable here whatever the caller asked for, and
+                        // prints the materialised function checked
+                        // (`FcnLambdaValue.java:783-791`). An unimplemented construct is not
                         // one of TLC's failures, so it surfaces rather than printing
                         // something TLC would not.
                         Err(e) if matches!(e.kind, EvalErrorKind::Unimplemented) => return Err(e),
@@ -85,8 +97,109 @@ impl Value {
                 UserValue::Nat => "Nat".to_string(),
                 UserValue::Int => "Int".to_string(),
                 UserValue::String => "STRING".to_string(),
+                UserValue::Seq(range) => format!("Seq({})", range.to_string_impl(ev, swallow)?),
                 _ => return Err(EvalError::unimplemented("toString of this special set (M2 unit 6)".into())),
             },
+            // `S \cup T`, `S \cap T`, `S \ T`: each operand parenthesised, since every set
+            // class is an EnumerableValue (`EnumerableValue.java:250-257`).
+            Value::SetCup(s) | Value::SetCap(s) | Value::SetDiff(s) => {
+                if let Some(expanded) = expanded(ev, self, swallow)? {
+                    return Ok(expanded);
+                }
+                let op = match self {
+                    Value::SetCup(_) => " \\cup ",
+                    Value::SetCap(_) => " \\cap ",
+                    _ => " \\ ",
+                };
+                let (a, b) = (cup_cap_diff_operand(ev, &s.left, swallow)?, cup_cap_diff_operand(ev, &s.right, swallow)?);
+                format!("{a}{op}{b}")
+            }
+            // `SUBSET S` expands only for a base set of fewer than 7 elements
+            // (`SubsetValue.java:317-341`).
+            Value::Subset(s) => {
+                let unlazy = match ev.tool().globals().expand {
+                    false => false,
+                    true => match s.base.size(ev) {
+                        Ok(n) => n < 7,
+                        Err(e) if !swallow || matches!(e.kind, EvalErrorKind::Unimplemented) => return Err(e),
+                        Err(_) => false,
+                    },
+                };
+                if unlazy {
+                    let set = self.to_set_enum(ev)?.expect("a lazy set converts");
+                    return Value::SetEnum(set).to_string_impl(ev, swallow);
+                }
+                // `..` binds tighter than SUBSET, and the three binary set operators share
+                // its precedence, so those operands are parenthesised.
+                let base = s.base.to_string_impl(ev, swallow)?;
+                match is_parenthesized_subset(&s.base) {
+                    true => format!("SUBSET ({base})"),
+                    false => format!("SUBSET {base}"),
+                }
+            }
+            Value::KSubset(_) => return Err(EvalError::unimplemented("toString of a k-subset (M5)".into())),
+            // `UnionValue.toString` has no handler of its own, so a failed expansion
+            // surfaces even when the caller swallows (`UnionValue.java:302-316`).
+            Value::Union(u) => {
+                if ev.tool().globals().expand {
+                    let set = self.to_set_enum(ev)?.expect("a lazy set converts");
+                    return Value::SetEnum(set).to_string_impl(ev, swallow);
+                }
+                format!("UNION({})", u.set.to_string_impl(ev, swallow)?)
+            }
+            // The three product-shaped classes expand when their cardinality is below
+            // `enumBound`, counted with the same saturating loop TLC uses.
+            Value::SetOfFcns(s) => {
+                if let Some(expanded) = expanded_below_bound(ev, self, &[s.domain.clone(), s.range.clone()], swallow)? {
+                    return Ok(expanded);
+                }
+                format!("[{} -> {}]", s.domain.to_string_impl(ev, swallow)?, s.range.to_string_impl(ev, swallow)?)
+            }
+            Value::SetOfRcds(s) => {
+                if let Some(expanded) = expanded_below_bound(ev, self, &s.sets, swallow)? {
+                    return Ok(expanded);
+                }
+                let mut out = String::from("[");
+                for (i, (n, v)) in s.names.iter().zip(s.sets.iter()).enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    out.push_str(&interner.text(*n));
+                    out.push_str(": ");
+                    out.push_str(&v.to_string_impl(ev, swallow)?);
+                }
+                out.push(']');
+                out
+            }
+            Value::SetOfTuples(s) => {
+                if let Some(expanded) = expanded_below_bound(ev, self, &s.sets, swallow)? {
+                    return Ok(expanded);
+                }
+                let mut out = String::from("(");
+                for (i, v) in s.sets.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(" \\X ");
+                    }
+                    out.push_str(&v.to_string_impl(ev, swallow)?);
+                }
+                out.push(')');
+                out
+            }
+            Value::SetPred(p) => {
+                if let Some(expanded) = expanded(ev, self, swallow)? {
+                    return Ok(expanded);
+                }
+                let mut out = String::from("{");
+                for (i, &v) in p.vars.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    out.push_str(&interner.text(ev.tool().graph().param(v).name));
+                }
+                let (set, pred) = (p.inner.to_string_impl(ev, swallow)?, ev.tool().graph().expr_tlc_text(p.pred));
+                out.push_str(&format!(" \\in {set} : <expression {pred}> }}"));
+                out
+            }
             _ => return Err(EvalError::unimplemented(format!("toString of {} (M2 unit 6)", self.kind_string()))),
         })
     }
@@ -96,6 +209,83 @@ impl Value {
         let flat = self.to_tlc_string(ev)?;
         ppr(ev, &flat)
     }
+}
+
+/// The expanded form a lazy set prints under `TLCGlobals.expand`, or `None` when it stays
+/// symbolic. TLC swallows any `Throwable` from the expansion and falls back to the symbolic
+/// form; a construct tlars does not implement is not one of TLC's failures, so it surfaces.
+fn expanded(ev: &mut Ev<'_>, v: &Value, swallow: bool) -> EvalResult<Option<String>> {
+    if !ev.tool().globals().expand {
+        return Ok(None);
+    }
+    match v.to_set_enum(ev).and_then(|s| Value::SetEnum(s.expect("a lazy set converts")).to_string_impl(ev, swallow)) {
+        Ok(s) => Ok(Some(s)),
+        Err(e) if !swallow || matches!(e.kind, EvalErrorKind::Unimplemented) => Err(e),
+        Err(_) => Ok(None),
+    }
+}
+
+/// `[D -> R]`, `[f : S]` and `S \X T` expand only when their cardinality is below
+/// `TLCGlobals.enumBound`. TLC multiplies the constituents' sizes in a `long` that stops
+/// growing at `Integer.MAX_VALUE`, and an empty constituent makes the product 0
+/// (`SetOfTuplesValue.java:430-451`).
+fn expanded_below_bound(ev: &mut Ev<'_>, v: &Value, constituents: &[Value], swallow: bool) -> EvalResult<Option<String>> {
+    if !ev.tool().globals().expand {
+        return Ok(None);
+    }
+    match product_size(ev, v, constituents) {
+        Ok(sz) if sz < i64::from(ev.tool().globals().enum_bound) => expanded(ev, v, swallow),
+        Ok(_) => Ok(None),
+        Err(e) if !swallow || matches!(e.kind, EvalErrorKind::Unimplemented) => Err(e),
+        Err(_) => Ok(None),
+    }
+}
+
+/// The saturating product the three classes' `toString` computes. `[D -> R]` is the range
+/// multiplied once per element of the domain, and has one element for an empty domain
+/// (`SetOfFcnsValue.java:415-437`).
+fn product_size(ev: &mut Ev<'_>, v: &Value, constituents: &[Value]) -> EvalResult<i64> {
+    if let Value::SetOfFcns(s) = v {
+        if s.domain.is_empty(ev)? {
+            return Ok(1);
+        }
+        let (dsz, rsz) = (s.domain.size(ev)?, s.range.size(ev)?);
+        let mut sz: i64 = 1;
+        for _ in 0..dsz {
+            if sz > i64::from(i32::MAX) {
+                break;
+            }
+            sz *= i64::from(rsz);
+        }
+        return Ok(sz);
+    }
+    let mut sz: i64 = 1;
+    for c in constituents {
+        let csz = c.size(ev)?;
+        if csz == 0 {
+            return Ok(0);
+        }
+        if sz <= i64::from(i32::MAX) {
+            sz *= i64::from(csz);
+        }
+    }
+    Ok(sz)
+}
+
+/// `Value.toStringForCupCapDiff`: every set class is an `EnumerableValue`, which
+/// parenthesises itself as an operand of `\cup`, `\cap` and `\`.
+fn cup_cap_diff_operand(ev: &mut Ev<'_>, v: &Value, swallow: bool) -> EvalResult<String> {
+    let text = v.to_string_impl(ev, swallow)?;
+    Ok(if v.is_enumerable() { format!("({text})") } else { text })
+}
+
+/// `instanceof ParenthesizedSubset`: the classes whose terse form needs brackets after
+/// `SUBSET`.
+fn is_parenthesized_subset(v: &Value) -> bool {
+    matches!(
+        v,
+        Value::Interval(_) | Value::Subset(_) | Value::KSubset(_) | Value::SetCup(_) | Value::SetCap(_) | Value::SetDiff(_)
+    )
 }
 
 /// `Values.ppr(String)`. A value that fits the width prints flat; wrapping is not ported yet.
@@ -119,7 +309,7 @@ struct Snapshot {
 
 /// `FcnRcdValue.toString`: `<<>>` when empty, a record when every domain element is an
 /// identifier-like string, a sequence when the domain is exactly `1..n`, else `(d :> v @@ ...)`.
-fn fcn_rcd_string(ev: &mut Ev<'_>, f: &Arc<FcnRcdValue>) -> EvalResult<String> {
+fn fcn_rcd_string(ev: &mut Ev<'_>, f: &Arc<FcnRcdValue>, swallow: bool) -> EvalResult<String> {
     let (domain, values) = f.snapshot();
     let mut snap = Snapshot {
         intv: f.interval(),
@@ -139,7 +329,7 @@ fn fcn_rcd_string(ev: &mut Ev<'_>, f: &Arc<FcnRcdValue>) -> EvalResult<String> {
             let Value::Str(name) = d else { unreachable!("isRcd accepted only strings") };
             out.push_str(&ev.tool().graph().interner().text(*name));
             out.push_str(" |-> ");
-            out.push_str(&v.to_tlc_string(ev)?);
+            out.push_str(&v.to_string_impl(ev, swallow)?);
         }
         out.push(']');
         return Ok(out);
@@ -150,7 +340,7 @@ fn fcn_rcd_string(ev: &mut Ev<'_>, f: &Arc<FcnRcdValue>) -> EvalResult<String> {
             if i > 0 {
                 out.push_str(", ");
             }
-            out.push_str(&v.to_tlc_string(ev)?);
+            out.push_str(&v.to_string_impl(ev, swallow)?);
         }
         out.push_str(">>");
         return Ok(out);
@@ -166,7 +356,7 @@ fn fcn_rcd_string(ev: &mut Ev<'_>, f: &Arc<FcnRcdValue>) -> EvalResult<String> {
         }
         out.push_str(&d.to_tlc_string(ev)?);
         out.push_str(" :> ");
-        out.push_str(&v.to_tlc_string(ev)?);
+        out.push_str(&v.to_string_impl(ev, swallow)?);
     }
     out.push(')');
     Ok(out)
@@ -201,7 +391,7 @@ fn is_name(name: &str) -> bool {
 /// `isTuple()` (`FcnRcdValue.java:937-953`), which normalises the snapshot it is given.
 fn is_tuple(ev: &mut Ev<'_>, snap: &mut Snapshot) -> EvalResult<bool> {
     if let Some(iv) = snap.intv {
-        return Ok(iv.lo == 1 || iv.size() == 0);
+        return Ok(iv.lo == 1 || iv.is_empty());
     }
     if !snap.domain.iter().all(|d| matches!(d, Value::Int(_))) {
         return Ok(false);
