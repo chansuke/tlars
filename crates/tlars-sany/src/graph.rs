@@ -272,7 +272,7 @@ pub struct ThmOrAssumpDefNode {
     pub params: Box<[ParamId]>,
 }
 
-/// Theorems and proofs are not here: TLC does not evaluate them.
+/// Proofs are not here: TLC does not evaluate them.
 pub struct ModuleNode {
     pub name: Atom,
     pub loc: Loc,
@@ -286,6 +286,8 @@ pub struct ModuleNode {
     /// Includes extended, excludes instantiated (`getAssumptions`).
     pub assumptions: Box<[AssumeNode]>,
     pub inner_modules: Box<[ModuleId]>,
+    /// `getTheorems()` bodies that are expressions; `ASSUME ... PROVE` theorems are left out.
+    pub theorems: Box<[ExprId]>,
     pub is_standard: bool,
     pub is_instantiated: bool,
     /// `ModuleNode.isParameterFree()`; with `is_instantiated` gates constant folding.
@@ -383,6 +385,15 @@ impl SemanticGraph {
             | ExprNode::Numeral { loc, .. }
             | ExprNode::Decimal { loc, .. }
             | ExprNode::String { loc, .. } => *loc,
+        }
+    }
+    /// `ExprNode.toString()`: a numeral or decimal prints as written, every other expression
+    /// as its location (`SemanticNode.toString`).
+    pub fn expr_tlc_text(&self, id: ExprId) -> String {
+        match self.expr(id) {
+            ExprNode::Numeral { digits, .. } => digits.to_string(),
+            ExprNode::Decimal { text, .. } => text.to_string(),
+            _ => self.loc(id).tlc_text(&self.interner),
         }
     }
     /// Resolve `a!b!c` / plain names the way `SpecProcessor` resolves cfg identifiers.

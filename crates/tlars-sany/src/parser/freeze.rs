@@ -97,6 +97,15 @@ impl Freezer {
             });
         }
         let inner_modules = nodes(m.getInnerModules()?).iter().map(|i| self.module(i)).collect();
+        // `processConstants` visits a theorem only when it is an expression, not an
+        // `ASSUME ... PROVE` (`SpecProcessor.java:2083-2087`).
+        let mut theorems = Vec::new();
+        for t in nodes(m.getTheorems()?) {
+            let body = t.getTheorem()?;
+            if body.jread(|o| o.is_instance_of("ExprNode")) {
+                theorems.push(self.expr(&body)?);
+            }
+        }
         self.module_slots[id.index()] = Some(graph::ModuleNode {
             name: atom(m.getName_0_via_SymbolNode()?),
             loc: loc(&m.getLocation_0_via_SemanticNode()?),
@@ -106,6 +115,7 @@ impl Freezer {
             op_defs,
             assumptions: assumptions.into(),
             inner_modules,
+            theorems: theorems.into(),
             is_standard: m.isStandardModule_0_via_SemanticNode()?,
             is_instantiated: m.isInstantiated()?,
             parameter_free: m.isParameterFree()?,
