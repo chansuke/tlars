@@ -84,7 +84,7 @@ impl Value {
                 };
                 let (an, av) = record_normalized(ev, a)?;
                 let (bn, bv) = record_normalized(ev, &b)?;
-                if an.len() != bn.len() || an != bn {
+                if an != bn {
                     return Ok(false);
                 }
                 for (x, y) in av.iter().zip(bv.iter()) {
@@ -505,10 +505,11 @@ fn fcn_equals(ev: &mut Ev<'_>, a: &FcnRcdValue, b: &FcnRcdValue) -> EvalResult<b
             return values_equal(ev, av, bv);
         }
         (Some(ai), None) => {
-            if bd.expect("an explicit domain").len() as i64 != i64::from(ai.size()) {
+            let bd = bd.expect("an explicit domain");
+            if bd.len() as i64 != i64::from(ai.size()) {
                 return Ok(false);
             }
-            (ai, bd.expect("an explicit domain"))
+            (ai, bd)
         }
         (None, Some(bi)) => {
             if av.len() != bv.len() {

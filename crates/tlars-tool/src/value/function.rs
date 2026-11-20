@@ -242,20 +242,31 @@ fn empty_rcd() -> Arc<RecordValue> {
     Value::record_arc(Vec::new(), Vec::new(), true)
 }
 
-impl TupleValue {
-    /// `apply` and `select` share the index check (`TupleValue.java:134-182`).
-    fn index(&self, ev: &mut Ev<'_>, arg: &Value) -> EvalResult<i32> {
-        match arg {
-            Value::Int(i) => Ok(*i),
-            _ => {
-                let shown = arg.ppr(ev)?;
-                Err(EvalError::detailed(format!("Attempted to access tuple at a non integral index: {shown}"), None))
-            }
+/// `apply` and `select` share the index check (`TupleValue.java:134-182`).
+fn tuple_index(ev: &mut Ev<'_>, arg: &Value) -> EvalResult<i32> {
+    match arg {
+        Value::Int(i) => Ok(*i),
+        _ => {
+            let shown = arg.ppr(ev)?;
+            Err(EvalError::detailed(format!("Attempted to access tuple at a non integral index: {shown}"), None))
         }
     }
+}
 
+/// `apply` and `select` share the field check (`RecordValue.java:473-521`).
+fn record_field(ev: &mut Ev<'_>, arg: &Value) -> EvalResult<Atom> {
+    match arg {
+        Value::Str(a) => Ok(*a),
+        _ => {
+            let shown = arg.ppr(ev)?;
+            Err(EvalError::detailed(format!("Attempted to access record by a non-string argument: {shown}"), None))
+        }
+    }
+}
+
+impl TupleValue {
     fn apply(self: &Arc<Self>, ev: &mut Ev<'_>, arg: &Value) -> EvalResult<Value> {
-        let idx = self.index(ev, arg)?;
+        let idx = tuple_index(ev, arg)?;
         if idx <= 0 || idx as usize > self.elems.len() {
             let shown = Value::Tuple(self.clone()).ppr(ev)?;
             return Err(EvalError::detailed(format!("Attempted to access index {idx} of tuple\n{shown}\nwhich is out of bounds."), None));
@@ -264,7 +275,7 @@ impl TupleValue {
     }
 
     fn select(&self, ev: &mut Ev<'_>, arg: &Value) -> EvalResult<Option<Value>> {
-        let idx = self.index(ev, arg)?;
+        let idx = tuple_index(ev, arg)?;
         Ok(if idx > 0 && idx as usize <= self.elems.len() { Some(self.elems[idx as usize - 1].clone()) } else { None })
     }
 
@@ -311,18 +322,8 @@ impl RecordValue {
         names.iter().position(|n| *n == name).map(|i| &values[i])
     }
 
-    fn field(&self, ev: &mut Ev<'_>, arg: &Value) -> EvalResult<Atom> {
-        match arg {
-            Value::Str(a) => Ok(*a),
-            _ => {
-                let shown = arg.ppr(ev)?;
-                Err(EvalError::detailed(format!("Attempted to access record by a non-string argument: {shown}"), None))
-            }
-        }
-    }
-
     fn apply(self: &Arc<Self>, ev: &mut Ev<'_>, arg: &Value) -> EvalResult<Value> {
-        let name = self.field(ev, arg)?;
+        let name = record_field(ev, arg)?;
         if let Some(v) = self.find(name) {
             return Ok(v.clone());
         }
@@ -332,7 +333,7 @@ impl RecordValue {
     }
 
     fn select(&self, ev: &mut Ev<'_>, arg: &Value) -> EvalResult<Option<Value>> {
-        let name = self.field(ev, arg)?;
+        let name = record_field(ev, arg)?;
         Ok(self.find(name).cloned())
     }
 
@@ -820,7 +821,7 @@ impl FcnLambdaValue {
         let Some(tuple) = args.to_tuple(ev)? else {
             return Err(self.no_match(ev, "the argument list", args)?);
         };
-        let elems = tuple.elems.to_vec();
+        let elems = &tuple.elems;
         let mut argn = 0;
         for (formals, is_tuple, domain) in self.params.iter() {
             // TLC reads past a short argument list (`FcnLambdaValue.java:224, 244`).
