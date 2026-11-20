@@ -19,8 +19,8 @@ use tlars_sany::graph::ExprOrOpArg;
 /// than one of the keys below.
 const NAMED_REGISTER_PREFIX: &str = "s:";
 
-/// The string keys whose value tlars cannot build yet: the run's configuration, its spec
-/// objects, the per-worker register maps, and the version record.
+/// The string keys whose value tlars cannot build yet: the spec objects, the action being
+/// run, the per-worker register maps and the build's version record.
 const UNIMPLEMENTED: &[&str] = &["spec", "revision", "action", "all", "all:named"];
 
 /// `getStatistics()`' fields, in the order `AbstractChecker` fills them
@@ -91,28 +91,29 @@ fn tlc_get_string(ev: &mut Ev<'_>, name: Atom, s0: StateRef<'_>, control: EvalCo
     if UNIMPLEMENTED.contains(&key.as_str()) {
         return Err(EvalError::unimplemented(format!("TLCGet(\"{key}\") (M3 unit 5)")));
     }
-    // Every counter below is a `TLCGlobals.mainChecker` call, so without a checker the NPE
-    // TLC catches turns into `TLCGet(key) was undefined`.
-    if matches!(key.as_str(), "diameter" | "generated" | "distinct" | "queue" | "stats" | "config") && ev.tool().run_counters().is_none() {
-        return Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key]));
+    // `duration` reads the clock alone and needs no checker in TLC, but tlars has no clock
+    // outside a run.
+    if key == "duration" {
+        let Some(checker) = ev.tool().main_checker() else {
+            return Err(EvalError::unimplemented("TLCGet(\"duration\") outside a run (M3 unit 5)".into()));
+        };
+        return narrow(ev, checker.duration_secs());
     }
-    match key.as_str() {
-        // `IntValue.gen(getProgress())`, already an int in Java.
-        "diameter" => return Ok(Value::Int(ev.tool().run_counters().expect("checked above").diameter() as i32)),
-        "generated" => return narrow(ev, ev.tool().run_counters().expect("checked above").generated()),
-        "distinct" => return narrow(ev, ev.tool().run_counters().expect("checked above").distinct()),
-        "queue" => return narrow(ev, ev.tool().run_counters().expect("checked above").queue()),
-        // `duration` reads the clock alone and needs no checker, but tlars has no clock
-        // outside a run.
-        "duration" => {
-            let Some(counters) = ev.tool().run_counters() else {
-                return Err(EvalError::unimplemented("TLCGet(\"duration\") outside a run (M3 unit 5)".into()));
-            };
-            return narrow(ev, counters.duration_secs().max(0) as u64);
-        }
-        "stats" => return statistics(ev),
-        "config" => return Ok(config(ev)),
-        _ => {}
+    if matches!(key.as_str(), "diameter" | "generated" | "distinct" | "queue" | "stats" | "config") {
+        // Each of these goes through `TLCGlobals.mainChecker`, so with no checker the NPE TLC
+        // catches turns into `TLCGet(key) was undefined`.
+        let Some(checker) = ev.tool().main_checker() else {
+            return Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key]));
+        };
+        return match key.as_str() {
+            // `IntValue.gen(getProgress())`, an int in Java already.
+            "diameter" => Ok(Value::Int(checker.diameter() as i32)),
+            "generated" => narrow(ev, checker.generated() as i64),
+            "distinct" => narrow(ev, checker.distinct() as i64),
+            "queue" => narrow(ev, checker.queue() as i64),
+            "stats" => Ok(statistics(ev, checker)),
+            _ => Ok(config(ev)),
+        };
     }
     // `System.getProperty(key.substring(2), key)`: the default is the whole key, `-D` and all.
     if let Some(property) = key.strip_prefix("-D") {
@@ -124,7 +125,7 @@ fn tlc_get_string(ev: &mut Ev<'_>, name: Atom, s0: StateRef<'_>, control: EvalCo
 
 /// `IntValue.gen(Math.toIntExact(v))`: a counter past `Integer.MAX_VALUE` is an
 /// `ArithmeticException`, which the module reports as `TLC_MODULE_OVERFLOW`.
-fn narrow(ev: &mut Ev<'_>, v: u64) -> EvalResult<Value> {
+fn narrow(ev: &mut Ev<'_>, v: i64) -> EvalResult<Value> {
     match i32::try_from(v) {
         Ok(n) => Ok(Value::Int(n)),
         Err(_) => Err(eval_exception(ev, Ec::TLC_MODULE_OVERFLOW, &[&v.to_string()])),
@@ -132,26 +133,26 @@ fn narrow(ev: &mut Ev<'_>, v: u64) -> EvalResult<Value> {
 }
 
 /// `IntValue.narrowToIntValue(v)`: a value that does not fit becomes -1.
-fn narrow_to_int(v: u64) -> Value {
+fn narrow_to_int(v: i64) -> Value {
     Value::Int(i32::try_from(v).unwrap_or(-1))
 }
 
 /// `AbstractChecker.getStatistics()` (`:683-709`).
-fn statistics(ev: &mut Ev<'_>) -> EvalResult<Value> {
-    let counters = ev.tool().run_counters().expect("checked by the caller");
-    let worker = ev.worker_id();
+fn statistics(ev: &mut Ev<'_>, checker: &dyn crate::effects::MainChecker) -> Value {
     let values = vec![
-        narrow_to_int(counters.queue()),
-        narrow_to_int(counters.distinct()),
-        narrow_to_int(counters.initial()),
-        narrow_to_int(counters.generated()),
-        narrow_to_int(u64::from(counters.diameter())),
-        narrow_to_int(counters.duration_secs().max(0) as u64),
-        Value::Int(i32::from(worker)),
+        narrow_to_int(checker.queue() as i64),
+        narrow_to_int(checker.distinct() as i64),
+        narrow_to_int(checker.initial() as i64),
+        narrow_to_int(checker.generated() as i64),
+        narrow_to_int(i64::from(checker.diameter())),
+        narrow_to_int(checker.duration_secs()),
+        // `Thread.currentThread() instanceof IdThread ? IdThread.GetId() : 0`, and tlars
+        // numbers the main thread 0 too.
+        Value::Int(i32::from(ev.worker_id())),
     ];
     let interner = ev.tool().graph().interner();
     let names = STATS_FIELDS.iter().map(|n| interner.intern(n)).collect();
-    Ok(Value::Record(Value::record_arc(names, values, false)))
+    Value::Record(Value::record_arc(names, values, false))
 }
 
 /// `AbstractChecker.createConfig()` (`:711-736`), which the checker builds once at startup.
@@ -187,9 +188,13 @@ pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
         // Every string key answers TRUE; only a TRUE second argument does anything.
         let asked = matches!(a[1], Value::Bool(true));
         match key.as_str() {
+            // `if (mainChecker != null) mainChecker.stop()`: with no checker it is a no-op
+            // that still answers TRUE.
             "exit" => {
                 if asked {
-                    return Err(EvalError::unimplemented("TLCSet(\"exit\", TRUE), which stops the checker (M3 unit 5)".into()));
+                    if let Some(checker) = ev.tool().main_checker() {
+                        checker.stop();
+                    }
                 }
                 return Ok(Value::Bool(true));
             }

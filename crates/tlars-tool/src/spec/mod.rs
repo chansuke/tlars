@@ -148,7 +148,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         globals,
         registers: std::sync::Mutex::new(crate::effects::Registers::default()),
         set_properties: std::sync::Mutex::new(Vec::new()),
-        counters: std::sync::OnceLock::new(),
+        main_checker: std::sync::OnceLock::new(),
     };
     let mut defns = defns;
     fold_constant_defns(&mut tool, &mut defns, out)?;

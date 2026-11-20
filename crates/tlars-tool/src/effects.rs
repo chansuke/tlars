@@ -48,14 +48,14 @@ impl StateRandom {
     }
 }
 
-/// Read-only run counters owned by the checker (`TLCGet("distinct")`, `"generated"`,
-/// `"queue"`, `"diameter"`, `"duration"`, `"stats"`). The checker implements this; the
-/// evaluator only reads through it. One method per `AbstractChecker` getter, read live, so a
-/// counter answers what it would have answered at that point of the search.
+/// `TLCGlobals.mainChecker`, as `TLCGet`/`TLCSet` use it: the live counters of the run plus
+/// the one write, `stop()`. The checker implements it; the evaluator only calls through it.
+/// Every counter is read live, so it answers what it would have answered at that point of the
+/// search.
 ///
-/// No implementation attached means `TLCGlobals.mainChecker == null`, which in TLC is an NPE
-/// the module turns into `TLC_MODULE_TLCGET_UNDEFINED`.
-pub trait RunCounters: Send + Sync {
+/// Nothing attached means `TLCGlobals.mainChecker == null`, which in TLC is the NPE the
+/// module turns into `TLC_MODULE_TLCGET_UNDEFINED`.
+pub trait MainChecker: Send + Sync {
     /// `getDistinctStatesGenerated`.
     fn distinct(&self) -> u64;
     /// `getStatesGenerated`.
@@ -68,6 +68,9 @@ pub trait RunCounters: Send + Sync {
     fn diameter(&self) -> u32;
     /// `(System.currentTimeMillis() - startTime) / 1000`.
     fn duration_secs(&self) -> i64;
+    /// `ModelChecker.stop()`: `theStateQueue.finishAll()`, so the workers stop dequeuing and
+    /// the run ends where it stands. What `TLCSet("exit", TRUE)` does.
+    fn stop(&self);
 }
 
 /// `IdThread.localValues` and `IdThread.namedRegisters`: what `TLCSet` writes and `TLCGet`

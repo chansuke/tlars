@@ -74,10 +74,10 @@ pub(crate) struct WorkerStats {
     pub(crate) out_degree: Mutex<[u64; 32]>,
 }
 
-/// What `TLCGet` reads out of the running checker (`AbstractChecker`'s getters). It shares
-/// the checker's counter sources instead of borrowing it, so the tool can hold it for the
-/// whole run.
-struct Counters {
+/// The checker as `TLCGet`/`TLCSet` see it (`AbstractChecker`'s getters plus `stop`). It
+/// shares the checker's counter sources instead of borrowing the checker, so the tool can
+/// hold it for the whole run.
+struct Published {
     fpset: std::sync::Arc<dyn FpSet>,
     queue: std::sync::Arc<StateQueue>,
     traces: std::sync::Arc<TraceStores>,
@@ -87,7 +87,7 @@ struct Counters {
     clock: crate::Clock,
 }
 
-impl tlars_tool::RunCounters for Counters {
+impl tlars_tool::MainChecker for Published {
     fn distinct(&self) -> u64 {
         self.fpset.size()
     }
@@ -108,12 +108,15 @@ impl tlars_tool::RunCounters for Counters {
     fn duration_secs(&self) -> i64 {
         (self.clock.now_millis() - self.start_millis) / 1000
     }
+    fn stop(&self) {
+        self.queue.finish_all();
+    }
 }
 
 pub(crate) struct ModelChecker<'a> {
     tool: &'a Tool,
     out: &'a dyn Report,
-    // The four counter sources `TLCGet` reads live are `Arc`s, so the `RunCounters` the tool
+    // The counter sources `TLCGet` reads live are `Arc`s, so the `MainChecker` the tool
     // holds can share them without borrowing the checker.
     fpset: std::sync::Arc<dyn FpSet>,
     queue: std::sync::Arc<StateQueue>,
@@ -168,7 +171,7 @@ impl<'a> ModelChecker<'a> {
         };
         // `TLCGlobals.mainChecker = this`, which is what makes `TLCGet("generated")` and
         // friends answer instead of raising `TLC_MODULE_TLCGET_UNDEFINED`.
-        tool.attach_counters(std::sync::Arc::new(Counters {
+        tool.attach_main_checker(std::sync::Arc::new(Published {
             fpset: mc.fpset.clone(),
             queue: mc.queue.clone(),
             traces: mc.traces.clone(),
