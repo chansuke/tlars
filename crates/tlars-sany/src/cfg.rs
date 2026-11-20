@@ -1,18 +1,20 @@
 //! `tlc2.tool.impl.ModelConfig`, mirrored. Parsed *before* SANY so its strings and model
 //! values take the lowest intern tokens (`Spec.java:87-113`).
 //!
-//! Lexing reuses SANY's token manager in lexical state 2, with `\n` appended so a trailing
-//! `\*` comment terminates (`ModelConfig.java:187-193`). A list keyword ends at the next
-//! token that is itself a keyword (the keyword table is the terminator set).
+//! Lexing is SANY's translated token manager in lexical state 2, over the file with `\n`
+//! appended so a trailing `\*` comment terminates (`ModelConfig.java:187-193`). A list
+//! keyword ends at the next token that is itself a keyword. Names (`INIT Init`, constant
+//! left-hand sides, overrides) stay plain strings, as in TLC, which interns only string
+//! values and model values.
 
 use crate::{Atom, Interner};
-use std::path::Path;
+use tlars_java::Hashtable;
+use tlars_msg::Ec;
 
-/// A cfg right-hand side. `{...}` stays unnormalised (order as written); any bare token that
+/// A cfg right-hand side. `{...}` stays as written (unnormalised); any other bare token that
 /// is not a number, string or TRUE/FALSE is a model value.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CfgValue {
-    /// `Integer.parseInt`: values beyond 32 bits are `CfgError::JavaNumberFormat`.
     Int(i32),
     Str(Atom),
     Bool(bool),
@@ -20,68 +22,59 @@ pub enum CfgValue {
     Set(Vec<CfgValue>),
 }
 
-/// `id = v`, `id(args) = v`, `id = [Mod] v`, `a!b!c = v`.
+/// `id = v`, `id(args) = v`, `a!b!c = v` (the left-hand side as TLC joins it).
 #[derive(Clone, Debug)]
 pub struct CfgConstant {
-    pub lhs: Vec<Atom>,
+    pub lhs: String,
     pub args: Vec<CfgValue>,
     pub value: CfgValue,
-    pub module: Option<Atom>,
-    pub line: u32,
 }
 
-/// `id <- op`, `id <- [Mod] op`.
-#[derive(Clone, Debug)]
-pub struct CfgOverride {
-    pub lhs: Vec<Atom>,
-    pub rhs: Atom,
-    pub module: Option<Atom>,
-    pub line: u32,
-}
-
-#[derive(Clone, Debug, Default)]
+/// The parsed cfg. Hashtables are TLC's, so later passes see TLC's enumeration order.
+#[derive(Default)]
 pub struct ModelConfig {
+    /// `CONSTANT` assignments without a module, in file order.
     pub constants: Vec<CfgConstant>,
-    pub overrides: Vec<CfgOverride>,
-    pub constraints: Vec<Atom>,
-    pub action_constraints: Vec<Atom>,
-    pub invariants: Vec<Atom>,
-    pub properties: Vec<Atom>,
-    pub postconditions: Vec<Atom>,
-    pub init: Option<Atom>,
-    pub next: Option<Atom>,
-    pub specification: Option<Atom>,
-    pub view: Option<Atom>,
-    pub symmetry: Option<Atom>,
-    pub alias: Option<Atom>,
-    pub periodic: Option<Atom>,
-    pub rl_reward: Option<Atom>,
-    pub possible: Vec<Atom>,
+    /// `id = [Mod] v`, by module.
+    pub mod_constants: Hashtable<String, Vec<CfgConstant>>,
+    /// `id <- op`.
+    pub overrides: Hashtable<String, String>,
+    /// `op` -> `id` for each override.
+    pub overrides_reverse: Hashtable<String, String>,
+    /// `id <- [Mod] op`, by module.
+    pub mod_overrides: Hashtable<String, Hashtable<String, String>>,
+    pub constraints: Vec<String>,
+    pub action_constraints: Vec<String>,
+    pub invariants: Vec<String>,
+    pub properties: Vec<String>,
+    pub postconditions: Vec<String>,
+    pub possible: Vec<String>,
+    pub init: Option<String>,
+    pub next: Option<String>,
+    pub specification: Option<String>,
+    pub view: Option<String>,
+    pub symmetry: Option<String>,
+    pub alias: Option<String>,
+    pub periodic: Option<String>,
+    pub rl_reward: Option<String>,
     pub check_deadlock: Option<bool>,
-    /// `ModelValue.make` call order during parsing. Single source for model-value indices
-    /// (`ModelValue.index`, used by symmetry permutations).
-    pub model_values_in_creation_order: Vec<Atom>,
-    /// Raw constant text, kept for the trace-exploration spec.
+    /// `ModelValue.make` first-creation order: the model values' indices.
+    pub model_values: Vec<Atom>,
+    /// Each `CONSTANT` section's tokens, kept for the trace-exploration spec.
     pub raw_constants: Vec<String>,
 }
 
-#[derive(Debug)]
+/// Why the cfg was rejected.
+#[derive(Debug, PartialEq, Eq)]
 pub enum CfgError {
-    /// `CFG_ERROR_READING_FILE` (TLC calls `System.exit` directly).
-    ReadingFile { path: String },
-    /// `CFG_LEXICAL_ERROR`.
-    Lexical { line: u32, column: u32, text: String },
-    /// `CFG_TWICE_KEYWORD`.
-    TwiceKeyword { keyword: &'static str, line: u32 },
-    /// `CFG_EXPECT_ID` / `CFG_EXPECTED_SYMBOL` / ... with TLC's parameters.
-    Syntax { code: u16, params: Vec<String> },
-    /// TLC leaks an uncaught `NumberFormatException` for > 32-bit integers.
+    /// `ConfigFileException(code, params)`; TLC reports it through the caller.
+    ConfigFile { code: Ec, params: Vec<String> },
+    /// `Integer.parseInt` threw on a number literal beyond 32 bits; TLC does not catch it.
     JavaNumberFormat { image: String },
 }
 
-/// Parse a cfg file. Interns into `interner` in the order TLC's parser does.
-pub fn parse(text: &str, file: &Path, interner: &Interner) -> Result<ModelConfig, CfgError> {
-    // TODO: the translated `TLAplusParserTokenManager` in lexical state 2 over `text + "\n"`; keyword table from
-    // ModelConfig.java:59-89; `configTbl.get(image) != null` terminates lists.
-    todo!()
+/// Parses cfg file contents (TLC reads them as UTF-8), interning string and model values
+/// into `interner` in the order TLC does.
+pub fn parse(text: &[u8], interner: &std::sync::Arc<Interner>) -> Result<ModelConfig, CfgError> {
+    crate::parser::parse_cfg(text, interner)
 }
