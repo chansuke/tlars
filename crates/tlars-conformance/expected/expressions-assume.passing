@@ -2,6 +2,7 @@ tlc/expressions/arithmetic/compare/geq_integers_message_names_geq
 tlc/expressions/arithmetic/compare/geq_naturals_message_names_greater
 tlc/expressions/arithmetic/compare/gt_second_argument
 tlc/expressions/arithmetic/compare/leq_second_argument
+tlc/expressions/arithmetic/compare/less_with_model_value
 tlc/expressions/arithmetic/compare/limits_compare
 tlc/expressions/arithmetic/compare/plus_with_boolean
 tlc/expressions/arithmetic/compare/plus_with_string_right
@@ -29,7 +30,9 @@ tlc/expressions/arithmetic/number_sets/int_member
 tlc/expressions/arithmetic/number_sets/int_member_boolean
 tlc/expressions/arithmetic/number_sets/nat_in_set_with_enum
 tlc/expressions/arithmetic/number_sets/nat_member
+tlc/expressions/arithmetic/number_sets/nat_member_model_value
 tlc/expressions/arithmetic/number_sets/nat_member_string
+tlc/expressions/arithmetic/number_sets/nat_member_typed_model_value
 tlc/expressions/arithmetic/number_sets/nat_ordered_before_int
 tlc/expressions/arithmetic/number_sets/nat_with_string_set_incomparable
 tlc/expressions/arithmetic/number_sets/naturals_has_no_unary_minus
@@ -289,6 +292,7 @@ tlc/expressions/functions/apply/double_at_mixed_miss
 tlc/expressions/functions/apply/enum_domain_incomparable
 tlc/expressions/functions/apply/enum_domain_missing_integer
 tlc/expressions/functions/apply/function_value_in_set
+tlc/expressions/functions/apply/interval_domain_model_value
 tlc/expressions/functions/apply/interval_domain_non_integer
 tlc/expressions/functions/apply/interval_domain_outside
 tlc/expressions/functions/apply/lazy_outside_domain
@@ -500,6 +504,7 @@ tlc/expressions/ordering/incomparable/function_domain_hides_values
 tlc/expressions/ordering/incomparable/function_domains_incomparable
 tlc/expressions/ordering/incomparable/function_values_incomparable
 tlc/expressions/ordering/incomparable/integer_against_boolean
+tlc/expressions/ordering/incomparable/integer_equal_to_typed
 tlc/expressions/ordering/incomparable/interval_function_vs_string_keys
 tlc/expressions/ordering/incomparable/record_against_integer
 tlc/expressions/ordering/incomparable/record_names_hide_incomparable
@@ -507,11 +512,21 @@ tlc/expressions/ordering/incomparable/record_reaches_incomparable
 tlc/expressions/ordering/incomparable/set_same_size_reaches_incomparable
 tlc/expressions/ordering/incomparable/set_size_hides_incomparable
 tlc/expressions/ordering/incomparable/single_element_never_compared
+tlc/expressions/ordering/incomparable/single_underscore_name_is_untyped
 tlc/expressions/ordering/incomparable/string_against_set
+tlc/expressions/ordering/incomparable/three_way_model_value_does_not_bridge
+tlc/expressions/ordering/incomparable/three_way_model_value_first
 tlc/expressions/ordering/incomparable/tuple_against_set
 tlc/expressions/ordering/incomparable/tuple_length_hides_incomparable
 tlc/expressions/ordering/incomparable/tuple_reaches_incomparable
 tlc/expressions/ordering/incomparable/tuple_stops_at_first_difference
+tlc/expressions/ordering/incomparable/typed_equal_to_different_type
+tlc/expressions/ordering/incomparable/typed_equal_to_integer
+tlc/expressions/ordering/incomparable/typed_model_value_against_integer
+tlc/expressions/ordering/incomparable/typed_model_value_same_type
+tlc/expressions/ordering/incomparable/typed_model_values_different_type
+tlc/expressions/ordering/incomparable/typed_with_untyped_compares
+tlc/expressions/ordering/incomparable/underscore_elsewhere_is_untyped
 tlc/expressions/ordering/print/booleans
 tlc/expressions/ordering/print/empty_interval_top_level
 tlc/expressions/ordering/print/equal_enum_and_interval_keep_first
@@ -523,6 +538,10 @@ tlc/expressions/ordering/print/functions_by_values
 tlc/expressions/ordering/print/integers_ascending
 tlc/expressions/ordering/print/interval_element_prints_as_interval
 tlc/expressions/ordering/print/map_prints_normalized
+tlc/expressions/ordering/print/model_value_before_integer
+tlc/expressions/ordering/print/model_value_before_set
+tlc/expressions/ordering/print/model_value_before_string
+tlc/expressions/ordering/print/model_values_by_token
 tlc/expressions/ordering/print/print_is_deeply_normalized
 tlc/expressions/ordering/print/print_short_value_stays_on_one_line
 tlc/expressions/ordering/print/print_tuple_width_77_stays_on_one_line
@@ -591,6 +610,7 @@ tlc/expressions/quantifier/unbounded_skipped_by_short_circuit
 tlc/expressions/quantifier/union_normalized_order
 tlc/expressions/records_tuples/record/apply_integer
 tlc/expressions/records_tuples/record/apply_missing_field
+tlc/expressions/records_tuples/record/apply_model_value
 tlc/expressions/records_tuples/record/chain_through_tuple_and_record
 tlc/expressions/records_tuples/record/duplicate_field_is_parse_error
 tlc/expressions/records_tuples/record/empty_tuple_lhs_record
@@ -600,6 +620,7 @@ tlc/expressions/records_tuples/record/in_function_set
 tlc/expressions/records_tuples/record/integer_function_lhs_record
 tlc/expressions/records_tuples/record/integer_function_lhs_record_different_size
 tlc/expressions/records_tuples/record/member_of_record
+tlc/expressions/records_tuples/record/model_value_unequal
 tlc/expressions/records_tuples/record/print_earlier_field_changes_order
 tlc/expressions/records_tuples/record/print_earlier_string_keeps_field_order
 tlc/expressions/records_tuples/record/print_nested
@@ -617,6 +638,7 @@ tlc/expressions/records_tuples/record/select_on_tuple
 tlc/expressions/records_tuples/record/size_compared_first
 tlc/expressions/records_tuples/record/tuple_lhs_record_other_size
 tlc/expressions/records_tuples/record/tuple_lhs_record_same_size
+tlc/expressions/records_tuples/record/typed_model_value_rejected
 tlc/expressions/records_tuples/record/unnormalized_lookup
 tlc/expressions/records_tuples/record/values_compared_after_names
 tlc/expressions/records_tuples/record/values_incomparable
@@ -678,6 +700,7 @@ tlc/expressions/sets/binary/diff_lazy_short_circuits
 tlc/expressions/sets/binary/diff_reducible_minus_nat
 tlc/expressions/sets/binary/nat_equals_enum_error
 tlc/expressions/sets/binary/nat_equals_nat_only
+tlc/expressions/sets/binary/nat_with_model_value
 tlc/expressions/sets/binary/subseteq_enum_of_nat
 tlc/expressions/sets/binary/subseteq_mismatch_error
 tlc/expressions/sets/binary/subseteq_nat_of_int
@@ -692,9 +715,11 @@ tlc/expressions/sets/cross/member_function_on_integers_false
 tlc/expressions/sets/cross/member_function_on_other_interval_false
 tlc/expressions/sets/cross/member_function_with_tuple_domain
 tlc/expressions/sets/cross/member_integer
+tlc/expressions/sets/cross/member_model_value
 tlc/expressions/sets/cross/member_record
 tlc/expressions/sets/cross/member_through_nat
 tlc/expressions/sets/cross/member_tuple
+tlc/expressions/sets/cross/member_typed_model_value
 tlc/expressions/sets/cross/member_wrong_length_false
 tlc/expressions/sets/cross/parenthesized_is_nested
 tlc/expressions/sets/cross/size_multiplies
@@ -715,6 +740,7 @@ tlc/expressions/sets/enum/member_unsorted_first_match_avoids_compare
 tlc/expressions/sets/enum/member_unsorted_miss_reaches_incomparable
 tlc/expressions/sets/enum/member_unsorted_order_matters
 tlc/expressions/sets/enum/member_unsorted_reaches_incomparable
+tlc/expressions/sets/enum/model_value_set_compares_with_anything
 tlc/expressions/sets/enum/nested_sets_normalize_deeply
 tlc/expressions/sets/enum/same_size_compares_elements
 tlc/expressions/sets/enum/sets_inside_tuples_normalize
@@ -759,6 +785,7 @@ tlc/expressions/sets/function_set/equal_nat_sets_by_parts
 tlc/expressions/sets/function_set/equals_enum
 tlc/expressions/sets/function_set/member_empty_function
 tlc/expressions/sets/function_set/member_lazy_function_on_nat
+tlc/expressions/sets/function_set/member_model_value
 tlc/expressions/sets/function_set/member_nat_range
 tlc/expressions/sets/function_set/member_non_function
 tlc/expressions/sets/function_set/member_other_interval
@@ -781,6 +808,9 @@ tlc/expressions/sets/interval/largest_countable
 tlc/expressions/sets/interval/low_above_high_is_empty
 tlc/expressions/sets/interval/member_non_integer_when_empty
 tlc/expressions/sets/interval/member_non_integer_when_non_empty
+tlc/expressions/sets/interval/member_typed_model_value
+tlc/expressions/sets/interval/member_typed_model_value_when_empty
+tlc/expressions/sets/interval/member_untyped_model_value
 tlc/expressions/sets/interval/negative_bounds
 tlc/expressions/sets/interval/non_integer_bound_message
 tlc/expressions/sets/interval/singleton
@@ -814,6 +844,7 @@ tlc/expressions/sets/record_set/member_field_order
 tlc/expressions/sets/record_set/member_function_on_strings
 tlc/expressions/sets/record_set/member_integer
 tlc/expressions/sets/record_set/member_missing_field_false
+tlc/expressions/sets/record_set/member_model_value
 tlc/expressions/sets/record_set/member_non_empty_tuple
 tlc/expressions/sets/record_set/member_other_field_false
 tlc/expressions/sets/record_set/member_record
@@ -867,6 +898,7 @@ tlc/expressions/strings/in_string_set
 tlc/expressions/strings/integer_in_string_set
 tlc/expressions/strings/len
 tlc/expressions/strings/len_counts_escape_as_one
+tlc/expressions/strings/model_value_not_in_string_set
 tlc/expressions/strings/not_equal_to_tuple
 tlc/expressions/strings/print_escape_backslash
 tlc/expressions/strings/print_escape_formfeed
@@ -888,3 +920,4 @@ tlc/expressions/strings/to_string
 tlc/expressions/strings/to_string_concat
 tlc/expressions/strings/to_string_of_integer
 tlc/expressions/strings/tuple_not_equal_to_string
+tlc/expressions/strings/typed_model_value_in_string_set

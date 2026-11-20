@@ -12,7 +12,8 @@ pub(crate) enum OpBinding {
     Value(Value),
     /// Java-module override (`MethodValue`), evaluation only.
     Native(NativeId),
-    /// cfg `Op <- Other`.
+    /// An `OpDefNode` tool object: the target of a cfg `Op <- Other`, and what `defns`
+    /// holds for a definition the cfg says nothing about.
     Replaced(OpDefId),
     /// cfg `Op(args) = v` (`OpRcdValue`).
     Table(OpRcd),
