@@ -31,6 +31,10 @@ pub(crate) fn process(session: &Session<'_>) -> Exit {
     if session.options.recover.is_some() {
         todo!("M3: -recover (UniqueString.internTbl.recover before FP64.Init, TLC.java:1349-1354)");
     }
+    if session.options.extras != tlars_tool::CliSpecExtras::default() {
+        // `checkDumpTraceModules` runs here, before the banner (`TLC.java:1356`).
+        todo!("M3: -dumpTrace, -postCondition, -inv and -loadTrace");
+    }
     if session.options.mode != Mode::ModelCheck || session.options.dfid.is_some() {
         todo!("M5: simulation and DFID runs");
     }
@@ -100,7 +104,7 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
         LoadRequest {
             root_file: &main_file,
             user_dir: user_dir.as_deref(),
-            working_dir: &session.cwd,
+            working_dir: &working_dir(session),
             library_paths: &library_paths,
             interner: session.interner.clone(),
             extra_root_extends: &[],
@@ -144,11 +148,23 @@ fn print_failure(out: &dyn Report, ec: Ec) -> Ec {
     out.error(ec, &[&message])
 }
 
+/// The directory a resolver without a user directory searches: the `user.dir` property
+/// (`SimpleFilenameToStream.java:112-120`), which defaults to the working directory.
+fn working_dir(session: &Session<'_>) -> PathBuf {
+    session.property("user.dir").map_or_else(|| session.cwd.clone(), |d| session.cwd.join(d))
+}
+
+/// `Path.of(s).toString()` on Unix: repeated and trailing separators go, `.` and `..` stay.
+fn path_of(s: &str) -> PathBuf {
+    let segments: Vec<&str> = s.split('/').filter(|p| !p.is_empty()).collect();
+    let joined = segments.join("/");
+    PathBuf::from(if s.starts_with('/') { format!("/{joined}") } else { joined })
+}
+
 /// `TLC.main`'s resolver (`TLC.java:343-354`): a main file with a directory part searches
 /// that directory after the user directory, in place of `-DTLA-Library`. Paths stay as
 /// written (`Path.of`), relative ones being relative to the working directory.
 fn library_paths(session: &Session<'_>, main_file: &str) -> Vec<PathBuf> {
-    let path_of = |s: &str| Path::new(s).components().collect::<PathBuf>();
     // `FileUtil.parseDirname`: everything up to the last separator.
     match main_file.rfind(std::path::MAIN_SEPARATOR) {
         Some(i) => vec![path_of(&main_file[..=i])],
@@ -198,9 +214,19 @@ fn read_config(session: &Session<'_>, user_dir: Option<&Path>, library_paths: &[
         todo!("M5: a cfg embedded in a monolithic spec");
     }
     let name = format!("{base}.cfg");
+    // `resolve(name, false)` (`SimpleFilenameToStream.java:254-264`) keeps the part before a
+    // newline; the error messages keep the whole name.
+    let lookup = match name.find('\n') {
+        Some(n) => {
+            out.raw(&format!("*** Warning: module name '{name}' contained NEWLINE; Only the part before NEWLINE is considered.\n"));
+            &name[..n]
+        }
+        None => name.as_str(),
+    };
+    let base_dir = working_dir(session);
     let dirs = std::iter::once(user_dir.unwrap_or(Path::new(""))).chain(library_paths.iter().map(PathBuf::as_path));
-    let found = dirs.map(|d| session.cwd.join(d).join(&name)).find(|p| p.exists());
-    let text = match found.map(std::fs::read) {
+    let found = dirs.map(|d| base_dir.join(d).join(lookup)).find(|p| p.exists());
+    let text = match found.map(|p| open_like_file_input_stream(&p).map(read_until_failure)) {
         Some(Ok(text)) => text,
         // `FileUtil.newFIS` (`FileUtil.java:427-440`): the file exists but cannot be opened.
         Some(Err(_)) => {
@@ -221,6 +247,23 @@ fn read_config(session: &Session<'_>, user_dir: Option<&Path>, library_paths: &[
         }
         Err(tlars_sany::cfg::CfgError::JavaNumberFormat { .. }) => todo!("M3: the uncaught NumberFormatException"),
     }
+}
+
+/// `new FileInputStream(file)`, which also refuses a directory (Unix `open` accepts one).
+fn open_like_file_input_stream(path: &Path) -> std::io::Result<std::fs::File> {
+    if path.is_dir() {
+        return Err(std::io::Error::from(std::io::ErrorKind::IsADirectory));
+    }
+    std::fs::File::open(path)
+}
+
+/// What the token manager sees of an opened cfg: a read failure ends the input like EOF
+/// (`TLAplusParserTokenManager.java:5167-5176`), keeping what was read before it.
+fn read_until_failure(mut file: std::fs::File) -> Vec<u8> {
+    use std::io::Read;
+    let mut text = Vec::new();
+    let _ = file.read_to_end(&mut text);
+    text
 }
 
 fn globals(session: &Session<'_>) -> TlcGlobals {
