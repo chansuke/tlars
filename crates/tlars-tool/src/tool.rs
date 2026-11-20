@@ -51,6 +51,22 @@ pub(crate) struct NamedCheck {
     pub(crate) op_def: Option<OpDefId>,
 }
 
+/// One cfg `_POSSIBLE` predicate. TLC witnesses it by generating a module that wraps the
+/// predicate in `_Possible!_Track` and wires that in as a constraint, then checks
+/// `_Possible!_CheckName` as a post-condition (`SpecProcessor.processConfigPossible`,
+/// `PossibleAction`). tlars evaluates `_Track` and `_CheckName` directly instead of
+/// generating the module, and keeps the same `s:_possible` register they share.
+pub(crate) struct PossibleCheck {
+    /// The definition's name, which is the key `_Track` counts under and the `%1%` of 2780.
+    pub(crate) name: Atom,
+    /// The definition's body: what `_Track` evaluates, and the location 2780 reports, since
+    /// `PossibleAction.getPred()` hands back the user predicate's body.
+    pub(crate) expr: ExprId,
+    /// SANY's level of the definition. State level and below becomes a CONSTRAINT, action
+    /// level an ACTION_CONSTRAINT (`SpecProcessor.java:1861-1865`).
+    pub(crate) is_action: bool,
+}
+
 /// The cfg ALIAS: the definition body `getAliasSpec()` returns, or the framed message of
 /// the `Assert.fail` it raises instead.
 pub(crate) struct AliasSpec {
@@ -86,6 +102,9 @@ pub struct Tool {
     /// checks are pure. TLC runs them when the search ends, so a bad name is reported after
     /// the search, not at startup: [`Tool::postcondition_error`] holds that message.
     pub(crate) postconditions: Box<[NamedCheck]>,
+    /// The cfg's `_POSSIBLE` predicates, in cfg order. They are checked ahead of
+    /// `postconditions`, as `getPostConditionSpecs()` orders them.
+    pub(crate) possible: Box<[PossibleCheck]>,
     /// The framed message of the `Assert.fail` that `getPostConditionSpecs` raises on the
     /// first name it cannot resolve. It leaves TLC with no postconditions at all.
     pub(crate) postcondition_error: Option<String>,

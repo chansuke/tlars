@@ -20,7 +20,7 @@ use crate::eval::expr::Builtin;
 use crate::eval::{EvalControl, WorkerLocals};
 use crate::globals::TlcGlobals;
 use crate::state::{StateRef, VarTable};
-use crate::tool::{NamedCheck, Tool};
+use crate::tool::{NamedCheck, PossibleCheck, Tool};
 use crate::value::Value;
 use tlars_msg::{Ec, Report};
 use tlars_sany::Atom;
@@ -143,6 +143,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         view: None,
         alias: None,
         postconditions: Box::new([]),
+        possible: Box::new([]),
         postcondition_error: None,
         counter_example: false,
         symmetry: Box::new([]),
@@ -836,7 +837,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     if config.rl_reward.is_some() || config.periodic.is_some() {
         return Err(unimplemented("_RL_REWARD and _PERIODIC (M5)"));
     }
-    config_possible(config, tool, defns)?;
+    tool.possible = config_possible(config, tool, defns)?;
     let alias = config_alias(config, tool, defns, out);
     let view = config_view(config, tool, defns)?;
     let symmetry = config_symmetry(config, tool, unprocessed, out)?;
@@ -1264,14 +1265,23 @@ fn named_checks(
     Ok(checks)
 }
 
-/// `processConfigPossible`'s validation loop (`SpecProcessor.java:1764-1790`). Every name
-/// must be a 0-arity, non-temporal definition. Witnessing them needs the module TLC
-/// generates, parses and analyses at run time, which is not here yet.
-fn config_possible(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<(), SpecError> {
+/// `processConfigPossible` (`SpecProcessor.java:1763-1892`). Every name must be a 0-arity,
+/// non-temporal definition.
+///
+/// TLC then writes a `_PossibleModule_<millis>` that EXTENDS the root module and `_Possible`,
+/// runs it through the parser, the semantic analyser and the level checker with every message
+/// suppressed, and wires its `_Track` and `_CheckName` definitions in as constraints and
+/// post-conditions. tlars evaluates those two definitions directly (`Ev::track_possible` and
+/// `Ev::check_possible`), because its semantic graph is frozen before the cfg is processed and
+/// nothing can be added to it. The generated module is never printed, so the only thing the
+/// shortcut gives up is the intern tokens the generated names and `_Possible.tla` consume,
+/// which shift no other string's order relative to another.
+fn config_possible(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<Box<[PossibleCheck]>, SpecError> {
     if config.possible.is_empty() {
-        return Ok(());
+        return Ok(Box::new([]));
     }
     let graph = tool.graph.clone();
+    let mut checks = Vec::new();
     for name in &config.possible {
         let fail = |ec: Ec| SpecError::Config { ec, params: vec!["possible".to_string(), name.clone()] };
         match defn_of(defns, &graph, name) {
@@ -1291,11 +1301,13 @@ fn config_possible(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<(
                         ],
                     });
                 }
+                let body = graph.op_def(d).body.expect("a user definition has a body");
+                checks.push(PossibleCheck { name: graph.op_def(d).name, expr: body, is_action: graph.op_level(d) > Level::State });
             }
             Some(_) => return Err(fail(Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT)),
         }
     }
-    Err(unimplemented("_POSSIBLE's generated module and its named registers (M3 unit 5)"))
+    Ok(checks.into())
 }
 
 /// `Spec.hasAlias` + `Spec.getAliasSpec` (`Spec.java:274-304`). TLC calls `getAliasSpec`

@@ -22,10 +22,13 @@ pub use alias::Aliased;
 use crate::actions::ActionId;
 use crate::effects::Effects;
 use crate::error::{EvalError, EvalResult, Flow};
+use crate::ctx::Ctx;
 use crate::fp64::Fp;
 use crate::state::{PartialState, State};
 use crate::tool::{CheckId, ImpliedAction, ImpliedInit, Invariant, Tool};
+use crate::value::Value;
 use tlars_msg::{Ec, Report};
+use tlars_sany::Atom;
 use tlars_sany::graph::ExprId;
 
 /// `EvalControl` bit flags (`Clear`, `KeepLazy`, `Primed`, `Enabled`, `Init`).
@@ -221,6 +224,7 @@ impl<'t> Ev<'t> {
                 return Ok(false);
             }
         }
+        self.track_possible(false, crate::state::StateRef::Full(s), crate::state::StateRef::Empty)?;
         Ok(true)
     }
     /// `isInActions`: all ACTION_CONSTRAINTs.
@@ -235,6 +239,7 @@ impl<'t> Ev<'t> {
                 return Ok(false);
             }
         }
+        self.track_possible(true, crate::state::StateRef::Full(s0), crate::state::StateRef::Full(s1))?;
         Ok(true)
     }
     /// `TLCStateMut.fingerPrint` (`TLCStateMut.java:171-237`): with no SYMMETRY and no VIEW,
@@ -351,6 +356,122 @@ impl<'t> Ev<'t> {
         };
         self.is_valid_in(expr, &ctx, crate::state::StateRef::Full(s), crate::state::StateRef::Empty)
     }
+    /// `_Possible!_Track(expr, name)` for the constraints `processConfigPossible` wires in
+    /// after the cfg's own (`_Possible.tla`): evaluate the predicate and record it in the
+    /// `s:_possible` register, raising the count when it holds and registering a zero the
+    /// first time it does not. It always answers TRUE, so a `_POSSIBLE` predicate never
+    /// narrows the state space.
+    fn track_possible(&mut self, is_action: bool, s0: crate::state::StateRef<'_>, s1: crate::state::StateRef<'_>) -> EvalResult<()> {
+        for i in 0..self.tool.possible.len() {
+            let (name, expr, wanted) = {
+                let check = &self.tool.possible[i];
+                (check.name, check.expr, check.is_action)
+            };
+            if wanted != is_action {
+                continue;
+            }
+            let held = match self.eval(expr, &Ctx::EMPTY, s0, s1, EvalControl::CLEAR)? {
+                Value::Bool(b) => b,
+                // `IF b THEN .. ELSE ..` inside `_Track` on a non-boolean raises an
+                // `EvalException` that names the generated module's IF, which tlars has no
+                // syntax for.
+                v => {
+                    let what = format!("a _POSSIBLE predicate that is not a boolean but a {} (M3 unit 5)", v.kind_string());
+                    return Err(crate::error::EvalError::unimplemented(what));
+                }
+            };
+            let mut counts = self.possible_counts()?;
+            match counts.iter_mut().find(|(n, _)| *n == name) {
+                // `[old EXCEPT ![name] = @ + 1]`, which keeps the domain order.
+                Some(slot) if held => slot.1 = slot.1.wrapping_add(1),
+                // `old @@ (name :> 0)` on a name already there changes nothing: `@@` keeps
+                // the left function's value, so a witnessed count never falls back to zero.
+                Some(_) => {}
+                // `old @@ (name :> 1)` / `old @@ (name :> 0)` appends.
+                None => counts.push((name, i32::from(held))),
+            }
+            self.put_possible_counts(counts);
+        }
+        Ok(())
+    }
+
+    /// `TLCGetOrDefault("s:_possible", <<>>)` decoded: the names `_Track` has seen and their
+    /// counts, in the order `@@` appended them. An unset register is the empty tuple, whose
+    /// DOMAIN is empty.
+    fn possible_counts(&mut self) -> EvalResult<Vec<(Atom, i32)>> {
+        let stored = self.tool.registers.lock().expect("registers").get_named(self.possible_register());
+        match stored {
+            None | Some(Value::Tuple(_)) => Ok(Vec::new()),
+            Some(Value::FcnRcd(fcn)) => {
+                let (domain, values) = fcn.snapshot();
+                let Some(domain) = domain else {
+                    return Err(crate::error::EvalError::unimplemented("a _POSSIBLE register holding a function over an interval (M3 unit 5)".into()));
+                };
+                let mut out = Vec::with_capacity(values.len());
+                for (d, v) in domain.iter().zip(values.iter()) {
+                    match (d, v) {
+                        (Value::Str(n), Value::Int(c)) => out.push((*n, *c)),
+                        _ => {
+                            return Err(crate::error::EvalError::unimplemented(
+                                "a _POSSIBLE register a spec overwrote with something other than a record of counts (M3 unit 5)".into(),
+                            ));
+                        }
+                    }
+                }
+                Ok(out)
+            }
+            Some(_) => Err(crate::error::EvalError::unimplemented(
+                "a _POSSIBLE register a spec overwrote with something other than a record of counts (M3 unit 5)".into(),
+            )),
+        }
+    }
+
+    /// `TLCSet("s:_possible", ..)`, which with one worker writes the single register bank.
+    fn put_possible_counts(&mut self, counts: Vec<(Atom, i32)>) {
+        let value = possible_record(counts);
+        let key = self.possible_register();
+        self.tool.registers.lock().expect("registers").set_named(key, value);
+    }
+
+    /// `_Possible.KEY`, the one named register `_Track` and `_Counts` share.
+    fn possible_register(&self) -> Atom {
+        self.tool.graph.interner().intern("s:_possible")
+    }
+
+    /// `_Possible!_CheckName(name)` for each `_POSSIBLE` predicate, which
+    /// `getPostConditionSpecs()` puts ahead of the cfg's own POSTCONDITIONs. The first
+    /// predicate the run never witnessed prints the whole count record and stops the loop,
+    /// so only one is ever named.
+    fn check_possible(&mut self) -> Result<(), (tlars_msg::Ec, Vec<String>)> {
+        if self.tool.possible.is_empty() {
+            return Ok(());
+        }
+        let graph = self.tool.graph.clone();
+        for i in 0..self.tool.possible.len() {
+            let (name, expr) = {
+                let check = &self.tool.possible[i];
+                (check.name, check.expr)
+            };
+            // `_Counts`, which merges every worker's register; with one worker it is that
+            // register, rebuilt as `new FcnRcdValue(domain, values, false)`.
+            let counts = match self.possible_counts() {
+                Ok(counts) => counts,
+                Err(e) => return Err((Ec::GENERAL, vec![e.message])),
+            };
+            if counts.iter().any(|(n, c)| *n == name && *c != 0) {
+                continue;
+            }
+            // `PrintT(counts) /\ FALSE`.
+            if let Err(e) = crate::modules::tlc::print_t(self, &[possible_record(counts)]) {
+                return Err((Ec::GENERAL, vec![e.message]));
+            }
+            let shown = graph.expr_tlc_text(expr);
+            let name = graph.interner().text(name).to_string();
+            return Err((Ec::TLC_POSSIBLE_UNWITNESSED, vec![name, shown]));
+        }
+        Ok(())
+    }
+
     /// `Tool.checkPostConditionWithContext` (`Tool.java:3681-3712`): each POSTCONDITION is a
     /// constant-level predicate, and the first one that is false or fails stops the loop.
     /// `Err` is what `MP.printError` is given; the caller decides whether that code becomes
@@ -362,6 +483,7 @@ impl<'t> Ev<'t> {
             let body = tlars_msg::unexpected_exception("java.lang.RuntimeException", message);
             return Err((Ec::GENERAL, vec![body]));
         }
+        self.check_possible()?;
         let graph = self.tool.graph.clone();
         for i in 0..self.tool.postconditions.len() {
             let (expr, ctx, name) = {
@@ -674,4 +796,11 @@ impl<'t> Ev<'t> {
     fn stack_overflow(&self) -> EvalError {
         EvalError { ec: Ec::SYSTEM_STACK_OVERFLOW, message: String::new(), loc: None, kind: crate::error::EvalErrorKind::StackOverflow, params: Vec::new() }
     }
+}
+
+/// The `s:_possible` register's value and what `_Possible!_Counts` returns:
+/// `new FcnRcdValue(domain, values, false)` over the tracked names.
+fn possible_record(counts: Vec<(Atom, i32)>) -> Value {
+    let (domain, values): (Vec<Value>, Vec<Value>) = counts.into_iter().map(|(n, c)| (Value::Str(n), Value::Int(c))).unzip();
+    Value::FcnRcd(Value::fcn_rcd_arc(domain, values, false))
 }

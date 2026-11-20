@@ -11,7 +11,7 @@
 mod finite_sets;
 mod naturals;
 mod sequences;
-mod tlc;
+pub(crate) mod tlc;
 mod tlc_get_set;
 
 pub(crate) use naturals::eval_exception;
