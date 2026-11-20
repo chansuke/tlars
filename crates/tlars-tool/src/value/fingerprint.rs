@@ -284,6 +284,7 @@ mod tests {
                 as_errors: Vec::new(),
                 debug: false,
                 now: Box::new(|| "NOW".into()),
+                unimplemented: None,
             },
         )
     }

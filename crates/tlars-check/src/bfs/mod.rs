@@ -934,7 +934,7 @@ fn java_class(e: &EvalError) -> &str {
 
 /// The state a trace ends on after `cur`: none, a complete successor, or the incomplete one
 /// `TLC_STATE_NOT_COMPLETELY_SPECIFIED_NEXT` reports.
-enum Succ<'a> {
+pub(crate) enum Succ<'a> {
     Complete(&'a State),
     Partial(&'a PartialState),
 }
