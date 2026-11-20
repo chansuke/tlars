@@ -21,6 +21,9 @@ struct Cell {
 
 enum CellName {
     Sym(SymbolRef),
+    /// `ToolGlobals.EXCEPT_AT`: the `@` of an EXCEPT component. TLC keys it on an `OpDefNode`
+    /// it builds outside the semantic graph, so it has no `SymbolRef`.
+    ExceptAt,
     /// `Context.branch`: ENABLED's cutoff marker (lookup with `cutoff` stops here).
     Branch,
 }
@@ -46,6 +49,22 @@ impl Ctx {
 
     pub(crate) fn cons(&self, name: SymbolRef, binding: Binding) -> Ctx {
         Ctx(Some(Arc::new(Cell { name: CellName::Sym(name), binding, next: self.clone() })))
+    }
+    /// `c.cons(EXCEPT_AT, atVal)`; an inner EXCEPT shadows an outer one, as the chain does.
+    pub(crate) fn cons_except_at(&self, value: Value) -> Ctx {
+        let binding = Binding::ExceptAt(value);
+        Ctx(Some(Arc::new(Cell { name: CellName::ExceptAt, binding, next: self.clone() })))
+    }
+    /// `c.lookup(EXCEPT_AT)`.
+    pub(crate) fn except_at(&self) -> Option<&Value> {
+        let mut cur = self.0.as_deref();
+        while let Some(cell) = cur {
+            if let (CellName::ExceptAt, Binding::ExceptAt(v)) = (&cell.name, &cell.binding) {
+                return Some(v);
+            }
+            cur = cell.next.0.as_deref();
+        }
+        None
     }
     pub(crate) fn branch(&self) -> Ctx {
         todo!()

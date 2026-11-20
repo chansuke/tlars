@@ -9,9 +9,11 @@ use crate::ctx::{Binding, Ctx, Thunk};
 use crate::error::{EvalError, EvalResult};
 use crate::spec::OpBinding;
 use crate::state::StateRef;
-use crate::value::Value;
 use crate::value::enumerate::{EnumOrder, ValueEnumeration};
+use crate::value::{Closure, Except, Value};
+use std::sync::Arc;
 use tlars_msg::Ec;
+use tlars_sany::Atom;
 use tlars_sany::graph::{BoundSymbols, BuiltinOp, ExprId, ExprNode, ExprOrOpArg, OpDefId, OpDefKind, ParamId, SymbolRef};
 
 /// What a name resolved to (`SymbolNodeValueLookupProvider.lookup`).
@@ -62,7 +64,7 @@ impl<'t> Ev<'t> {
             ExprNode::Numeral { .. } | ExprNode::String { .. } => {
                 Ok(self.tool().bindings.literal(expr).expect("processConstants bound every literal").clone())
             }
-            ExprNode::At { .. } => Err(EvalError::unimplemented("EXCEPT's @ (M2 unit 4)".into())),
+            ExprNode::At { .. } => Ok(c.except_at().expect("SANY builds an AtNode only inside an EXCEPT").clone()),
             ExprNode::Decimal { .. } => unreachable!("processConstants rejects decimals"),
         }
     }
@@ -163,7 +165,7 @@ impl<'t> Ev<'t> {
                     return crate::modules::apply(self, id, &vals);
                 }
                 Resolved::Binding(Binding::Lambda(_) | Binding::ExceptAt(_)) => {
-                    return Err(EvalError::unimplemented("operator arguments and EXCEPT (M2 unit 4)".into()));
+                    return Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()));
                 }
                 Resolved::Binding(Binding::Value(_)) | Resolved::Value(_) | Resolved::Var(_) => {
                     if matches!(op, SymbolRef::OpDef(d) if matches!(self.tool().bindings.op_def(d).or_else(|| self.body_binding(d)), Some(OpBinding::Unimplemented))) {
@@ -326,7 +328,124 @@ impl<'t> Ev<'t> {
                 }
                 Ok(Value::set_enum(elems))
             }
+            Builtin::Tuple => {
+                let mut elems = Vec::with_capacity(args.len());
+                for i in 0..args.len() {
+                    elems.push(self.eval(arg(i), c, s0, s1, control)?);
+                }
+                Ok(Value::tuple(elems))
+            }
+            Builtin::RcdConstructor => {
+                let mut names = Vec::with_capacity(args.len());
+                let mut vals = Vec::with_capacity(args.len());
+                for i in 0..args.len() {
+                    let (name, value) = pair(&graph, arg(i));
+                    names.push(self.field_name(name));
+                    vals.push(self.eval(value, c, s0, s1, control)?);
+                }
+                Ok(Value::Record(Value::record_arc(names, vals, false)))
+            }
+            Builtin::RcdSelect => {
+                let rval = self.eval(arg(0), c, s0, s1, control)?;
+                let sval = Value::Str(self.field_name(arg(1)));
+                let field = sval.to_tlc_string(self)?;
+                if matches!(rval, Value::Record(_)) {
+                    return match rval.select(self, &sval)? {
+                        Some(v) => Ok(v),
+                        None => {
+                            let shown = rval.ppr(self)?;
+                            let reason = format!("Attempted to select nonexistent field {field} from the record\n{shown}\n{}", text(self, expr));
+                            Err(not_boolean(self, reason, expr))
+                        }
+                    };
+                }
+                let Some(fcn) = rval.to_fcn_rcd(self)? else {
+                    let shown = rval.ppr(self)?;
+                    let reason = format!("Attempted to select field {field} from a non-record value {shown}\n{}", text(self, expr));
+                    return Err(not_boolean(self, reason, expr));
+                };
+                Value::FcnRcd(fcn).apply(self, &sval, control)
+            }
+            Builtin::FcnApply => {
+                // The function itself is evaluated with KeepLazy, so `[x \in S |-> e][a]`
+                // evaluates the body at `a` only (`Tool.java:2328-2352`).
+                let fval = self.eval(arg(0), c, s0, s1, control.with(EvalControl::KEEP_LAZY))?;
+                if !fval.is_function() {
+                    let reason = format!("A non-function ({}) was applied as a function.\n{}", fval.kind_string(), text(self, expr));
+                    return Err(not_boolean(self, reason, expr));
+                }
+                let argv = self.eval(arg(1), c, s0, s1, control)?;
+                fval.apply(self, &argv, control)
+            }
+            Builtin::Domain => {
+                let v = self.eval(arg(0), c, s0, s1, control)?;
+                if !v.is_function() {
+                    let reason =
+                        format!("Attempted to apply the operator DOMAIN to a non-function\n({})\n{}", v.kind_string(), text(self, expr));
+                    return Err(not_boolean(self, reason, expr));
+                }
+                v.get_domain(self)
+            }
+            Builtin::FcnConstructor | Builtin::RecursiveFcnSpec => {
+                let bound = bound.expect("a function constructor has bounds");
+                let mut params = Vec::with_capacity(bound.lists.len());
+                let mut is_fcn_rcd = true;
+                for list in bound.lists.iter() {
+                    let dval = self.eval(list.domain, c, s0, s1, control)?;
+                    is_fcn_rcd = is_fcn_rcd && dval.is_reducible();
+                    params.push((list.vars.clone(), list.tuple, dval));
+                }
+                // `makeRecursive` both binds the function's own name in its context and sets
+                // KeepLazy, so a recursive definition is never materialised eagerly.
+                let recursive = builtin == Builtin::RecursiveFcnSpec;
+                let rec_name = recursive.then(|| SymbolRef::Param(bound.unbounded[0]));
+                let lambda_control = if recursive { control.with(EvalControl::KEEP_LAZY) } else { control };
+                let lambda = Arc::new(crate::value::FcnLambdaValue {
+                    params: params.into_boxed_slice(),
+                    body: arg(0),
+                    env: Closure::capture(c, s0, s1, lambda_control)?,
+                    rec_name,
+                    excepts: Box::new([]),
+                    converted: std::sync::OnceLock::new(),
+                });
+                if is_fcn_rcd && !recursive && !control.has(EvalControl::KEEP_LAZY) {
+                    return Ok(Value::FcnRcd(lambda.to_fcn_rcd(self)?));
+                }
+                Ok(Value::FcnLambda(lambda))
+            }
+            Builtin::Except => {
+                let mut result = self.eval(arg(0), c, s0, s1, control)?;
+                for i in 1..args.len() {
+                    let (lhs_node, rhs_node) = pair(&graph, arg(i));
+                    let ExprNode::OpAppl { args: cmpts, .. } = graph.expr(lhs_node) else { unreachable!("an EXCEPT path is $Seq") };
+                    let mut lhs = Vec::with_capacity(cmpts.len());
+                    for &cmpt in cmpts.iter() {
+                        lhs.push(self.eval(cmpt.expect_expr(), c, s0, s1, control)?);
+                    }
+                    match result.select_path(self, &lhs)? {
+                        None => {
+                            let shown = text(self, arg(0));
+                            crate::value::warn(self, Ec::TLC_EXCEPT_APPLIED_TO_UNKNOWN_FIELD, &[&shown])?;
+                        }
+                        Some(at_val) => {
+                            let c1 = c.cons_except_at(at_val);
+                            let rhs = self.eval(rhs_node, &c1, s0, s1, control)?;
+                            let mut ex = Except::new(lhs, rhs);
+                            result = result.take_except(self, &mut ex)?;
+                        }
+                    }
+                }
+                Ok(result)
+            }
             Builtin::Unimplemented(name) => Err(EvalError::unimplemented(format!("the operator {name} (M2 unit 4)"))),
+        }
+    }
+
+    /// The `StringValue` `processConstants` left on a record field name or an `r.f` selector.
+    fn field_name(&self, e: ExprId) -> Atom {
+        match self.tool().bindings.literal(e) {
+            Some(Value::Str(a)) => *a,
+            _ => unreachable!("processConstants bound every field name"),
         }
     }
 
@@ -365,12 +484,14 @@ impl<'t> Ev<'t> {
         let mut vars = Vec::new();
         for list in bound.lists.iter() {
             let set = self.eval(list.domain, c, s0, s1, control)?;
-            if list.tuple {
-                return Err(EvalError::unimplemented("tuple-bound quantifiers (M2 unit 4)".into()));
-            }
-            for &p in list.vars.iter() {
+            // One enumeration per bound variable, and a `<<x, y>> \in S` list takes one.
+            let repeats = if list.tuple { 1 } else { list.vars.len() };
+            for i in 0..repeats {
                 match set.elements(self, EnumOrder::Normalized)? {
-                    Some(e) => vars.push((p, e)),
+                    Some(e) => {
+                        let bound = if list.tuple { Bound::Tuple(list.vars.clone()) } else { Bound::Var(list.vars[i]) };
+                        vars.push((bound, e));
+                    }
                     None => {
                         let reason = set.non_enumerable_message(self, &graph.expr_tlc_text(list.domain))?;
                         return Err(EvalError::detailed(reason, Some(graph.loc(list.domain))));
@@ -403,6 +524,13 @@ impl<'t> Ev<'t> {
     }
 }
 
+/// The two operands of a `$Pair` node, which SANY uses for record fields, CASE arms and
+/// EXCEPT clauses.
+fn pair(graph: &tlars_sany::graph::SemanticGraph, e: ExprId) -> (ExprId, ExprId) {
+    let ExprNode::OpAppl { args, .. } = graph.expr(e) else { unreachable!("$Pair is an application") };
+    (args[0].expect_expr(), args[1].expect_expr())
+}
+
 fn resolved(b: &OpBinding, d: OpDefId) -> Resolved {
     match b {
         OpBinding::Folded(v) => Resolved::Value(v.clone()),
@@ -415,10 +543,17 @@ fn resolved(b: &OpBinding, d: OpDefId) -> Resolved {
     }
 }
 
+/// One `ContextEnumerator` slot: a bound variable, or the formals a `<<x, y>> \in S` list
+/// destructures each element into.
+enum Bound {
+    Var(ParamId),
+    Tuple(Box<[ParamId]>),
+}
+
 /// `ContextEnumerator`.
 struct Contexts {
     base: Ctx,
-    vars: Vec<(ParamId, ValueEnumeration)>,
+    vars: Vec<(Bound, ValueEnumeration)>,
     current: Vec<Value>,
     done: bool,
 }
@@ -430,7 +565,26 @@ impl Contexts {
         }
         let mut c1 = self.base.clone();
         for ((p, _), v) in self.vars.iter().zip(&self.current) {
-            c1 = c1.cons(SymbolRef::Param(*p), Binding::Value(v.clone()));
+            match p {
+                Bound::Var(p) => c1 = c1.cons(SymbolRef::Param(*p), Binding::Value(v.clone())),
+                Bound::Tuple(formals) => {
+                    let elems = match v {
+                        Value::Tuple(t) if t.elems.len() == formals.len() => t.elems.clone(),
+                        // `Assert.fail(EC.TLC_ARGUMENT_MISMATCH, varList[0].toString())`
+                        // (`ContextEnumerator.java:51, 55`): the parameter is a location, and
+                        // the message's `%1` has no closing `%`, so it stays literal.
+                        _ => {
+                            let graph = ev.tool().graph();
+                            let at = graph.param(formals[0]).loc.tlc_text(graph.interner());
+                            let message = ev.out().text(Ec::TLC_ARGUMENT_MISMATCH, &[&at]);
+                            return Err(EvalError::runtime(Ec::TLC_ARGUMENT_MISMATCH, message));
+                        }
+                    };
+                    for (&id, e) in formals.iter().zip(elems.iter()) {
+                        c1 = c1.cons(SymbolRef::Param(id), Binding::Value(e.clone()));
+                    }
+                }
+            }
         }
         for i in 0..self.vars.len() {
             if let Some(v) = self.vars[i].1.next(ev)? {
@@ -470,6 +624,15 @@ enum Builtin {
     BoundedForall,
     BoundedExists,
     SetEnumerate,
+    Tuple,
+    RcdConstructor,
+    RcdSelect,
+    FcnApply,
+    Domain,
+    /// `$FcnConstructor` and `$NonRecursiveFcnSpec`, which differ only in where SANY puts them.
+    FcnConstructor,
+    RecursiveFcnSpec,
+    Except,
     Unimplemented(&'static str),
 }
 
@@ -503,6 +666,14 @@ impl Builtin {
             "$BoundedForall" => Builtin::BoundedForall,
             "$BoundedExists" => Builtin::BoundedExists,
             "$SetEnumerate" => Builtin::SetEnumerate,
+            "$Tuple" => Builtin::Tuple,
+            "$RcdConstructor" => Builtin::RcdConstructor,
+            "$RcdSelect" => Builtin::RcdSelect,
+            "$FcnApply" => Builtin::FcnApply,
+            "DOMAIN" => Builtin::Domain,
+            "$FcnConstructor" | "$NonRecursiveFcnSpec" => Builtin::FcnConstructor,
+            "$RecursiveFcnSpec" => Builtin::RecursiveFcnSpec,
+            "$Except" => Builtin::Except,
             other => Builtin::Unimplemented(BUILT_IN_OPS.iter().copied().find(|n| *n == other)?),
         })
     }
