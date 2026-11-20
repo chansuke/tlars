@@ -321,6 +321,67 @@ impl<'t> Ev<'t> {
                 }
                 Ok(Value::Bool(forall))
             }
+            Builtin::BoundedChoose => {
+                let bound = bound.expect("a bounded CHOOSE has a bound");
+                let list = &bound.lists[0];
+                let in_val = self.eval(list.domain, c, s0, s1, control)?;
+                if !in_val.is_enumerable() {
+                    let reason = format!(
+                        "Attempted to compute the value of an expression of\nform CHOOSE x \\in S: P, but S was not enumerable.\n{}",
+                        text(self, expr)
+                    );
+                    return Err(not_boolean(self, reason, expr));
+                }
+                in_val.normalize(self)?;
+                let mut elems = in_val.elements(self, EnumOrder::Normalized)?.expect("an enumerable value enumerates");
+                let pred = arg(0);
+                while let Some(val) = elems.next(self)? {
+                    let mut c1 = c.clone();
+                    if list.tuple {
+                        let cnt = list.vars.len();
+                        let tuple = val.to_tuple(self)?.filter(|t| t.elems.len() == cnt);
+                        let Some(tuple) = tuple else {
+                            let reason = format!(
+                                "Attempted to compute the value of an expression of form\nCHOOSE <<x1, ... , xN>> \\in S: P, but S was not a set\nof N-tuples.\n{}",
+                                text(self, expr)
+                            );
+                            return Err(not_boolean(self, reason, expr));
+                        };
+                        for (&id, e) in list.vars.iter().zip(tuple.elems.iter()) {
+                            c1 = c1.cons(SymbolRef::Param(id), Binding::Value(e.clone()));
+                        }
+                    } else {
+                        c1 = c1.cons(SymbolRef::Param(list.vars[0]), Binding::Value(val.clone()));
+                    }
+                    let bval = self.eval(pred, &c1, s0, s1, control)?;
+                    let Value::Bool(b) = bval else {
+                        let message = self.out().text(Ec::TLC_EXPECTED_VALUE, &["boolean", &text(self, expr)]);
+                        return Err(EvalError { loc: Some(graph.loc(pred)), ..EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message) });
+                    };
+                    if b {
+                        return Ok(val);
+                    }
+                }
+                let reason = format!(
+                    "Attempted to compute the value of an expression of form\nCHOOSE x \\in S: P, but no element of S satisfied P.\n{}",
+                    text(self, expr)
+                );
+                Err(not_boolean(self, reason, expr))
+            }
+            Builtin::UnboundedChoose | Builtin::UnboundedExists | Builtin::UnboundedForall => {
+                let what = match builtin {
+                    Builtin::UnboundedChoose => ("CHOOSE", "CHOOSE x \\in S: P(x)"),
+                    Builtin::UnboundedExists => ("\\E", "\\E x \\in S: P(x)"),
+                    _ => ("\\A", "\\A x \\in S: P(x)"),
+                };
+                let reason = format!(
+                    "TLC attempted to evaluate an unbounded {}.\nMake sure that the expression is of form {}.\n{}",
+                    what.0,
+                    what.1,
+                    text(self, expr)
+                );
+                Err(not_boolean(self, reason, expr))
+            }
             Builtin::SetEnumerate => {
                 let mut elems = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
@@ -623,6 +684,10 @@ enum Builtin {
     Case,
     BoundedForall,
     BoundedExists,
+    BoundedChoose,
+    UnboundedChoose,
+    UnboundedExists,
+    UnboundedForall,
     SetEnumerate,
     Tuple,
     RcdConstructor,
@@ -665,6 +730,10 @@ impl Builtin {
             "$Case" => Builtin::Case,
             "$BoundedForall" => Builtin::BoundedForall,
             "$BoundedExists" => Builtin::BoundedExists,
+            "$BoundedChoose" => Builtin::BoundedChoose,
+            "$UnboundedChoose" => Builtin::UnboundedChoose,
+            "$UnboundedExists" => Builtin::UnboundedExists,
+            "$UnboundedForall" => Builtin::UnboundedForall,
             "$SetEnumerate" => Builtin::SetEnumerate,
             "$Tuple" => Builtin::Tuple,
             "$RcdConstructor" => Builtin::RcdConstructor,

@@ -415,6 +415,43 @@ impl Value {
         matches!(self, Value::Interval(_) | Value::SetEnum(_))
     }
 
+    /// `instanceof Enumerable`: the set classes. TLC tests the class, not whether the
+    /// enumeration succeeds, so `SUBSET Nat` is enumerable and fails while enumerating.
+    pub(crate) fn is_enumerable(&self) -> bool {
+        matches!(
+            self,
+            Value::SetEnum(_)
+                | Value::Interval(_)
+                | Value::Subset(_)
+                | Value::KSubset(_)
+                | Value::SetOfFcns(_)
+                | Value::SetOfRcds(_)
+                | Value::SetOfTuples(_)
+                | Value::Union(_)
+                | Value::SetCup(_)
+                | Value::SetCap(_)
+                | Value::SetDiff(_)
+                | Value::SetPred(_)
+        )
+    }
+
+    /// `normalize()`: the in-place sort TLC runs before a value is compared or printed. Here
+    /// it publishes the `OnceLock`, after which only the normalised form is read.
+    pub(crate) fn normalize(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
+        match self {
+            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Model(_) | Value::Interval(_) | Value::User(_) | Value::Undef => Ok(()),
+            Value::Tuple(_) => Ok(()),
+            Value::SetEnum(s) => order::normalized(ev, s).map(|_| ()),
+            Value::Record(r) => order::record_normalized(ev, r).map(|_| ()),
+            Value::FcnRcd(f) => f.normalize(ev).map(|_| ()),
+            Value::FcnLambda(f) => match f.converted.get() {
+                Some(r) => r.normalize(ev).map(|_| ()),
+                None => Ok(()),
+            },
+            _ => Err(EvalError::unimplemented(format!("normalize of {} (M2 unit 4)", self.kind_string()))),
+        }
+    }
+
     /// `deepNormalize()`: done before a state is fingerprinted / shared.
     pub(crate) fn deep_normalize(&self, ev: &mut Ev<'_>) -> EvalResult<()> {
         match self {
