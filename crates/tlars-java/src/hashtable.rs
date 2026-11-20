@@ -75,6 +75,11 @@ impl<K: Eq, V> Hashtable<K, V> {
         self.find(key, java_hash).map(|i| &self.entry(i).value)
     }
 
+    /// A value changed in place (its entry keeps its position).
+    pub fn get_mut(&mut self, key: &K, java_hash: i32) -> Option<&mut V> {
+        self.find(key, java_hash).map(|i| &mut self.entry_mut(i).value)
+    }
+
     /// `Hashtable.remove`: unlinks the entry from its chain (the others keep their order).
     pub fn remove(&mut self, key: &K, java_hash: i32) -> Option<V> {
         let index = index_for(java_hash, self.buckets.len());
