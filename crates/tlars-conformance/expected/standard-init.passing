@@ -590,6 +590,7 @@ tlc/standard/tlc/to_string_string_quoted
 tlc/standard/tlc/to_string_tuple
 tlc/standard/tlc/to_string_usable_in_concat
 tlc/standard/tlc_eval/filter_over_nat_lazy_without_eval
+tlc/standard/tlc_get_set/action_unknown_all_contexts
 tlc/standard/tlc_get_set/exit_false_continues
 tlc/standard/tlc_get_set/exit_non_boolean_ignored
 tlc/standard/tlc_get_set/get_bool_index
@@ -619,9 +620,11 @@ tlc/standard/tlc_get_set/register_set_then_get
 tlc/standard/tlc_get_set/register_undefined
 tlc/standard/tlc_get_set/register_zero
 tlc/standard/tlc_get_set/registers_independent
+tlc/standard/tlc_get_set/revision_domain
 tlc/standard/tlc_get_set/set_bool_index
 tlc/standard/tlc_get_set/set_set_index
 tlc/standard/tlc_get_set/set_unknown_string
+tlc/standard/tlc_get_set/spec_in_any_context
 tlc/standard/toolbox/teposition_level_zero_or_one
 tlc/standard/toolbox/teposition_needs_tetrace
 tlc/standard/toolbox/tetrace_not_enumerable

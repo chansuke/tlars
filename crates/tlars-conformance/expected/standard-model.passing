@@ -14,6 +14,11 @@ tlc/standard/tlc_ext/postcondition_non_boolean
 tlc/standard/tlc_ext/postcondition_true
 tlc/standard/tlc_ext/postcondition_unknown
 tlc/standard/tlc_ext/trace_alias
+tlc/standard/tlc_get_set/action_unknown_bfs
+tlc/standard/tlc_get_set/all_empty
+tlc/standard/tlc_get_set/all_named_empty
+tlc/standard/tlc_get_set/all_named_values
+tlc/standard/tlc_get_set/all_values
 tlc/standard/tlc_get_set/assume_named_register_visible_in_workers
 tlc/standard/tlc_get_set/assume_register_visible_in_workers
 tlc/standard/tlc_get_set/config_bfs
@@ -30,6 +35,12 @@ tlc/standard/tlc_get_set/level_constraint
 tlc/standard/tlc_get_set/level_in_next_relation
 tlc/standard/tlc_get_set/level_invariant
 tlc/standard/tlc_get_set/level_primed
+tlc/standard/tlc_get_set/pause_true_prompts
+tlc/standard/tlc_get_set/spec_action_names
+tlc/standard/tlc_get_set/spec_action_per_disjunct
+tlc/standard/tlc_get_set/spec_domain
+tlc/standard/tlc_get_set/spec_invariant_names
+tlc/standard/tlc_get_set/spec_variable_names
 tlc/standard/tlc_get_set/stats_domain
 tlc/standard/tlc_get_set/stats_invariant
 tlc/standard/tlc_get_set/stats_postcondition
