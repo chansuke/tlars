@@ -15,10 +15,12 @@
 //! | `DecimalFormat("###,###.###")`| progress lines (`MP.format`)                       |
 //! | `SimpleDateFormat`            | timestamps, `TLC_FINISHED` durations, metadir      |
 //! | `tlc2.pprint.*`               | state values wrapped at `Values.width` (80)        |
+//! | JVM exception messages        | the casts and array reads TLC lets escape          |
 //!
 //! Golden files under `tests/golden` come from `tools/golden/JavaGolden.java` run on the
 //! pinned JDK 21.
 
+mod exception;
 mod hashmap;
 mod hashset;
 mod hashtable;
@@ -28,6 +30,7 @@ mod pprint;
 mod random;
 pub mod time;
 
+pub use exception::{class_cast, index_out_of_bounds};
 pub use hashmap::{JavaHashMap, capacity_for_mappings, table_size_for};
 pub use hashset::JavaIntHashSet;
 pub use hashtable::{Elements, Hashtable};
