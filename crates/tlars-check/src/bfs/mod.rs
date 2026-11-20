@@ -120,9 +120,17 @@ impl<'a> ModelChecker<'a> {
         }
     }
 
+    /// `AbstractChecker.modelCheck` (`AbstractChecker.java:618-621`): the recorded error code
+    /// stands in whenever `modelCheckImpl` itself came back clean, which is how an invariant
+    /// that failed to evaluate still ends the run with its own status.
+    pub(crate) fn model_check(&mut self) -> Ec {
+        let result = self.model_check_impl();
+        if result != Ec::NO_ERROR { result } else { self.error_code() }
+    }
+
     /// `ModelChecker.modelCheckImpl`: assumptions, 2189, `do_init`, 2190/2191, `run_tlc`,
     /// final liveness check, success report, summary (2199, 2194, 2268 on success).
-    pub(crate) fn model_check(&mut self) -> Ec {
+    fn model_check_impl(&mut self) -> Ec {
         let mut locals = WorkerLocals::new(0, self.seed);
         let assumptions = self.tool.ev(&mut locals, self.out).check_assumptions();
         if assumptions != Ec::NO_ERROR {

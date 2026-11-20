@@ -283,6 +283,7 @@ tlc/checker/init/zero_arity_false
 tlc/checker/init/zero_arity_true
 tlc/checker/invariants/action_level_rejected
 tlc/checker/invariants/assert_in_invariant_initial
+tlc/checker/invariants/assert_in_invariant_successor
 tlc/checker/invariants/box_action_rejected
 tlc/checker/invariants/config_constant_value_nonbool
 tlc/checker/invariants/config_order_first
@@ -292,6 +293,7 @@ tlc/checker/invariants/constant_false_warns_then_violates
 tlc/checker/invariants/constant_true_operator
 tlc/checker/invariants/constant_true_warns
 tlc/checker/invariants/error_on_initial
+tlc/checker/invariants/error_on_successor
 tlc/checker/invariants/first_pass_order_print
 tlc/checker/invariants/initial_duplicate_not_rechecked
 tlc/checker/invariants/initial_violation
@@ -301,6 +303,7 @@ tlc/checker/invariants/initial_violation_second_state
 tlc/checker/invariants/initial_violation_two_variables
 tlc/checker/invariants/multiple_lines_accumulate
 tlc/checker/invariants/non_boolean_on_initial
+tlc/checker/invariants/non_boolean_on_successor
 tlc/checker/invariants/parameterized
 tlc/checker/invariants/plural_keyword
 tlc/checker/invariants/stops_at_first_violation
@@ -447,6 +450,7 @@ tlc/checker/states/record_set_vs_enumeration
 tlc/checker/states/record_vs_function
 tlc/checker/states/set_and_string_differ_as_states
 tlc/checker/states/set_of_tuples_vs_seq
+tlc/checker/states/set_vs_integer_invariant_fails_equality
 tlc/checker/states/stuttering_counts
 tlc/checker/states/stuttering_is_not_invariant_rechecked
 tlc/checker/states/subset_vs_enumeration
