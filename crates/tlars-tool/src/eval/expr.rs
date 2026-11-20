@@ -157,12 +157,19 @@ impl<'t> Ev<'t> {
                     }
                 }
                 Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
-                    // `MethodValue.eval(tool, args, ...)`: the arguments are evaluated first.
-                    let mut vals = Vec::with_capacity(args.len());
-                    for &a in args {
-                        vals.push(self.eval(a.expect_expr(), c, s0, s1, control)?);
-                    }
-                    return crate::modules::apply(self, id, &vals);
+                    // `MethodValue.eval(tool, args, ...)`: the arguments are evaluated first,
+                    // except where the Java method takes an operator and tlars has to see the
+                    // argument node to resolve it.
+                    return match crate::modules::imp(id) {
+                        crate::modules::NativeImpl::Lazy(f) => f(self, args, c, s0, s1, control),
+                        crate::modules::NativeImpl::Strict(_) => {
+                            let mut vals = Vec::with_capacity(args.len());
+                            for &a in args {
+                                vals.push(self.eval(a.expect_expr(), c, s0, s1, control)?);
+                            }
+                            crate::modules::apply(self, id, &vals)
+                        }
+                    };
                 }
                 Resolved::Binding(Binding::Lambda(_) | Binding::ExceptAt(_)) => {
                     return Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()));
@@ -636,7 +643,7 @@ impl<'t> Ev<'t> {
         tool.graph.op_def(d).body.and_then(|b| tool.bindings.body_chain(&tool.graph, b))
     }
 
-    fn symbol_name(&self, sym: SymbolRef) -> String {
+    pub(crate) fn symbol_name(&self, sym: SymbolRef) -> String {
         let graph = &self.tool().graph;
         let name = match sym {
             SymbolRef::OpDef(d) => graph.op_def(d).name,
@@ -646,6 +653,49 @@ impl<'t> Ev<'t> {
             SymbolRef::Module(m) => graph.module(m).name,
         };
         graph.interner().text(name).to_string()
+    }
+
+    /// `evalImplOpArgKind` (`Tool.java:1884-1892`): an operator argument evaluated as a
+    /// value, which TLC wraps in an `OpLambdaValue` carrying the context of the *use* site.
+    /// `None` = the argument does not name an operator.
+    pub(crate) fn op_arg_value(&mut self, arg: ExprOrOpArg, c: &Ctx, control: EvalControl) -> EvalResult<Option<OpArgValue>> {
+        let ExprOrOpArg::OpArg(sym) = arg else { return Ok(None) };
+        Ok(match self.lookup(sym, c, StateRef::Empty, false) {
+            Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
+                Some(OpArgValue::Op { def: d, ctx: c.clone(), control })
+            }
+            Resolved::Binding(Binding::Native(id)) | Resolved::Native(id) => Some(OpArgValue::Native(id)),
+            _ => None,
+        })
+    }
+
+    /// `Values.ppr(op.toString())` of an operator argument: `OpLambdaValue.toString` is
+    /// `<Operator name>`, and the definition SANY builds for a LAMBDA is named `LAMBDA`.
+    pub(crate) fn op_arg_text(&mut self, arg: ExprOrOpArg) -> EvalResult<String> {
+        let ExprOrOpArg::OpArg(sym) = arg else {
+            return Err(EvalError::unimplemented("the printed form of a non-operator module argument".into()));
+        };
+        Ok(format!("<Operator {}>", self.symbol_name(sym)))
+    }
+
+    /// `OpLambdaValue.eval(args, control)` (`OpLambdaValue.java:100-119`) and
+    /// `MethodValue.eval(args)`: the body runs in the captured context, and the captured
+    /// control contributes only its Enabled bit.
+    pub(crate) fn apply_operator(&mut self, op: &OpArgValue, args: &[Value], control: EvalControl) -> EvalResult<Value> {
+        match op {
+            OpArgValue::Native(id) => crate::modules::apply(self, *id, args),
+            OpArgValue::Op { def, ctx, control: captured } => {
+                let def = *def;
+                let params = self.tool().graph.op_def(def).params.clone();
+                let body = self.tool().graph.op_def(def).body.expect("a definition has a body");
+                let mut c1 = ctx.clone();
+                for (&p, v) in params.iter().zip(args) {
+                    c1 = c1.cons(SymbolRef::Param(p), Binding::Value(v.clone()));
+                }
+                let control = if captured.has(EvalControl::ENABLED) { control.with(EvalControl::ENABLED) } else { control };
+                self.eval(body, &c1, StateRef::Empty, StateRef::Empty, control)
+            }
+        }
     }
 
     /// `BuiltInOPs.getOpCode(name)` for a built-in operator; `None` for everything else
@@ -704,6 +754,13 @@ impl<'t> Ev<'t> {
     pub(crate) fn not_boolean_next(&mut self, pred: ExprId, c: &Ctx) -> EvalError {
         todo!("'The next state relation is not a boolean expression.' with location")
     }
+}
+
+/// What an operator argument of a Java module resolves to: `OpLambdaValue` for a definition,
+/// `MethodValue` for another module's override.
+pub(crate) enum OpArgValue {
+    Op { def: OpDefId, ctx: Ctx, control: EvalControl },
+    Native(crate::modules::NativeId),
 }
 
 /// The two operands of a `$Pair` node, which SANY uses for record fields, CASE arms and
