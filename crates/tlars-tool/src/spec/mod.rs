@@ -818,20 +818,22 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
         fairness: temporals.into_iter().map(|p| (p.expr, p.ctx)).collect(),
         properties: Box::new([]),
     };
-    // The `Tool` constructor's splitting (`Tool.java:224-240`).
-    let mut inits = Vec::new();
+    // The `Tool` constructor's splitting (`Tool.java:224-240`). Only the next-state
+    // relation is split; `getInitStateSpec()` hands the initial predicates over as they are,
+    // so an init predicate that is not a boolean fails during generation, not here.
     let mut actions = Vec::new();
     {
         let mut locals = WorkerLocals::new(0, tool.globals.seed);
         let mut ev = tool.ev(&mut locals, out);
-        for p in &init_preds {
-            crate::actions::split_init(&mut ev, p.expr, &p.ctx, &mut inits).map_err(uncaught)?;
-        }
         if let Some(next) = &next_pred {
             crate::actions::split_next(&mut ev, next.expr, &next.ctx, &mut actions).map_err(uncaught)?;
         }
     }
-    tool.init_actions = inits.into();
+    tool.init_actions = init_preds
+        .iter()
+        .enumerate()
+        .map(|(i, p)| crate::actions::init_action(i, p.expr, &p.ctx, p.op_def))
+        .collect();
     tool.actions = actions.into();
     Ok(())
 }

@@ -39,19 +39,28 @@ pub(crate) enum ErrState {
     Liveness,
 }
 
+/// `AbstractChecker.setErrState(curState, succState, keepCallStack, errorCode)`: the cause,
+/// the error code it reports, and whether TLC re-runs the step to print the nested
+/// expressions.
+pub(crate) struct Recorded {
+    state: ErrState,
+    ec: Ec,
+    keep_call_stack: bool,
+}
+
 /// `AbstractChecker.setErrState`: only the first error is kept (unless `-continue`).
 pub(crate) struct ErrSlot {
-    first: Mutex<Option<ErrState>>,
+    first: Mutex<Option<Recorded>>,
 }
 
 impl ErrSlot {
     /// `true` if this call recorded the first error.
-    pub(crate) fn set(&self, e: ErrState) -> bool {
+    pub(crate) fn set(&self, state: ErrState, ec: Ec, keep_call_stack: bool) -> bool {
         let mut slot = self.first.lock().expect("error slot");
         if slot.is_some() {
             return false;
         }
-        *slot = Some(e);
+        *slot = Some(Recorded { state, ec, keep_call_stack });
         true
     }
 }
@@ -148,7 +157,13 @@ impl<'a> ModelChecker<'a> {
             }
             return result;
         }
-        result = self.run_tlc();
+        self.run_tlc();
+        // `runTLC` returns the recorded code unless a call-stack replay was asked for.
+        let replay = self.call_stack_replay();
+        result = match &replay {
+            Some(_) => Ec::NO_ERROR,
+            None => self.error_code(),
+        };
         if result != Ec::NO_ERROR {
             self.print_summary(false);
             return result;
@@ -156,9 +171,11 @@ impl<'a> ModelChecker<'a> {
         let errored = self.err.first.lock().expect("error slot").is_some();
         if !errored {
             self.report_success();
+        } else if let Some(pred) = replay {
+            result = self.replay_next_call_stack(&pred);
         }
-        self.print_summary(!errored);
-        if errored { self.error_code() } else { Ec::NO_ERROR }
+        self.print_summary(result == Ec::NO_ERROR);
+        result
     }
 
     /// `doInit` + `DoInitFunctor`: for each initial state in generation order:
@@ -221,7 +238,7 @@ impl<'a> ModelChecker<'a> {
     /// `runTLC`: start workers on large-stack scoped threads, then the main-thread loop
     /// (first progress after 3 s, then every 60 s; periodic liveness when the graph grew
     /// > 10% and liveness used < 20% of runtime, unless `-lncheck final|seqfinal|off`).
-    fn run_tlc(&self) -> Ec {
+    fn run_tlc(&self) {
         std::thread::scope(|scope| {
             for id in 0..self.workers {
                 std::thread::Builder::new()
@@ -230,18 +247,31 @@ impl<'a> ModelChecker<'a> {
                     .spawn_scoped(scope, move || worker::Worker::new(id as u16, self).run())
                     .expect("spawn TLC worker");
             }
-            self.periodic_loop()
-        })
+            self.periodic_loop();
+        });
     }
 
     /// `runTLCContinueDoing` + `doPeriodicWork`. With no liveness and no checkpointing there
     /// is nothing periodic to do, so the loop only waits for the workers.
-    fn periodic_loop(&self) -> Ec {
-        Ec::NO_ERROR
+    fn periodic_loop(&self) {}
+
+    /// `setErrState` with the error code and the call-stack flag the caller chose.
+    pub(crate) fn set_err_with(&self, e: ErrState, ec: Ec, keep_call_stack: bool) -> bool {
+        self.err.set(e, ec, keep_call_stack)
     }
 
+    /// `setErrState(cur, succ, false, ec)`: a violation, which needs no replay.
     pub(crate) fn set_err(&self, e: ErrState) -> bool {
-        self.err.set(e)
+        let ec = match &e {
+            ErrState::InvariantInitial { .. } => Ec::TLC_INVARIANT_VIOLATED_INITIAL,
+            ErrState::Invariant { .. } => Ec::TLC_INVARIANT_VIOLATED_BEHAVIOR,
+            ErrState::ImpliedAction { .. } => Ec::TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR,
+            ErrState::Deadlock { .. } => Ec::TLC_DEADLOCK_REACHED,
+            ErrState::Incomplete { .. } => Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_NEXT,
+            ErrState::Eval { error, .. } => eval_error_code(error),
+            ErrState::Liveness => Ec::NO_ERROR,
+        };
+        self.err.set(e, ec, false)
     }
 
     /// Invariants on a new (or out-of-model) successor, in cfg order. Violation: record,
@@ -266,7 +296,9 @@ impl<'a> ModelChecker<'a> {
                     return Err(Halt::Stop);
                 }
                 Err(e) => {
-                    if self.set_err(ErrState::Eval { pred: cur.clone(), succ: Some(succ.clone()), error: e.clone() }) {
+                    // `doNextEvalFailed`: keeps the call stack and reports the invariant's code.
+                    let recorded = ErrState::Eval { pred: cur.clone(), succ: Some(succ.clone()), error: e.clone() };
+                    if self.set_err_with(recorded, Ec::TLC_INVARIANT_EVALUATION_FAILED, true) {
                         self.out.error(Ec::TLC_INVARIANT_EVALUATION_FAILED, &[&name, &e.message]);
                         self.print_trace_and_stop(ev, cur, Some(succ));
                     }
@@ -297,7 +329,8 @@ impl<'a> ModelChecker<'a> {
                     return Err(Halt::Stop);
                 }
                 Err(e) => {
-                    if self.set_err(ErrState::Eval { pred: cur.clone(), succ: Some(succ.clone()), error: e.clone() }) {
+                    let recorded = ErrState::Eval { pred: cur.clone(), succ: Some(succ.clone()), error: e.clone() };
+                    if self.set_err_with(recorded, Ec::TLC_ACTION_PROPERTY_EVALUATION_FAILED, true) {
                         self.out.error(Ec::TLC_ACTION_PROPERTY_EVALUATION_FAILED, &[&name, &e.message]);
                         self.print_trace_and_stop(ev, cur, Some(succ));
                     }
@@ -312,7 +345,10 @@ impl<'a> ModelChecker<'a> {
     /// records it, and stops all workers.
     pub(crate) fn next_failed(&self, cur: &Queued, succ: Option<&State>, e: EvalError) {
         let ec = eval_error_code(&e);
-        if self.set_err(ErrState::Eval { pred: cur.clone(), succ: succ.cloned(), error: e.clone() }) {
+        // `doNextFailed`: a stack overflow, an out-of-memory or an assertion error keeps no
+        // call stack, because its replay would not reproduce the same frames.
+        let keep = !matches!(e.kind, tlars_tool::EvalErrorKind::StackOverflow | tlars_tool::EvalErrorKind::Assertion);
+        if self.set_err_with(ErrState::Eval { pred: cur.clone(), succ: succ.cloned(), error: e.clone() }, ec, keep) {
             if !(ec == Ec::GENERAL && e.message.is_empty()) {
                 self.out.error(ec, &[&e.message]);
             }
@@ -409,16 +445,44 @@ impl<'a> ModelChecker<'a> {
         }
     }
 
-    /// The exit code of the recorded error (`setErrState`'s `ec`).
+    /// `AbstractChecker.errorCode`, as `setErrState` recorded it.
     fn error_code(&self) -> Ec {
-        match &*self.err.first.lock().expect("error slot") {
-            Some(ErrState::InvariantInitial { .. }) => Ec::TLC_INVARIANT_VIOLATED_INITIAL,
-            Some(ErrState::Invariant { .. }) => Ec::TLC_INVARIANT_VIOLATED_BEHAVIOR,
-            Some(ErrState::ImpliedAction { .. }) => Ec::TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR,
-            Some(ErrState::Deadlock { .. }) => Ec::TLC_DEADLOCK_REACHED,
-            Some(ErrState::Incomplete { .. }) => Ec::TLC_STATE_NOT_COMPLETELY_SPECIFIED_NEXT,
-            Some(ErrState::Eval { error, .. }) => eval_error_code(error),
-            Some(ErrState::Liveness) | None => Ec::NO_ERROR,
+        self.err.first.lock().expect("error slot").as_ref().map_or(Ec::NO_ERROR, |r| r.ec)
+    }
+
+    /// The step to re-run under a `CallStackTool`, and whether TLC asks for that re-run.
+    fn call_stack_replay(&self) -> Option<Queued> {
+        let slot = self.err.first.lock().expect("error slot");
+        let recorded = slot.as_ref()?;
+        if !recorded.keep_call_stack {
+            return None;
+        }
+        match &recorded.state {
+            ErrState::Eval { pred, .. } => Some(pred.clone()),
+            _ => None,
+        }
+    }
+
+    /// `modelCheckImpl`'s `keepCallStack` branch (`ModelChecker.java:299-318`): re-run the
+    /// failing step with the call stack recorded and print `TLC_NESTED_EXPRESSION`.
+    fn replay_next_call_stack(&self, pred: &Queued) -> Ec {
+        // TLC runs the replay on a worker of its own (`new Worker(4223, ...)`), which never
+        // writes to the trace because every fingerprint it meets is already in the FPSet.
+        let mut worker = worker::Worker::recording(0, self);
+        let flow = worker.expand(pred);
+        let stack = worker.take_call_stack().expect("recording was switched on");
+        let text = stack.to_tlc_string(self.tool);
+        match flow {
+            Err(Halt::Eval(e)) if matches!(e.kind, tlars_tool::EvalErrorKind::Fingerprint { .. }) => {
+                self.out.error(Ec::TLC_FINGERPRINT_EXCEPTION, &[&text, &e.message])
+            }
+            // An `EvalException` keeps its own code; anything else reports 2103.
+            Err(Halt::Eval(e)) if matches!(e.kind, tlars_tool::EvalErrorKind::Eval) => {
+                self.out.error(Ec::TLC_NESTED_EXPRESSION, &[&text]);
+                e.ec
+            }
+            Err(Halt::Eval(_)) => self.out.error(Ec::TLC_NESTED_EXPRESSION, &[&text]),
+            _ => Ec::NO_ERROR,
         }
     }
 

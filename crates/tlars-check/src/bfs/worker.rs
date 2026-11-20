@@ -33,10 +33,35 @@ impl<'a> Worker<'a> {
         Worker { id, mc, locals, sink: SinkState { generated: 0, unseen: 0, live_successors: None, live_multiplier: 1 } }
     }
 
+    /// A worker whose evaluation records the nested-expression stack, for the replay TLC
+    /// runs with a `CallStackTool`.
+    pub(super) fn recording(id: u16, mc: &'a ModelChecker<'a>) -> Self {
+        let mut w = Worker::new(id, mc);
+        w.locals.record_call_stack();
+        w
+    }
+
+    pub(super) fn take_call_stack(&mut self) -> Option<tlars_tool::CallStack> {
+        self.locals.take_call_stack()
+    }
+
     /// `Worker.run`.
     pub(super) fn run(&mut self) {
         let mc = self.mc;
         while let Some(cur) = mc.queue.dequeue() {
+            let _ = self.expand(&cur);
+        }
+        mc.worker_done(self.id);
+    }
+
+    /// One iteration of `Worker.run`: expand `cur`, check for a deadlock, and record the
+    /// counters. The `Flow` is what the next-state generation returned, which the call-stack
+    /// replay inspects.
+    pub(super) fn expand(&mut self, cur: &Queued) -> Flow {
+        let mc = self.mc;
+        let cur = cur.clone();
+        let outcome;
+        {
             if mc.live.is_some() {
                 self.sink.live_successors = Some(SetOfStates::with_capacity(16 * self.sink.live_multiplier as usize));
             }
@@ -44,9 +69,9 @@ impl<'a> Worker<'a> {
             let generated_before = self.sink.generated;
             let mut ev = mc.tool.ev(&mut self.locals, mc.out);
             let mut sink = WorkerSink { mc, worker: self.id, cur: &cur, st: &mut self.sink, seen: SharedPut(&*mc.fpset) };
-            match ev.next_states(&cur.state, cur.fp, &mut sink) {
-                Ok(()) | Err(Halt::Stop) => {}
-                Err(Halt::Eval(e)) => mc.next_failed(&cur, None, e),
+            outcome = ev.next_states(&cur.state, cur.fp, &mut sink);
+            if let Err(Halt::Eval(e)) = &outcome {
+                mc.next_failed(&cur, None, e.clone());
             }
             // Deadlock = zero addElement calls, even if every successor was out of model.
             if mc.check_deadlock && generated_before == self.sink.generated && mc.set_err(ErrState::Deadlock { state: cur.clone() }) {
@@ -67,7 +92,7 @@ impl<'a> Worker<'a> {
             mc.stats[self.id as usize].out_degree.lock().expect("out degree")[bucket] += 1;
             self.sink.unseen = 0;
         }
-        mc.worker_done(self.id);
+        outcome
     }
 }
 
@@ -107,9 +132,10 @@ impl<O: SeenOracle> NextSink for WorkerSink<'_, O> {
             return Err(self.mc.incomplete(self.cur, action, s1));
         };
         match self.examine(ev, s0, &succ) {
+            // `doNext`'s `catch (Throwable e) { doNextFailed(...); throw e; }`.
             Err(Halt::Eval(e)) => {
-                self.mc.next_failed(self.cur, Some(&succ), e);
-                Err(Halt::Stop)
+                self.mc.next_failed(self.cur, Some(&succ), e.clone());
+                Err(Halt::Eval(e))
             }
             other => other,
         }

@@ -57,9 +57,9 @@ pub(crate) fn split_next(ev: &mut Ev<'_>, next: ExprId, c: &Ctx, out: &mut Vec<A
     split(ev, next, c, None, out, false)
 }
 
-/// Init predicates are split the same way and numbered before the next-state actions.
-pub(crate) fn split_init(ev: &mut Ev<'_>, init: ExprId, c: &Ctx, out: &mut Vec<Action>) -> EvalResult<()> {
-    split(ev, init, c, None, out, true)
+/// `getInitStateSpec()`: one action per initial predicate, unsplit.
+pub(crate) fn init_action(index: usize, pred: ExprId, c: &Ctx, op_def: Option<OpDefId>) -> Action {
+    Action { id: ActionId(index as u32), pred, ctx: c.clone(), name: None, op_def, is_init: true, is_internal: false }
 }
 
 /// `(OpDefNode) opNode` on a symbol that is not a definition.
