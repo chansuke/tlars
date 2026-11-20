@@ -49,8 +49,8 @@ impl<'t> Ev<'t> {
             ExprNode::OpAppl { .. } => self.init_appl(pred, acts, c, ps, sink),
             ExprNode::LetIn { body, .. } | ExprNode::Label { body, .. } => self.init_impl(*body, acts, c, ps, sink),
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
-                let (substs, body) = (substs.clone(), *body);
-                let c1 = self.subst_context(&substs, c);
+                let body = *body;
+                let c1 = self.subst_context(substs, c);
                 self.init_impl(body, acts, &c1, ps, sink)
             }
             _ => {

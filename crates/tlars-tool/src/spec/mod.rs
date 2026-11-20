@@ -798,8 +798,8 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
     if pass.next_pred.is_none() && has_checks {
         return Err(SpecError::Failure { ec: Ec::TLC_CONFIG_MISSING_NEXT });
     }
-    let model_constraints = named_checks(config, &config.constraints, tool, defns, out, "constraint")?;
-    let action_constraints = named_checks(config, &config.action_constraints, tool, defns, out, "action-constraint")?;
+    let model_constraints = named_checks(&config.constraints, tool, defns, out, "constraint")?;
+    let action_constraints = named_checks(&config.action_constraints, tool, defns, out, "action-constraint")?;
     if config.rl_reward.is_some() || config.periodic.is_some() || !config.possible.is_empty() || !config.postconditions.is_empty() {
         return Err(unimplemented("_RL_REWARD, _PERIODIC, _POSSIBLE and POSTCONDITION (M3 unit 5)"));
     }
@@ -894,7 +894,7 @@ impl ConfigPass {
     /// `processConfigInitAndNext` (`SpecProcessor.java:957-1002`).
     fn init_and_next(&mut self, config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<(), SpecError> {
         let graph = tool.graph.clone();
-        let mut one = |name: &str, what: &str| -> Result<Pred, SpecError> {
+        let one = |name: &str, what: &str| -> Result<Pred, SpecError> {
             match defn_of(defns, &graph, name) {
                 None => Err(SpecError::Config {
                     ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
@@ -935,11 +935,11 @@ impl ConfigPass {
         let graph = tool.graph.clone();
         match graph.expr(pred) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
-                let (substs, body) = (substs.clone(), *body);
+                let body = *body;
                 let mut locals = WorkerLocals::new(0, tool.globals.seed);
                 let c1 = {
                     let mut ev = tool.ev(&mut locals, out);
-                    ev.subst_context(&substs, c)
+                    ev.subst_context(substs, c)
                 };
                 return self.config_spec(body, &c1, tool, out);
             }
@@ -1161,8 +1161,8 @@ fn collect_subscript(ev: &mut crate::eval::Ev<'_>, subscript: ExprId, c: &Ctx, f
             }
         }
         ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
-            let (substs, body) = (substs.clone(), *body);
-            let c1 = ev.subst_context(&substs, c);
+            let body = *body;
+            let c1 = ev.subst_context(substs, c);
             collect_subscript(ev, body, &c1, found)
         }
         ExprNode::LetIn { body, .. } | ExprNode::Label { body, .. } => collect_subscript(ev, *body, c, found),
@@ -1173,7 +1173,6 @@ fn collect_subscript(ev: &mut crate::eval::Ev<'_>, subscript: ExprId, c: &Ctx, f
 /// `processModelConstraints` / `processActionConstraints` (`SpecProcessor.java:2196-2260`):
 /// each name must be a 0-arity definition.
 fn named_checks(
-    _config: &ModelConfig,
     names: &[String],
     tool: &Tool,
     defns: &Defns,

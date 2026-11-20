@@ -624,8 +624,8 @@ impl<'t> Ev<'t> {
         let (ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. }) = graph.expr(pred) else {
             unreachable!("only a SubstIn reaches here")
         };
-        let (substs, body) = (substs.clone(), *body);
-        let c1 = self.subst_context(&substs, c);
+        let body = *body;
+        let c1 = self.subst_context(substs, c);
         self.next_impl(a, body, acts, &c1, s0, s1, sink)
     }
 }
