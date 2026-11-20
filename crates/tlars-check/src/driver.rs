@@ -23,6 +23,9 @@ pub(crate) enum Exit {
 ///  6. `finally`: 2186 `Finished in ...`, trace-exploration spec (unless -tool/-continue/TE).
 pub(crate) fn process(session: &Session<'_>) -> Exit {
     let out = &session.reporter;
+    if session.options.debug {
+        todo!("M5: -debug (DebugPrinter output from handleParameters on, and exception stack traces)");
+    }
     // `printWelcome`, the last step of `handleParameters` (`TLC.java:1318`).
     out.message(Ec::TLC_VERSION, &[crate::VERSION]);
     if session.options.recover.is_some() {
@@ -146,8 +149,20 @@ fn library_paths(session: &Session<'_>, main_file: &str) -> Vec<PathBuf> {
     // `FileUtil.parseDirname`: everything up to the last separator.
     match main_file.rfind(std::path::MAIN_SEPARATOR) {
         Some(i) => vec![session.cwd.join(&main_file[..=i])],
-        None => session.property("TLA-Library").map_or_else(Vec::new, |p| std::env::split_paths(p).collect()),
+        None => session.property("TLA-Library").map_or_else(Vec::new, |p| java_split(p, ':').map(|d| session.cwd.join(d)).collect()),
     }
+}
+
+/// `String.split(sep)` (`SimpleFilenameToStream.parsePaths`): trailing empty entries are
+/// dropped, inner and leading ones kept (an empty path is the working directory).
+fn java_split(s: &str, sep: char) -> impl Iterator<Item = &str> {
+    let mut parts: Vec<&str> = s.split(sep).collect();
+    if parts.len() > 1 {
+        while parts.last() == Some(&"") {
+            parts.pop();
+        }
+    }
+    parts.into_iter()
 }
 
 /// The end of `handleParameters` (`TLC.java:1236-1242`): an absolute spec path becomes the
@@ -226,11 +241,15 @@ struct SanyLines<'s, 'a> {
 }
 
 impl SanyOut for SanyLines<'_, '_> {
-    fn line(&mut self, text: &str) {
+    fn log_line(&mut self, text: &str) {
         match self.held.as_mut() {
             Some(held) => held.push(text.to_string()),
             None => self.out.raw(&format!("{text}\n")),
         }
+    }
+    /// Direct `ToolIO.out` prints bypass the `DelayedPrintStream`.
+    fn line(&mut self, text: &str) {
+        self.out.raw(&format!("{text}\n"));
     }
     fn err_line(&mut self, text: &str) {
         use std::io::Write;
