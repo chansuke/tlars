@@ -1,0 +1,11 @@
+tlc/checker/actions/spec_angle_box
+tlc/checker/deadlock/config_nonboolean
+tlc/checker/deadlock/config_twice
+tlc/checker/enabled/enabled_in_assume
+tlc/checker/enabled/temporal_box
+tlc/checker/enabled/temporal_diamond
+tlc/checker/enabled/temporal_sf
+tlc/checker/enabled/temporal_wf
+tlc/checker/init/error_undefined_constant
+tlc/checker/next/box_formula_in_next
+tlc/checker/prime/double_prime_level_error
