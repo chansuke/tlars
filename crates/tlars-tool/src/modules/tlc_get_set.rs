@@ -1,0 +1,223 @@
+//! `tlc2.module.TLCGetSet`: the Java override of `TLC!TLCGet` and `TLC!TLCSet`.
+//!
+//! `TLCGet` is an `@Evaluation` override, so it gets the argument node and evaluates it
+//! itself, and every failure it raises reaches the spec wrapped in
+//! `TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE`. `TLCSet` is an ordinary `@TLAPlusOperator`, whose
+//! `EvalException` passes through unwrapped.
+
+use super::{eval_exception, wrap_evaluating};
+use crate::ctx::Ctx;
+use crate::error::{EvalError, EvalResult};
+use crate::eval::{EvalControl, Ev};
+use crate::state::StateRef;
+use crate::value::Value;
+use tlars_msg::Ec;
+use tlars_sany::Atom;
+use tlars_sany::graph::ExprOrOpArg;
+
+/// `TLCGetSet.NAMED_REGISTER_PREFIX`: a string key with this prefix names a register rather
+/// than one of the keys below.
+const NAMED_REGISTER_PREFIX: &str = "s:";
+
+/// The string keys whose value tlars cannot build yet: the spec objects, the action being
+/// run, the per-worker register maps and the build's version record.
+const UNIMPLEMENTED: &[&str] = &["spec", "revision", "action", "all", "all:named"];
+
+/// `getStatistics()`' fields, in the order `AbstractChecker` fills them
+/// (`AbstractChecker.java:683-709`). The record prints them in intern-token order, which is
+/// `TLCGetSet`'s declaration order, not this one.
+const STATS_FIELDS: &[&str] = &["queue", "distinct", "initial", "generated", "diameter", "duration", "worker"];
+
+/// `createConfig()`' fields, in the order `AbstractChecker` fills them (`:713-736`).
+const CONFIG_FIELDS: &[&str] = &["mode", "deadlock", "worker", "seed", "fingerprint", "install"];
+
+/// `TLCGetSet.TLCGetEval` (`TLCGetSet.java:160-185`).
+pub(crate) fn tlc_get(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Value> {
+    let result = tlc_get_eval(ev, args, c, s0, s1, control);
+    result.map_err(|e| wrap_evaluating(ev, "TLC", "TLCGet", e))
+}
+
+fn tlc_get_eval(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Value> {
+    let vidx = ev.eval(args[0].expect_expr(), c, s0, s1, control)?;
+    // A negative index falls through to the argument error, as the inner `if` does in Java.
+    if let Value::Int(i) = vidx
+        && i >= 0
+    {
+        let stored = ev.tool().registers.lock().expect("registers").get(i as usize);
+        return match stored {
+            Some(v) => Ok(v),
+            None => Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&i.to_string()])),
+        };
+    }
+    if let Value::Str(name) = vidx {
+        return tlc_get_string(ev, name, s0, control);
+    }
+    let shown = vidx.ppr(ev)?;
+    Err(eval_exception(ev, Ec::TLC_MODULE_ONE_ARGUMENT_ERROR, &["TLCGet", "nonnegative integer", &shown]))
+}
+
+/// `TLCGetStringValue` (`TLCGetSet.java:187-461`).
+fn tlc_get_string(ev: &mut Ev<'_>, name: Atom, s0: StateRef<'_>, control: EvalControl) -> EvalResult<Value> {
+    let key = ev.tool().graph().interner().text(name).to_string();
+    if key == "level" {
+        // `level` is the height stored in the state being worked on, and is 0 by definition
+        // in ASSUME, POSTCONDITION and the initial predicate (`:379-392`).
+        if control.has(EvalControl::CONST) || control.has(EvalControl::INIT) {
+            return Ok(Value::Int(crate::state::INIT_LEVEL as i32 - 1));
+        }
+        return Ok(Value::Int(s0.level() as i32));
+    }
+    if key.starts_with(NAMED_REGISTER_PREFIX) && key != "all:named" {
+        let stored = ev.tool().registers.lock().expect("registers").get_named(name);
+        return match stored {
+            Some(v) => Ok(v),
+            None => Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key])),
+        };
+    }
+    if UNIMPLEMENTED.contains(&key.as_str()) {
+        return Err(EvalError::unimplemented(format!("TLCGet(\"{key}\") (M3 unit 5)")));
+    }
+    // `duration` reads the clock alone and needs no checker in TLC, but tlars has no clock
+    // outside a run.
+    if key == "duration" {
+        let Some(checker) = ev.tool().main_checker() else {
+            return Err(EvalError::unimplemented("TLCGet(\"duration\") outside a run (M3 unit 5)".into()));
+        };
+        return narrow(ev, checker.duration_secs());
+    }
+    if matches!(key.as_str(), "diameter" | "generated" | "distinct" | "queue" | "stats" | "config") {
+        // Each of these goes through `TLCGlobals.mainChecker`, so with no checker the NPE TLC
+        // catches turns into `TLCGet(key) was undefined`.
+        let Some(checker) = ev.tool().main_checker() else {
+            return Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key]));
+        };
+        return match key.as_str() {
+            // `IntValue.gen(getProgress())`, an int in Java already.
+            "diameter" => Ok(Value::Int(checker.diameter() as i32)),
+            "generated" => narrow(ev, checker.generated() as i64),
+            "distinct" => narrow(ev, checker.distinct() as i64),
+            "queue" => narrow(ev, checker.queue() as i64),
+            "stats" => Ok(statistics(ev, checker)),
+            _ => Ok(config(ev)),
+        };
+    }
+    // `System.getProperty(key.substring(2), key)`: the default is the whole key, `-D` and all.
+    if let Some(property) = key.strip_prefix("-D") {
+        let text = ev.tool().property(property).unwrap_or_else(|| key.clone());
+        return Ok(Value::Str(ev.tool().graph().interner().intern(&text)));
+    }
+    Err(eval_exception(ev, Ec::TLC_MODULE_TLCGET_UNDEFINED, &[&key]))
+}
+
+/// `IntValue.gen(Math.toIntExact(v))`: a counter past `Integer.MAX_VALUE` is an
+/// `ArithmeticException`, which the module reports as `TLC_MODULE_OVERFLOW`.
+fn narrow(ev: &mut Ev<'_>, v: i64) -> EvalResult<Value> {
+    match i32::try_from(v) {
+        Ok(n) => Ok(Value::Int(n)),
+        Err(_) => Err(eval_exception(ev, Ec::TLC_MODULE_OVERFLOW, &[&v.to_string()])),
+    }
+}
+
+/// `IntValue.narrowToIntValue(v)`: a value that does not fit becomes -1.
+fn narrow_to_int(v: i64) -> Value {
+    Value::Int(i32::try_from(v).unwrap_or(-1))
+}
+
+/// `AbstractChecker.getStatistics()` (`:683-709`).
+fn statistics(ev: &mut Ev<'_>, checker: &dyn crate::effects::MainChecker) -> Value {
+    let values = vec![
+        narrow_to_int(checker.queue() as i64),
+        narrow_to_int(checker.distinct() as i64),
+        narrow_to_int(checker.initial() as i64),
+        narrow_to_int(checker.generated() as i64),
+        narrow_to_int(i64::from(checker.diameter())),
+        narrow_to_int(checker.duration_secs()),
+        // `Thread.currentThread() instanceof IdThread ? IdThread.GetId() : 0`, and tlars
+        // numbers the main thread 0 too.
+        Value::Int(i32::from(ev.worker_id())),
+    ];
+    let interner = ev.tool().graph().interner();
+    let names = STATS_FIELDS.iter().map(|n| interner.intern(n)).collect();
+    Value::Record(Value::record_arc(names, values, false))
+}
+
+/// `AbstractChecker.createConfig()` (`:711-736`), which the checker builds once at startup.
+/// `mode` is `"bfs"` for the model checker; the simulator's own record is M5.
+fn config(ev: &mut Ev<'_>) -> Value {
+    let globals = ev.tool().globals();
+    let (deadlock, workers, seed) = (globals.check_deadlock, globals.workers, globals.seed);
+    let install = globals.install_location.clone();
+    let poly = ev.tool().fp64.irred_poly();
+    let interner = ev.tool().graph().interner();
+    let values = vec![
+        Value::Str(interner.intern("bfs")),
+        Value::Bool(deadlock),
+        Value::Int(workers as i32),
+        Value::Str(interner.intern(&seed.to_string())),
+        Value::Str(interner.intern(&poly.to_string())),
+        Value::Str(interner.intern(&install)),
+    ];
+    let names = CONFIG_FIELDS.iter().map(|n| interner.intern(n)).collect();
+    Value::Record(Value::record_arc(names, values, false))
+}
+
+/// `TLCGetSet.TLCSet` (`TLCGetSet.java:463-535`).
+pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
+    if let Value::Int(i) = a[0]
+        && i >= 0
+    {
+        ev.tool().registers.lock().expect("registers").set(i as usize, a[1].clone());
+        return Ok(Value::Bool(true));
+    }
+    if let Value::Str(name) = a[0] {
+        let key = ev.tool().graph().interner().text(name).to_string();
+        // Every string key answers TRUE; only a TRUE second argument does anything.
+        let asked = matches!(a[1], Value::Bool(true));
+        match key.as_str() {
+            // `if (mainChecker != null) mainChecker.stop()`: with no checker it is a no-op
+            // that still answers TRUE.
+            "exit" => {
+                if asked {
+                    if let Some(checker) = ev.tool().main_checker() {
+                        checker.stop();
+                    }
+                }
+                return Ok(Value::Bool(true));
+            }
+            "pause" => {
+                if asked {
+                    return Err(EvalError::unimplemented("TLCSet(\"pause\", TRUE), which waits on standard input (M3 unit 5)".into()));
+                }
+                return Ok(Value::Bool(true));
+            }
+            _ if key.starts_with(NAMED_REGISTER_PREFIX) => {
+                ev.tool().registers.lock().expect("registers").set_named(name, a[1].clone());
+                return Ok(Value::Bool(true));
+            }
+            // `System.setProperty(key.substring(2), val.toString())`, so a string value
+            // keeps the quotes its `toString` prints.
+            _ if key.starts_with("-D") => {
+                let text = a[1].to_tlc_string(ev)?;
+                ev.tool().set_property(&key["-D".len()..], text);
+                return Ok(Value::Bool(true));
+            }
+            _ => {}
+        }
+    }
+    let shown = a[0].ppr(ev)?;
+    Err(eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["first", "TLCSet", "nonnegative integer", &shown]))
+}

@@ -74,13 +74,54 @@ pub(crate) struct WorkerStats {
     pub(crate) out_degree: Mutex<[u64; 32]>,
 }
 
+/// The checker as `TLCGet`/`TLCSet` see it (`AbstractChecker`'s getters plus `stop`). It
+/// shares the checker's counter sources instead of borrowing the checker, so the tool can
+/// hold it for the whole run.
+struct Published {
+    fpset: std::sync::Arc<dyn FpSet>,
+    queue: std::sync::Arc<StateQueue>,
+    traces: std::sync::Arc<TraceStores>,
+    stats: std::sync::Arc<[WorkerStats]>,
+    initial_states: std::sync::Arc<AtomicU64>,
+    start_millis: i64,
+    clock: crate::Clock,
+}
+
+impl tlars_tool::MainChecker for Published {
+    fn distinct(&self) -> u64 {
+        self.fpset.size()
+    }
+    fn generated(&self) -> u64 {
+        self.initial_states.load(Relaxed) + self.stats.iter().map(|s| s.generated.load(Relaxed)).sum::<u64>()
+    }
+    fn initial(&self) -> u64 {
+        self.initial_states.load(Relaxed)
+    }
+    fn queue(&self) -> u64 {
+        self.queue.len()
+    }
+    fn diameter(&self) -> u32 {
+        self.traces.level()
+    }
+    /// `TLCGetSet.startTime` is the class's load time and `AbstractChecker.startTime` the
+    /// checker's; tlars has one clock origin, `TLC.startTime`, which lies between them.
+    fn duration_secs(&self) -> i64 {
+        (self.clock.now_millis() - self.start_millis) / 1000
+    }
+    fn stop(&self) {
+        self.queue.finish_all();
+    }
+}
+
 pub(crate) struct ModelChecker<'a> {
     tool: &'a Tool,
     out: &'a dyn Report,
-    fpset: Box<dyn FpSet>,
-    queue: StateQueue,
-    traces: TraceStores,
-    stats: Box<[WorkerStats]>,
+    // The counter sources `TLCGet` reads live are `Arc`s, so the `MainChecker` the tool
+    // holds can share them without borrowing the checker.
+    fpset: std::sync::Arc<dyn FpSet>,
+    queue: std::sync::Arc<StateQueue>,
+    traces: std::sync::Arc<TraceStores>,
+    stats: std::sync::Arc<[WorkerStats]>,
     err: ErrSlot,
     live: Option<LiveCheck>,
     check_deadlock: bool,
@@ -89,7 +130,7 @@ pub(crate) struct ModelChecker<'a> {
     worker_stack_bytes: usize,
     seed: i64,
     /// `ModelChecker.numberOfInitialStates`.
-    initial_states: AtomicU64,
+    initial_states: std::sync::Arc<AtomicU64>,
     /// `TLC.startTime` and the run's clock, for the throughput in the progress messages.
     start_millis: i64,
     clock: crate::Clock,
@@ -106,12 +147,12 @@ impl<'a> ModelChecker<'a> {
         session: &crate::session::Session<'_>,
     ) -> ModelChecker<'a> {
         let workers = tool.globals().workers.max(1);
-        ModelChecker {
+        let mc = ModelChecker {
             tool,
             out,
-            fpset,
-            queue: StateQueue::new(workers),
-            traces: TraceStores::new(workers),
+            fpset: fpset.into(),
+            queue: StateQueue::new(workers).into(),
+            traces: TraceStores::new(workers).into(),
             stats: (0..workers)
                 .map(|_| WorkerStats { generated: AtomicU64::new(0), max_level: AtomicU32::new(0), out_degree: Mutex::new([0; 32]) })
                 .collect(),
@@ -122,12 +163,24 @@ impl<'a> ModelChecker<'a> {
             workers,
             worker_stack_bytes: session.env.worker_stack_bytes,
             seed: session.seed,
-            initial_states: AtomicU64::new(0),
+            initial_states: std::sync::Arc::new(AtomicU64::new(0)),
             start_millis: session.start_millis,
-            clock: session.env.clock.clone(),
+            clock: session.env.clock,
             old_generated: AtomicU64::new(0),
             old_distinct: AtomicU64::new(0),
-        }
+        };
+        // `TLCGlobals.mainChecker = this`, which is what makes `TLCGet("generated")` and
+        // friends answer instead of raising `TLC_MODULE_TLCGET_UNDEFINED`.
+        tool.attach_main_checker(std::sync::Arc::new(Published {
+            fpset: mc.fpset.clone(),
+            queue: mc.queue.clone(),
+            traces: mc.traces.clone(),
+            stats: mc.stats.clone(),
+            initial_states: mc.initial_states.clone(),
+            start_millis: mc.start_millis,
+            clock: mc.clock,
+        }));
+        mc
     }
 
     /// `AbstractChecker.modelCheck` (`AbstractChecker.java:618-621`): the recorded error code

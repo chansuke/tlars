@@ -60,7 +60,7 @@ impl<'t> Ev<'t> {
     }
 
     fn next_states_of_action(&mut self, s0: &State, action: &Action, sink: &mut dyn NextSink) -> Flow {
-        let mut s1 = PartialState::empty(s0.len());
+        let mut s1 = PartialState::successor_of(s0.len(), s0);
         self.next_impl(action, action.pred, Acts::Empty, &action.ctx, s0, &mut s1, sink)
     }
 
@@ -288,7 +288,7 @@ impl<'t> Ev<'t> {
             }
             Builtin::Unchanged => self.process_unchanged(a, arg(0), acts, c, s0, s1, sink),
             Builtin::Nop => self.next_impl(a, arg(0), acts, c, s0, s1, sink),
-            Builtin::Cdot => Err(EvalError::unimplemented("action composition (A \\cdot B)".into()).into()),
+            Builtin::Cdot => Err(super::enabled::cdot_unsupported(self, pred).into()),
             // Every other built-in operator is a boolean filter.
             _ => {
                 let v = self.eval(pred, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;

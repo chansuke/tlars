@@ -736,7 +736,7 @@ impl<'t> Ev<'t> {
                 Ok(Value::Bool(enabled))
             }
             Builtin::Nop => self.eval(arg(0), c, s0, s1, control),
-            Builtin::Cdot => Err(EvalError::unimplemented("action composition (A \\cdot B)".into())),
+            Builtin::Cdot => Err(super::enabled::cdot_unsupported(self, expr)),
             Builtin::Box | Builtin::TemporalExists | Builtin::TemporalForall => {
                 Err(EvalError::unimplemented("a temporal operator outside PROPERTY (M4)".into()))
             }
@@ -1156,6 +1156,11 @@ impl<'t> Ev<'t> {
                     Resolved::Binding(Binding::Thunk(t)) => {
                         let (e, tc) = (t.expr, t.ctx.clone());
                         level = level.max(self.level_bound(e, &tc));
+                    }
+                    // A Java override contributes its declared `minLevel`, which is how
+                    // `TLCGet` stays out of constant folding (`:270-276`).
+                    Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
+                        level = level.max(crate::modules::min_level(id));
                     }
                     _ => {}
                 }

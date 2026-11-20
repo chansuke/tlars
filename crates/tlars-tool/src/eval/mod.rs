@@ -63,20 +63,15 @@ impl EvalControl {
 /// Per-worker mutable evaluator state: what TLC keeps in `IdThread` locals and statics.
 pub struct WorkerLocals {
     pub(crate) worker_id: u16,
-    /// RNG, registers, current parent: the one effect channel (`effects.rs`).
+    /// RNG and the current parent: the one effect channel (`effects.rs`).
     pub(crate) effects: Effects,
-    /// `TLCGet("level")` of the state being expanded.
-    pub(crate) level: u32,
     /// `Some` while re-running a failure under `CallStackTool` semantics.
     pub(crate) call_stack: Option<CallStack>,
 }
 
 impl WorkerLocals {
     pub fn new(worker_id: u16, seed: i64) -> Self {
-        Self { worker_id, effects: Effects::new(seed), level: 0, call_stack: None }
-    }
-    pub fn set_level(&mut self, level: u32) {
-        self.level = level;
+        Self { worker_id, effects: Effects::new(seed), call_stack: None }
     }
     /// Start recording the nested-expression stack (TLC re-runs the failing step with a
     /// `CallStackTool` to print `TLC_NESTED_EXPRESSION`).
@@ -202,6 +197,10 @@ impl<'t> Ev<'t> {
     }
     pub fn out(&self) -> &'t dyn Report {
         self.out
+    }
+    /// `IdThread.GetId()`, which is 0 on the main thread (`getStatistics`'s `worker` field).
+    pub(crate) fn worker_id(&self) -> u16 {
+        self.locals.worker_id
     }
 
     // ---- checks the engine runs around each successor (ITool) ----

@@ -272,6 +272,8 @@ mod tests {
             seed: 4,
             aril: 0,
             no_timestamps: true,
+            properties: Vec::new(),
+            install_location: String::new(),
         }
     }
 

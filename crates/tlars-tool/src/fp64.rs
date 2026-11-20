@@ -70,6 +70,11 @@ impl Fp64 {
         Fp64 { irred_poly, byte_mod_table }
     }
 
+    /// `FP64.getIrredPoly()`, which `TLCGet("config").fingerprint` prints as a Java long.
+    pub(crate) fn irred_poly(&self) -> i64 {
+        self.irred_poly as i64
+    }
+
     /// `FP64.New()`.
     pub(crate) fn new_fp(&self) -> Fp {
         Fp(self.irred_poly)

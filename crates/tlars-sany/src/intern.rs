@@ -107,10 +107,20 @@ impl Interner {
         tlars_java::string_hash_code(&self.text(a))
     }
 
-    /// Run `class`'s static initialiser once: intern its static strings in source order.
+    /// Run `class`'s static initialiser once: intern its static strings in source order. A
+    /// string an earlier event already interned keeps the token it got then, exactly as
+    /// `uniqueStringOf` hands back the existing `UniqueString`.
     pub fn ensure(&self, class: JavaClass) {
-        let _strings: &[&str] = crate::fidelity::class_statics(class);
-        todo!()
+        {
+            let mut done = self.initialised.lock().expect("class initialisers");
+            if done[class as usize] {
+                return;
+            }
+            done[class as usize] = true;
+        }
+        for s in crate::fidelity::class_statics(class) {
+            self.intern(s);
+        }
     }
 
     /// Number of tokens handed out; runtime strings created during search come after this.
@@ -120,5 +130,26 @@ impl Interner {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A class initialiser runs once, leaves the token a string already had, and hands out the
+    /// rest in source order: that order is what sorts the fields of a `TLCGet("stats")` record.
+    #[test]
+    fn class_initialiser_runs_once_and_keeps_earlier_tokens() {
+        let interner = Interner::new();
+        let stats = interner.intern("stats");
+        interner.ensure(JavaClass::TlcRuntime);
+        let after = interner.len();
+        interner.ensure(JavaClass::TlcRuntime);
+        assert_eq!(interner.len(), after, "a second ensure interns nothing");
+        assert_eq!(interner.intern("stats"), stats, "a string interned before keeps its token");
+        let order = ["worker", "duration", "generated", "diameter", "distinct", "initial", "queue"];
+        let tokens: Vec<i32> = order.iter().map(|s| interner.intern(s).tok()).collect();
+        assert!(tokens.windows(2).all(|w| w[0] < w[1]), "TLCGetSet declaration order, got {tokens:?}");
     }
 }

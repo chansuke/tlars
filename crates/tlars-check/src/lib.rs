@@ -65,6 +65,9 @@ pub struct Env {
     /// Worker thread stack (TLC conformance recordings ran with `-Xss2m`).
     pub worker_stack_bytes: usize,
     pub host: HostInfo,
+    /// `TLCGlobals.Version.installLocation()`, the jar TLC runs from: where this tool lives.
+    /// `TLCGet("config").install` is its only reader.
+    pub install_location: String,
 }
 
 #[derive(Clone, Copy)]
@@ -96,6 +99,7 @@ impl Env {
             entropy: Entropy::Os,
             worker_stack_bytes: 64 << 20,
             host: HostInfo::current(),
+            install_location: std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default(),
         }
     }
 
@@ -107,6 +111,7 @@ impl Env {
             entropy: Entropy::Fixed(0),
             worker_stack_bytes: 64 << 20,
             host: HostInfo { os_name: "Linux".into(), os_version: "0".into(), os_arch: "amd64".into(), cores: 1 },
+            install_location: String::new(),
         }
     }
 

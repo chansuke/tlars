@@ -148,6 +148,9 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         fp64: crate::fp64::Fp64::new(globals.fp_index),
         model_values,
         globals,
+        registers: std::sync::Mutex::new(crate::effects::Registers::default()),
+        set_properties: std::sync::Mutex::new(Vec::new()),
+        main_checker: std::sync::OnceLock::new(),
     };
     let mut defns = defns;
     // `SpecProcessor.snapshot`, taken before `processConstantDefns` and reached through
@@ -258,6 +261,10 @@ impl CfgBind<'_> {
     /// Methods tlars does not implement yet stay unimplemented natives.
     fn module_overrides(&mut self) {
         let graph = self.graph;
+        // `TLCBuiltInOverrides.get()`: the annotated classes are loaded here whatever the
+        // spec extends, so their static `UniqueString`s are interned now, after parsing. The
+        // tokens are what orders the fields of a `TLCGet("stats")`-style record.
+        graph.interner().ensure(tlars_sany::JavaClass::TlcRuntime);
         for (mid, m) in graph.modules() {
             let module = graph.interner().text(m.name);
             if !crate::modules::JAVA_MODULES.contains(&&*module) {
@@ -637,10 +644,14 @@ fn fold_module(tool: &mut Tool, defns: &mut Defns, graph: &SemanticGraph, m: &Mo
         if tool.bindings.body_chain(graph, body).is_some() {
             continue;
         }
-        if graph.level(body) != Level::Constant {
+        let mut locals = WorkerLocals::new(0, tool.globals.seed);
+        // `getLevelBound(body, Context.Empty)`, not SANY's own level (`:355`). The two differ
+        // where SANY's rule drops an argument the body never uses: `PrintT(ENABLED A)` is
+        // constant to SANY, because `PrintT(out) == TRUE` ignores `out`, while `getLevelBound`
+        // walks the arguments and finds the ENABLED.
+        if { tool.ev(&mut locals, out).level_bound(body, &Ctx::EMPTY) } != 0 {
             continue;
         }
-        let mut locals = WorkerLocals::new(0, tool.globals.seed);
         let folded = {
             let mut ev = tool.ev(&mut locals, out);
             ev.eval(body, &Ctx::EMPTY, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR)

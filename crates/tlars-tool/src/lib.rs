@@ -24,7 +24,7 @@ mod tool;
 mod value;
 
 pub use actions::{Action, ActionId};
-pub use effects::RunCounters;
+pub use effects::MainChecker;
 pub use error::{EvalError, EvalErrorKind, EvalResult, Flow, Halt};
 pub use eval::{Aliased, CallStack, EvalControl, Ev, InitSink, NextSink, StateInfo, WorkerLocals};
 pub use fp64::{Fp, FpKey};
