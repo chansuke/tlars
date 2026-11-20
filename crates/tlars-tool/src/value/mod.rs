@@ -16,7 +16,7 @@
 //!   only the normalised form is read".
 //! - No hash-consing: it would merge representations whose printed forms differ.
 
-mod enumerate;
+pub(crate) mod enumerate;
 mod fingerprint;
 mod order;
 mod print;
@@ -223,7 +223,90 @@ pub enum UserValue {
 
 impl Value {
     pub(crate) fn kind(&self) -> ValueKind {
-        todo!()
+        match self {
+            Value::Bool(_) => ValueKind::Bool,
+            Value::Int(_) => ValueKind::Int,
+            Value::Str(_) => ValueKind::String,
+            Value::Model(_) => ValueKind::Model,
+            Value::Tuple(_) => ValueKind::Tuple,
+            Value::Record(_) => ValueKind::Record,
+            Value::FcnRcd(_) => ValueKind::FcnRcd,
+            Value::SetEnum(_) => ValueKind::SetEnum,
+            Value::Interval(_) => ValueKind::Interval,
+            Value::Subset(_) | Value::KSubset(_) => ValueKind::Subset,
+            Value::SetOfFcns(_) => ValueKind::SetOfFcns,
+            Value::SetOfRcds(_) => ValueKind::SetOfRcds,
+            Value::SetOfTuples(_) => ValueKind::SetOfTuples,
+            Value::Union(_) => ValueKind::Union,
+            Value::SetCup(_) => ValueKind::SetCup,
+            Value::SetCap(_) => ValueKind::SetCap,
+            Value::SetDiff(_) => ValueKind::SetDiff,
+            Value::SetPred(_) => ValueKind::SetPred,
+            Value::FcnLambda(_) => ValueKind::FcnLambda,
+            Value::User(_) => ValueKind::User,
+            Value::Undef => ValueKind::Undef,
+        }
+    }
+
+    /// `Value.getKindString()` (`Value.java:34-62`).
+    pub(crate) fn kind_string(&self) -> &'static str {
+        match self.kind() {
+            ValueKind::Bool => "a Boolean value",
+            ValueKind::Int => "an integer",
+            ValueKind::Real => "a real",
+            ValueKind::String => "a string",
+            ValueKind::Record => "a record",
+            ValueKind::SetEnum => "a set of the form {e1, ... ,eN}",
+            ValueKind::SetPred => "a set of the form {x \\in S : expr}",
+            ValueKind::Tuple => "a tuple",
+            ValueKind::FcnLambda => "a function of the form  [x \\in S |-> expr]",
+            ValueKind::FcnRcd => "a function  of the form (d1 :> e1 @@ ... @@ dN :> eN)",
+            ValueKind::OpLambda => "an operator",
+            ValueKind::OpRcd => "a constant operator",
+            ValueKind::Method => "a java method",
+            ValueKind::SetOfFcns => "a set of the form [S -> T]",
+            ValueKind::SetOfRcds => "a set of the form [d1 : S1, ... , dN : SN]",
+            ValueKind::SetOfTuples => "a cartesian product",
+            ValueKind::Subset => "a set of the form SUBSET S",
+            ValueKind::SetDiff => "a set of the form S \\ T",
+            ValueKind::SetCap => "a set of the form S \\cap T",
+            ValueKind::SetCup => "a set of the form S \\cup T",
+            ValueKind::Union => "a set of the form UNION  S",
+            ValueKind::Model => "a model value",
+            ValueKind::User => "a special set constant",
+            ValueKind::Interval => "a set of the form i..j",
+            ValueKind::Undef => "an undefined value",
+            ValueKind::Lazy => "a value represented in lazy form",
+            ValueKind::Dummy => "a dummy for not-a-value",
+        }
+    }
+
+    /// The simple name of the `tlc2.value.impl` class, as cast errors print it.
+    pub(crate) fn java_class(&self) -> &'static str {
+        match self {
+            Value::Bool(_) => "BoolValue",
+            Value::Int(_) => "IntValue",
+            Value::Str(_) => "StringValue",
+            Value::Model(_) => "ModelValue",
+            Value::Tuple(_) => "TupleValue",
+            Value::Record(_) => "RecordValue",
+            Value::FcnRcd(_) => "FcnRcdValue",
+            Value::SetEnum(_) => "SetEnumValue",
+            Value::Interval(_) => "IntervalValue",
+            Value::Subset(_) => "SubsetValue",
+            Value::KSubset(_) => "KSubsetValue",
+            Value::SetOfFcns(_) => "SetOfFcnsValue",
+            Value::SetOfRcds(_) => "SetOfRcdsValue",
+            Value::SetOfTuples(_) => "SetOfTuplesValue",
+            Value::Union(_) => "UnionValue",
+            Value::SetCup(_) => "SetCupValue",
+            Value::SetCap(_) => "SetCapValue",
+            Value::SetDiff(_) => "SetDiffValue",
+            Value::SetPred(_) => "SetPredValue",
+            Value::FcnLambda(_) => "FcnLambdaValue",
+            Value::User(_) => "UserValue",
+            Value::Undef => "UndefValue",
+        }
     }
 
     pub(crate) fn tuple(elems: Vec<Value>) -> Value {

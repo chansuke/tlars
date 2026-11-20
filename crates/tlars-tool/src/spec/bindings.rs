@@ -14,6 +14,8 @@ pub(crate) enum OpBinding {
     Replaced(OpDefId),
     /// cfg `Op(args) = v` (`OpRcdValue`).
     Table(Box<[(Box<[Value]>, Value)]>),
+    /// A definition TLC overrides with a Java class tlars does not implement yet.
+    Unimplemented,
 }
 
 pub(crate) enum DeclBinding {
@@ -26,6 +28,9 @@ pub(crate) enum DeclBinding {
 
 pub(crate) struct Bindings {
     pub(crate) op_defs: Box<[Option<OpBinding>]>,
+    /// Tool objects on definition bodies, by `ExprId`: the Java overrides
+    /// (`opDef.getBody().setToolObject`, `SpecProcessor.java:1067`).
+    pub(crate) bodies: Box<[Option<OpBinding>]>,
     pub(crate) decls: Box<[Option<DeclBinding>]>,
     /// `processConstants`: Numeral / String literal values by `ExprId`.
     pub(crate) literals: Box<[Option<Value>]>,
@@ -34,6 +39,23 @@ pub(crate) struct Bindings {
 impl Bindings {
     pub(crate) fn op_def(&self, id: OpDefId) -> Option<&OpBinding> {
         self.op_defs[id.index()].as_ref()
+    }
+    pub(crate) fn body(&self, id: ExprId) -> Option<&OpBinding> {
+        self.bodies[id.index()].as_ref()
+    }
+    /// The tool object `lookup` finds on a definition's body, following INSTANCE
+    /// substitutions down to the instantiated body (`SymbolNodeValueLookupProvider.java:99-111`).
+    pub(crate) fn body_chain(&self, graph: &tlars_sany::graph::SemanticGraph, body: ExprId) -> Option<&OpBinding> {
+        let mut e = body;
+        loop {
+            if let Some(b) = self.body(e) {
+                return Some(b);
+            }
+            match graph.expr(e) {
+                tlars_sany::graph::ExprNode::SubstIn { body, .. } => e = *body,
+                _ => return None,
+            }
+        }
     }
     pub(crate) fn literal(&self, id: ExprId) -> Option<&Value> {
         self.literals[id.index()].as_ref()

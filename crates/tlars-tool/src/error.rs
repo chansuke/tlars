@@ -38,6 +38,22 @@ pub struct EvalError {
 pub type EvalResult<T> = Result<T, EvalError>;
 
 impl EvalError {
+    /// `new EvalException(ec, params)`; `message` is `MP.getMessage(ec, params)`.
+    pub(crate) fn eval(ec: Ec, message: String) -> EvalError {
+        EvalError { ec, message, loc: None, kind: EvalErrorKind::Eval }
+    }
+
+    /// `Assert.fail(ec, params)`; `message` is `MP.getMessage(ec, params)`.
+    pub(crate) fn runtime(ec: Ec, message: String) -> EvalError {
+        EvalError { ec, message, loc: None, kind: EvalErrorKind::Runtime }
+    }
+
+    /// `Assert.fail(reason, expr, ctxt)`: a `TLCDetailedRuntimeException` with
+    /// `EC.GENERAL` and the reason as its message.
+    pub(crate) fn detailed(reason: String, loc: Option<Loc>) -> EvalError {
+        EvalError { ec: Ec::GENERAL, message: reason, loc, kind: EvalErrorKind::Runtime }
+    }
+
     pub(crate) fn unimplemented(what: String) -> EvalError {
         EvalError { ec: Ec::GENERAL, message: format!("tlars does not implement {what} yet"), loc: None, kind: EvalErrorKind::Unimplemented }
     }

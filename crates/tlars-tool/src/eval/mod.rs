@@ -44,7 +44,10 @@ impl EvalControl {
     }
     /// `EvalControl.semanticallyEquivalent` (LazyValue cache guard).
     pub(crate) fn semantically_equivalent(self, other: Self) -> bool {
-        todo!()
+        // `KeepLazy`, `Init` and `Const` do not change what an expression means
+        // (`EvalControl.java:108-130`).
+        let ignored = Self::KEEP_LAZY.0 | Self::INIT.0 | Self::CONST.0;
+        self.0 & !ignored == other.0 & !ignored
     }
 }
 
@@ -111,8 +114,11 @@ pub trait NextSink {
 }
 
 /// Maximum evaluation depth before raising TLC's StackOverflowError message instead of
-/// overflowing the native stack. Workers run on large-stack threads.
-pub(crate) const MAX_EVAL_DEPTH: u32 = 1 << 16;
+/// overflowing the native stack. Evaluation runs on threads of `Env::worker_stack_bytes`
+/// (64 MiB): 2^15 levels of operator recursion measured to fit, 2^16 not; 2^14 leaves room
+/// for expressions with larger frames. TLC's own limit follows the JVM's `-Xss`, so the depth
+/// at which the two overflow differs.
+pub(crate) const MAX_EVAL_DEPTH: u32 = 1 << 14;
 
 pub struct Ev<'t> {
     tool: &'t Tool,
@@ -208,6 +214,11 @@ impl<'t> Ev<'t> {
             match self.is_valid(a.expr) {
                 Ok(true) => {}
                 Ok(false) => return self.out.error(Ec::TLC_ASSUMPTION_FALSE, &[&loc]),
+                // Not an `Exception`: `TLC.process` reports it (`TLC.java:1414-1418`), and
+                // nothing runs in between.
+                Err(e) if matches!(e.kind, crate::error::EvalErrorKind::StackOverflow) => {
+                    return self.out.error(Ec::SYSTEM_STACK_OVERFLOW, &[&e.message]);
+                }
                 Err(e) => return self.out.error(Ec::TLC_ASSUMPTION_EVALUATION_ERROR, &[&loc, &e.message]),
             }
         }
@@ -242,7 +253,9 @@ impl<'t> Ev<'t> {
     pub(crate) fn leave(&mut self) {
         self.depth -= 1;
     }
+    /// What the JVM's `StackOverflowError` becomes. It is an `Error`, so the `catch
+    /// (Exception)` blocks TLC evaluates under (assumptions, invariants) let it through.
     fn stack_overflow(&self) -> EvalError {
-        todo!("EvalErrorKind::StackOverflow with ModelChecker.java:187's text")
+        EvalError { ec: Ec::SYSTEM_STACK_OVERFLOW, message: String::new(), loc: None, kind: crate::error::EvalErrorKind::StackOverflow }
     }
 }

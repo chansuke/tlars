@@ -34,6 +34,8 @@ pub(crate) enum Binding {
     Thunk(Arc<Thunk>),
     /// Operator argument bound to a user definition (`OpArgNode`).
     OpDef(OpDefId),
+    /// Operator argument bound to a Java override (`MethodValue`).
+    Native(crate::modules::NativeId),
     Lambda(Arc<OpLambda>),
     /// The `@` of an EXCEPT component.
     ExceptAt(Value),
@@ -50,7 +52,16 @@ impl Ctx {
     }
     /// `Context.lookup(var)`: first cell whose name is `name`.
     pub(crate) fn lookup(&self, name: SymbolRef) -> Option<&Binding> {
-        todo!()
+        let mut cur = self.0.as_deref();
+        while let Some(cell) = cur {
+            if let CellName::Sym(s) = cell.name {
+                if s == name {
+                    return Some(&cell.binding);
+                }
+            }
+            cur = cell.next.0.as_deref();
+        }
+        None
     }
     /// `Context.lookup(var, cutoff)`.
     pub(crate) fn lookup_cutoff(&self, name: SymbolRef, cutoff: bool) -> Option<&Binding> {
@@ -81,13 +92,25 @@ impl Thunk {
         Arc::new(Thunk { expr, ctx, cachable, cache: Mutex::new(None) })
     }
     /// `getCachedValue`: hit only if s0 ⊆ cached s0, s1 ⊆ cached s1 and controls are
-    /// semantically equivalent (`EvalControl.semanticallyEquivalent`).
+    /// semantically equivalent (`EvalControl.semanticallyEquivalent`). Only evaluations
+    /// without states are cached so far: the state snapshots come with M3.
     pub(crate) fn cached(&self, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> Option<Value> {
-        todo!()
+        if !matches!((s0, s1), (StateRef::Empty, StateRef::Empty)) {
+            return None;
+        }
+        let cache = self.cache.lock().expect("thunk cache").clone()?;
+        (cache.s0.is_none() && cache.s1.is_none() && control.semantically_equivalent(cache.control)).then(|| cache.value.clone())
     }
     /// `getValue`: cached, or evaluate in the captured context and publish.
     pub(crate) fn force(&self, ev: &mut Ev<'_>, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Value> {
-        todo!()
+        if let Some(v) = self.cached(s0, s1, control) {
+            return Ok(v);
+        }
+        let value = ev.eval(self.expr, &self.ctx, s0, s1, control)?;
+        if self.cachable && matches!((s0, s1), (StateRef::Empty, StateRef::Empty)) {
+            *self.cache.lock().expect("thunk cache") = Some(Arc::new(ThunkCache { value: value.clone(), s0: None, s1: None, control }));
+        }
+        Ok(value)
     }
 }
 

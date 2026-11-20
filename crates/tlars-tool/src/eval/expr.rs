@@ -5,12 +5,14 @@
 //! Operator arguments and LET definitions become `Binding::Thunk` (call-by-name).
 
 use super::{EvalControl, Ev};
-use crate::ctx::{Binding, Ctx};
+use crate::ctx::{Binding, Ctx, Thunk};
 use crate::error::{EvalError, EvalResult};
+use crate::spec::OpBinding;
 use crate::state::StateRef;
 use crate::value::Value;
-use crate::spec::OpBinding;
-use tlars_sany::graph::{BuiltinOp, ExprId, ExprNode, OpDefKind, SymbolRef};
+use crate::value::enumerate::{EnumOrder, ValueEnumeration};
+use tlars_msg::Ec;
+use tlars_sany::graph::{BoundSymbols, BuiltinOp, ExprId, ExprNode, ExprOrOpArg, OpDefId, OpDefKind, ParamId, SymbolRef};
 
 /// What a name resolved to (`SymbolNodeValueLookupProvider.lookup`).
 pub(crate) enum Resolved {
@@ -30,54 +32,469 @@ impl<'t> Ev<'t> {
         r
     }
 
+    /// `Tool.evalImpl` (`Tool.java:1795-1850`).
     fn eval_impl(&mut self, expr: ExprId, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Value> {
-        let graph = &self.tool().graph;
+        let graph = self.tool().graph.clone();
         match graph.expr(expr) {
-            ExprNode::OpAppl { op, args, bound, .. } => {
-                if let SymbolRef::OpDef(id) = *op {
-                    if args.is_empty() && bound.is_none() {
-                        match self.tool().bindings.op_def(id) {
-                            Some(OpBinding::Folded(v)) => return Ok(v.clone()),
-                            None => {
-                                let def = graph.op_def(id);
-                                if def.kind == OpDefKind::User && def.params.is_empty() {
-                                    let body = def.body.expect("a user definition has a body");
-                                    return self.eval(body, c, s0, s1, control);
-                                }
-                            }
-                            Some(_) => {}
-                        }
+            ExprNode::OpAppl { op, args, bound, .. } => self.eval_appl(expr, *op, args, bound.as_deref(), c, s0, s1, control),
+            ExprNode::Label { body, .. } => self.eval(*body, c, s0, s1, control),
+            ExprNode::LetIn { defs, body, .. } => {
+                // `evalImplLetInKind`: 0-arity definitions become lazy values over the context
+                // so far; the others are found through `lookup`.
+                let mut c1 = c.clone();
+                for &d in defs.iter() {
+                    let def = graph.op_def(d);
+                    if def.params.is_empty() {
+                        let body = def.body.expect("a LET definition has a body");
+                        c1 = c1.cons(SymbolRef::OpDef(d), Binding::Thunk(Thunk::new(body, c1.clone(), true)));
                     }
                 }
-                Err(EvalError::unimplemented(format!("evalAppl of {} (M2 unit 4)", graph.loc(expr).tlc_text(graph.interner()))))
+                self.eval(*body, &c1, s0, s1, control)
             }
-            ExprNode::Label { body, .. } => self.eval(*body, c, s0, s1, control),
+            ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
+                let mut c1 = c.clone();
+                for sub in substs.iter() {
+                    let val = self.get_val(sub.expr, c, true);
+                    c1 = c1.cons(SymbolRef::Decl(sub.decl), val);
+                }
+                self.eval(*body, &c1, s0, s1, control)
+            }
             ExprNode::Numeral { .. } | ExprNode::String { .. } => {
                 Ok(self.tool().bindings.literal(expr).expect("processConstants bound every literal").clone())
             }
-            ExprNode::LetIn { .. } | ExprNode::SubstIn { .. } | ExprNode::APSubstIn { .. } | ExprNode::At { .. } => {
-                Err(EvalError::unimplemented(format!("eval of {} (M2 unit 4)", graph.loc(expr).tlc_text(graph.interner()))))
-            }
+            ExprNode::At { .. } => Err(EvalError::unimplemented("EXCEPT's @ (M2 unit 4)".into())),
             ExprNode::Decimal { .. } => unreachable!("processConstants rejects decimals"),
         }
     }
 
+    /// `getVal`: an expression argument is passed by name, an operator argument as what it
+    /// names.
+    fn get_val(&mut self, arg: ExprOrOpArg, c: &Ctx, cachable: bool) -> Binding {
+        match arg {
+            ExprOrOpArg::Expr(e) => Binding::Thunk(Thunk::new(e, c.clone(), cachable)),
+            ExprOrOpArg::OpArg(sym) => match self.lookup(sym, c, StateRef::Empty, false) {
+                Resolved::Binding(b) => b,
+                Resolved::Value(v) => Binding::Value(v),
+                Resolved::UserOp(d) => Binding::OpDef(d),
+                Resolved::Native(id) => Binding::Native(id),
+                Resolved::Var(_) => Binding::Value(Value::Undef),
+            },
+            ExprOrOpArg::Absent => unreachable!("only CASE's OTHER guard is absent"),
+        }
+    }
+
+    /// `SymbolNodeValueLookupProvider.lookup` (`:87-121`) and `Spec.lookup` (`:450-466`): the
+    /// context, then the symbol's tool object, then a definition body's (through INSTANCE
+    /// substitutions).
     pub(crate) fn lookup(&mut self, sym: SymbolRef, c: &Ctx, s0: StateRef<'_>, cutoff: bool) -> Resolved {
-        todo!()
+        if let Some(b) = c.lookup(sym) {
+            return Resolved::Binding(b.clone());
+        }
+        let tool = self.tool();
+        match sym {
+            SymbolRef::OpDef(d) => {
+                if let Some(b) = tool.bindings.op_def(d) {
+                    return resolved(b, d);
+                }
+                if tool.graph.op_def(d).kind == OpDefKind::User {
+                    if let Some(b) = tool.graph.op_def(d).body.and_then(|e| tool.bindings.body_chain(&tool.graph, e)) {
+                        return resolved(b, d);
+                    }
+                }
+                Resolved::UserOp(d)
+            }
+            SymbolRef::Decl(d) => match tool.bindings.decls[d.index()].as_ref() {
+                Some(crate::spec::DeclBinding::Value(v)) => Resolved::Value(v.clone()),
+                Some(crate::spec::DeclBinding::Op(op)) => Resolved::UserOp(*op),
+                Some(crate::spec::DeclBinding::Var(slot)) => Resolved::Var(*slot),
+                None => Resolved::Value(Value::Undef),
+            },
+            SymbolRef::Param(_) => unreachable!("SANY binds every parameter in the context"),
+            SymbolRef::Thm(_) | SymbolRef::Module(_) => Resolved::Value(Value::Undef),
+        }
+    }
+
+    /// `getOpContext`: bind params to call-by-name thunks over `c`.
+    pub(crate) fn op_context(&mut self, def: OpDefId, args: &[ExprOrOpArg], c: &Ctx, cachable: bool) -> Ctx {
+        let params = self.tool().graph.op_def(def).params.clone();
+        let mut c1 = c.clone();
+        for (&p, &arg) in params.iter().zip(args) {
+            let val = self.get_val(arg, c, cachable);
+            c1 = c1.cons(SymbolRef::Param(p), val);
+        }
+        c1
+    }
+
+    /// `Tool.evalApplImpl` (`Tool.java:1903-2870`) for the operators implemented so far.
+    #[allow(clippy::too_many_arguments)]
+    fn eval_appl(
+        &mut self,
+        expr: ExprId,
+        op: SymbolRef,
+        args: &[ExprOrOpArg],
+        bound: Option<&BoundSymbols>,
+        c: &Ctx,
+        s0: StateRef<'_>,
+        s1: StateRef<'_>,
+        control: EvalControl,
+    ) -> EvalResult<Value> {
+        let graph = self.tool().graph.clone();
+        let mut builtin = self.builtin(op);
+        if builtin.is_none() {
+            match self.lookup(op, c, s0, control.has(EvalControl::PRIMED)) {
+                Resolved::Binding(Binding::Thunk(t)) => return t.force(self, s0, s1, control),
+                Resolved::Binding(Binding::Value(v)) | Resolved::Value(v) if !matches!(v, Value::Undef) => return Ok(v),
+                Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
+                    let def = graph.op_def(d);
+                    if def.kind == OpDefKind::BuiltIn {
+                        builtin = self.builtin(SymbolRef::OpDef(d));
+                    } else {
+                        let body = def.body.expect("a user definition has a body");
+                        let c1 = self.op_context(d, args, c, true);
+                        return self.eval(body, &c1, s0, s1, control);
+                    }
+                }
+                Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
+                    // `MethodValue.eval(tool, args, ...)`: the arguments are evaluated first.
+                    let mut vals = Vec::with_capacity(args.len());
+                    for &a in args {
+                        vals.push(self.eval(a.expect_expr(), c, s0, s1, control)?);
+                    }
+                    return crate::modules::apply(self, id, &vals);
+                }
+                Resolved::Binding(Binding::Lambda(_) | Binding::ExceptAt(_)) => {
+                    return Err(EvalError::unimplemented("operator arguments and EXCEPT (M2 unit 4)".into()));
+                }
+                Resolved::Binding(Binding::Value(_)) | Resolved::Value(_) | Resolved::Var(_) => {
+                    if matches!(op, SymbolRef::OpDef(d) if matches!(self.tool().bindings.op_def(d).or_else(|| self.body_binding(d)), Some(OpBinding::Unimplemented))) {
+                        let name = self.symbol_name(op);
+                        return Err(EvalError::unimplemented(format!("the Java implementation of {name}")));
+                    }
+                    // `Assert.fail(TLC_CONFIG_UNDEFINED_OR_NO_OPERATOR, ...)` (`Tool.java:2103`).
+                    let name = self.symbol_name(op);
+                    let text = graph.expr_tlc_text(expr);
+                    let message = self.out().text(Ec::TLC_CONFIG_UNDEFINED_OR_NO_OPERATOR, &[&name, &text]);
+                    return Err(EvalError::runtime(Ec::TLC_CONFIG_UNDEFINED_OR_NO_OPERATOR, message));
+                }
+            }
+        }
+        let Some(builtin) = builtin else { unreachable!("resolved above") };
+        let text = |ev: &Ev<'_>, e: ExprId| ev.tool().graph.expr_tlc_text(e);
+        let arg = |i: usize| args[i].expect_expr();
+        let not_boolean = |ev: &mut Ev<'_>, reason: String, at: ExprId| -> EvalError {
+            let loc = ev.tool().graph.loc(at);
+            EvalError::detailed(reason, Some(loc))
+        };
+        match builtin {
+            Builtin::ConjList | Builtin::DisjList => {
+                let conj = builtin == Builtin::ConjList;
+                for i in 0..args.len() {
+                    let v = self.eval(arg(i), c, s0, s1, control)?;
+                    let Value::Bool(b) = v else {
+                        let what = if conj { "conjunction" } else { "disjunction" };
+                        let reason = format!("A non-boolean expression ({}) was used as a formula in a {what}.\n{}", v.kind_string(), text(self, arg(i)));
+                        return Err(not_boolean(self, reason, arg(i)));
+                    };
+                    if b != conj {
+                        return Ok(Value::Bool(b));
+                    }
+                }
+                Ok(Value::Bool(conj))
+            }
+            Builtin::Land | Builtin::Lor | Builtin::Implies => {
+                let form = match builtin {
+                    Builtin::Land => "P /\\ Q",
+                    Builtin::Lor => "P \\/ Q",
+                    _ => "P => Q",
+                };
+                let v1 = self.eval(arg(0), c, s0, s1, control)?;
+                let Value::Bool(b1) = v1 else {
+                    let reason = format!("Attempted to evaluate an expression of form {form} when P was\n{}.\n{}", v1.kind_string(), text(self, expr));
+                    return Err(not_boolean(self, reason, expr));
+                };
+                // `/\` and `=>` need Q only when P holds, `\/` only when it does not.
+                let short = match builtin {
+                    Builtin::Land => (!b1).then_some(false),
+                    Builtin::Lor => b1.then_some(true),
+                    _ => (!b1).then_some(true),
+                };
+                if let Some(r) = short {
+                    return Ok(Value::Bool(r));
+                }
+                let v2 = self.eval(arg(1), c, s0, s1, control)?;
+                if !matches!(v2, Value::Bool(_)) {
+                    let reason = format!("Attempted to evaluate an expression of form {form} when Q was\n{}.\n{}", v2.kind_string(), text(self, expr));
+                    return Err(not_boolean(self, reason, expr));
+                }
+                Ok(v2)
+            }
+            Builtin::Equiv => {
+                let v1 = self.eval(arg(0), c, s0, s1, control)?;
+                let v2 = self.eval(arg(1), c, s0, s1, control)?;
+                match (v1, v2) {
+                    (Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(a == b)),
+                    _ => {
+                        let reason = format!("Attempted to evaluate an expression of form P <=> Q when P or Q was not a boolean.\n{}", text(self, expr));
+                        Err(not_boolean(self, reason, expr))
+                    }
+                }
+            }
+            Builtin::Lnot => {
+                let v = self.eval(arg(0), c, s0, s1, control)?;
+                match v {
+                    Value::Bool(b) => Ok(Value::Bool(!b)),
+                    _ => {
+                        let reason = format!("Attempted to apply the operator ~ to a non-boolean\n({})\n{}", v.kind_string(), text(self, expr));
+                        Err(not_boolean(self, reason, arg(0)))
+                    }
+                }
+            }
+            Builtin::Eq | Builtin::Noteq => {
+                let v1 = self.eval(arg(0), c, s0, s1, control)?;
+                let v2 = self.eval(arg(1), c, s0, s1, control)?;
+                let eq = v1.tlc_equals(self, &v2)?;
+                Ok(Value::Bool(eq == (builtin == Builtin::Eq)))
+            }
+            Builtin::In | Builtin::Notin => {
+                let v1 = self.eval(arg(0), c, s0, s1, control)?;
+                let v2 = self.eval(arg(1), c, s0, s1, control)?;
+                let member = v2.member(self, &v1)?;
+                Ok(Value::Bool(member == (builtin == Builtin::In)))
+            }
+            Builtin::IfThenElse => {
+                let v = self.eval(arg(0), c, s0, s1, control)?;
+                match v {
+                    Value::Bool(true) => self.eval(arg(1), c, s0, s1, control),
+                    Value::Bool(false) => self.eval(arg(2), c, s0, s1, control),
+                    _ => {
+                        let reason = format!("A non-boolean expression ({}) was used as the condition of an IF.\n{}", v.kind_string(), text(self, expr));
+                        Err(not_boolean(self, reason, expr))
+                    }
+                }
+            }
+            Builtin::Case => {
+                let mut other = None;
+                for a in args {
+                    let pair = a.expect_expr();
+                    let ExprNode::OpAppl { args: pair_args, .. } = graph.expr(pair) else { unreachable!("CASE arms are $Pair") };
+                    match pair_args[0] {
+                        ExprOrOpArg::Absent => other = Some(pair_args[1].expect_expr()),
+                        guard => {
+                            let guard = guard.expect_expr();
+                            let v = self.eval(guard, c, s0, s1, control)?;
+                            match v {
+                                Value::Bool(true) => return self.eval(pair_args[1].expect_expr(), c, s0, s1, control),
+                                Value::Bool(false) => {}
+                                _ => {
+                                    let reason = format!("A non-boolean expression ({}) was used as a condition of a CASE. {}", v.kind_string(), text(self, guard));
+                                    return Err(not_boolean(self, reason, guard));
+                                }
+                            }
+                        }
+                    }
+                }
+                match other {
+                    Some(e) => self.eval(e, c, s0, s1, control),
+                    None => {
+                        let reason = format!("Attempted to evaluate a CASE with no conditions true.\n{}", text(self, expr));
+                        Err(not_boolean(self, reason, expr))
+                    }
+                }
+            }
+            Builtin::BoundedForall | Builtin::BoundedExists => {
+                let forall = builtin == Builtin::BoundedForall;
+                let bound = bound.expect("a bounded quantifier has bounds");
+                let mut contexts = self.contexts(bound, c, s0, s1, control)?;
+                let body = arg(0);
+                while let Some(c1) = contexts.next(self)? {
+                    let v = self.eval(body, &c1, s0, s1, control)?;
+                    let Value::Bool(b) = v else {
+                        // `Assert.fail(TLC_EXPECTED_VALUE, {"boolean", expr}, body, c1)`.
+                        let message = self.out().text(Ec::TLC_EXPECTED_VALUE, &["boolean", &text(self, expr)]);
+                        return Err(EvalError { loc: Some(graph.loc(body)), ..EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message) });
+                    };
+                    if b != forall {
+                        return Ok(Value::Bool(b));
+                    }
+                }
+                Ok(Value::Bool(forall))
+            }
+            Builtin::Unimplemented(name) => Err(EvalError::unimplemented(format!("the operator {name} (M2 unit 4)"))),
+        }
+    }
+
+    fn body_binding(&self, d: OpDefId) -> Option<&'t OpBinding> {
+        let tool = self.tool();
+        tool.graph.op_def(d).body.and_then(|b| tool.bindings.body_chain(&tool.graph, b))
+    }
+
+    fn symbol_name(&self, sym: SymbolRef) -> String {
+        let graph = &self.tool().graph;
+        let name = match sym {
+            SymbolRef::OpDef(d) => graph.op_def(d).name,
+            SymbolRef::Decl(d) => graph.decl(d).name,
+            SymbolRef::Param(p) => graph.param(p).name,
+            SymbolRef::Thm(t) => graph.thm(t).name,
+            SymbolRef::Module(m) => graph.module(m).name,
+        };
+        graph.interner().text(name).to_string()
+    }
+
+    /// `BuiltInOPs.getOpCode(name)` for a built-in operator; `None` for everything else
+    /// (user definitions, and built-ins such as TRUE that TLC binds as values).
+    fn builtin(&self, op: SymbolRef) -> Option<Builtin> {
+        let SymbolRef::OpDef(d) = op else { return None };
+        let def = self.tool().graph.op_def(d);
+        if def.kind != OpDefKind::BuiltIn {
+            return None;
+        }
+        Builtin::of(&self.tool().graph.interner().text(def.name))
+    }
+
+    /// `Tool.contexts` (`Tool.java:4080-4110`): every domain is evaluated first; then the
+    /// bindings run like an odometer with the first variable fastest.
+    fn contexts(&mut self, bound: &BoundSymbols, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Contexts> {
+        let graph = self.tool().graph.clone();
+        let mut vars = Vec::new();
+        for list in bound.lists.iter() {
+            let set = self.eval(list.domain, c, s0, s1, control)?;
+            if list.tuple {
+                return Err(EvalError::unimplemented("tuple-bound quantifiers (M2 unit 4)".into()));
+            }
+            for &p in list.vars.iter() {
+                match set.elements(self, EnumOrder::Normalized)? {
+                    Some(e) => vars.push((p, e)),
+                    None => {
+                        let reason = set.non_enumerable_message(self, &graph.expr_tlc_text(list.domain))?;
+                        return Err(EvalError::detailed(reason, Some(graph.loc(list.domain))));
+                    }
+                }
+            }
+        }
+        let mut current = Vec::with_capacity(vars.len());
+        let mut done = false;
+        for (_, e) in vars.iter_mut() {
+            match e.next(self)? {
+                Some(v) => current.push(v),
+                None => {
+                    done = true;
+                    break;
+                }
+            }
+        }
+        Ok(Contexts { base: c.clone(), vars, current, done })
     }
 
     /// Builtin opcode of an applied operator, after `lookup` (an INSTANCE or cfg override may
     /// map a user name onto a builtin). TLC: `BuiltInOPs.getOpCode(opDef.getName())`.
     pub(crate) fn opcode(&mut self, op: SymbolRef, c: &Ctx) -> Option<BuiltinOp> {
-        todo!()
-    }
-
-    /// `getOpContext`: bind params to call-by-name thunks over `c`.
-    pub(crate) fn op_context(&mut self, def: tlars_sany::graph::OpDefId, args: &[tlars_sany::graph::ExprOrOpArg], c: &Ctx, cachable: bool) -> Ctx {
-        todo!()
+        todo!("M3: opcodes for next-state splitting")
     }
 
     pub(crate) fn not_boolean_next(&mut self, pred: ExprId, c: &Ctx) -> EvalError {
         todo!("'The next state relation is not a boolean expression.' with location")
+    }
+}
+
+fn resolved(b: &OpBinding, d: OpDefId) -> Resolved {
+    match b {
+        OpBinding::Folded(v) => Resolved::Value(v.clone()),
+        OpBinding::Native(id) => Resolved::Native(*id),
+        OpBinding::Replaced(r) => Resolved::UserOp(*r),
+        OpBinding::Table(_) | OpBinding::Unimplemented => {
+            let _ = d;
+            Resolved::Value(Value::Undef)
+        }
+    }
+}
+
+/// `ContextEnumerator`.
+struct Contexts {
+    base: Ctx,
+    vars: Vec<(ParamId, ValueEnumeration)>,
+    current: Vec<Value>,
+    done: bool,
+}
+
+impl Contexts {
+    fn next(&mut self, ev: &mut Ev<'_>) -> EvalResult<Option<Ctx>> {
+        if self.done {
+            return Ok(None);
+        }
+        let mut c1 = self.base.clone();
+        for ((p, _), v) in self.vars.iter().zip(&self.current) {
+            c1 = c1.cons(SymbolRef::Param(*p), Binding::Value(v.clone()));
+        }
+        for i in 0..self.vars.len() {
+            if let Some(v) = self.vars[i].1.next(ev)? {
+                self.current[i] = v;
+                return Ok(Some(c1));
+            }
+            if i == self.vars.len() - 1 {
+                self.done = true;
+                break;
+            }
+            self.vars[i].1.reset();
+            self.current[i] = self.vars[i].1.next(ev)?.expect("a reset enumeration of a non-empty set has an element");
+        }
+        if self.vars.is_empty() {
+            self.done = true;
+        }
+        Ok(Some(c1))
+    }
+}
+
+/// The opcodes of `BuiltInOPs` this evaluator implements; the others are named.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Builtin {
+    ConjList,
+    DisjList,
+    Land,
+    Lor,
+    Lnot,
+    Implies,
+    Equiv,
+    Eq,
+    Noteq,
+    In,
+    Notin,
+    IfThenElse,
+    Case,
+    BoundedForall,
+    BoundedExists,
+    Unimplemented(&'static str),
+}
+
+/// Every name `BuiltInOPs` registers (`BuiltInOPs.java:17-84`).
+const BUILT_IN_OPS: &[&str] = &[
+    "$AngleAct", "$BoundedChoose", "$BoundedExists", "$BoundedForall", "$Case", "$CartesianProd", "$ConjList",
+    "$DisjList", "$Except", "$FcnApply", "$FcnConstructor", "$IfThenElse", "$NonRecursiveFcnSpec", "$Pair",
+    "$RcdConstructor", "$RcdSelect", "$RecursiveFcnSpec", "$Seq", "$SquareAct", "$SetEnumerate", "$SF", "$SetOfAll",
+    "$SetOfRcds", "$SetOfFcns", "$SubsetOf", "$Tuple", "$TemporalExists", "$TemporalForall", "$UnboundedChoose",
+    "$UnboundedExists", "$UnboundedForall", "$WF", "\\lnot", "SUBSET", "UNION", "DOMAIN", "[]", "<>", "ENABLED",
+    "UNCHANGED", "=", "\\land", "\\lor", "=>", "\\cdot", "\\equiv", "~>", "-+->", "/=", "\\subseteq", "\\in",
+    "\\notin", "\\", "\\intersect", "$Nop", "\\union", "'",
+];
+
+impl Builtin {
+    fn of(name: &str) -> Option<Builtin> {
+        Some(match name {
+            "$ConjList" => Builtin::ConjList,
+            "$DisjList" => Builtin::DisjList,
+            "\\land" => Builtin::Land,
+            "\\lor" => Builtin::Lor,
+            "\\lnot" => Builtin::Lnot,
+            "=>" => Builtin::Implies,
+            "\\equiv" => Builtin::Equiv,
+            "=" => Builtin::Eq,
+            "/=" => Builtin::Noteq,
+            "\\in" => Builtin::In,
+            "\\notin" => Builtin::Notin,
+            "$IfThenElse" => Builtin::IfThenElse,
+            "$Case" => Builtin::Case,
+            "$BoundedForall" => Builtin::BoundedForall,
+            "$BoundedExists" => Builtin::BoundedExists,
+            other => Builtin::Unimplemented(BUILT_IN_OPS.iter().copied().find(|n| *n == other)?),
+        })
     }
 }
