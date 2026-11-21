@@ -418,10 +418,26 @@ fn all_values(ev: &mut Ev<'_>) -> EvalResult<Value> {
 }
 
 /// `AbstractChecker.getAllNamedRegisterValues()` (`:565-578`): the same shape keyed by the
-/// register names. Nothing normalises this function before it prints, so the `HashMap` order
-/// is the printed order.
+/// register names. `PrintT` normalises what it prints, but `ToString` and the error messages
+/// do not, so the `HashMap` order shows through.
+///
+/// It is filled from `((IdThread) workers[0]).getNamedRegisters().keySet()`, a
+/// `ConcurrentHashMap<UniqueString, IValue>`, so the order the keys reach the `HashMap` in is
+/// that map's iteration order and not the order they were first set in.
 fn all_named_values(ev: &mut Ev<'_>) -> EvalResult<Value> {
     let named: Vec<(Atom, Value)> = ev.tool().registers.lock().expect("registers").named().to_vec();
+    let mut registers = tlars_java::JavaConcurrentHashMap::new();
+    for (name, v) in named {
+        // `UniqueString.hashCode()` is `String.hashCode()` of its text (`:207-211`).
+        let hash = tlars_java::string_hash_code(&ev.tool().graph().interner().text(name));
+        registers.put(name, hash, v, |a, b| a == b);
+    }
+    if registers.needs_tree_bin() {
+        return Err(EvalError::unimplemented(
+            "TLCGet(\"all:named\") where the register names fill a ConcurrentHashMap tree bin".into(),
+        ));
+    }
+    let named: Vec<(Atom, Value)> = registers.iter().map(|(&n, v)| (n, v.clone())).collect();
     let mut map = tlars_java::JavaHashMap::new();
     for (name, v) in named {
         let key = Value::Str(name);
