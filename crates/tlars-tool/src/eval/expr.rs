@@ -938,6 +938,10 @@ impl<'t> Ev<'t> {
                 let name = self.symbol_name(op);
                 Err(EvalError::unimplemented(format!("the Java implementation of {name}")))
             }
+            // `OpLambdaValue` is an `OpValue`, so TLC applies it here (`OpLambdaValue.eval`).
+            Resolved::Binding(Binding::Lambda(_)) => {
+                Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()))
+            }
             Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
                 if args.len() != crate::modules::arity(id) {
                     let name = self.symbol_name(op);
@@ -1022,6 +1026,21 @@ impl<'t> Ev<'t> {
     pub(crate) fn var_slot(&self, decl: tlars_sany::graph::DeclId) -> Option<crate::state::VarSlot> {
         let tool = self.tool();
         tool.vars.slot_of(tool.graph.decl(decl).name)
+    }
+
+    /// `SemanticNode.toString()` of a symbol `lookup` returned in place of a value: its
+    /// location (`SemanticNode.java:481-489`). `None` for a theorem or assumption definition,
+    /// whose location the graph does not keep; TLC expands one before any caller prints it.
+    pub(crate) fn symbol_loc_text(&self, sym: SymbolRef) -> Option<String> {
+        let graph = &self.tool().graph;
+        let loc = match sym {
+            SymbolRef::OpDef(d) => graph.op_def(d).loc,
+            SymbolRef::Decl(d) => graph.decl(d).loc,
+            SymbolRef::Param(p) => graph.param(p).loc,
+            SymbolRef::Module(m) => graph.module(m).loc,
+            SymbolRef::Thm(_) => return None,
+        };
+        Some(loc.tlc_text(graph.interner()))
     }
 
     /// `var.getName()`, which is how a `TLCStateFun` is keyed.

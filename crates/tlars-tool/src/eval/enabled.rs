@@ -86,7 +86,17 @@ impl<'t> Ev<'t> {
         let mut code = self.opcode(op);
         if code.is_none() {
             // A user-defined operator, unless a cfg override or INSTANCE put a built-in here.
-            match self.lookup(op, c, s0, false) {
+            let resolved = self.lookup(op, c, s0, false);
+            // `bval = val`, evaluated first where `val` is an `OpValue`. Anything else reaches
+            // the boolean check as the object `lookup` returned, and a `SymbolNode` is never a
+            // `BoolValue`: 2247 prints it as `SemanticNode.toString()`, which is its location
+            // (`Tool.java:3119-3135`).
+            if matches!(resolved, Resolved::Var(_) | Resolved::Value(Value::Undef) | Resolved::Binding(Binding::Value(Value::Undef)))
+                && let Some(shown) = self.symbol_loc_text(op)
+            {
+                return Err(self.enabled_expected_boolean(pred, &shown));
+            }
+            match resolved {
                 Resolved::UserOp(d) | Resolved::Binding(Binding::OpDef(d)) => {
                     code = self.opcode(SymbolRef::OpDef(d));
                     if code.is_none() {
@@ -327,16 +337,19 @@ impl<'t> Ev<'t> {
     /// one continues with the remaining items.
     fn enabled_filter(&mut self, pred: ExprId, acts: Acts<'_>, s0: StateRef<'_>, s1: &FunState, v: Value) -> EvalResult<bool> {
         let Value::Bool(b) = v else {
-            let graph = self.tool().graph.clone();
             let shown = v.to_tlc_string(self)?;
-            let message =
-                self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["ENABLED", "boolean", &shown, &graph.expr_tlc_text(pred)]);
-            return Err(EvalError {
-                loc: Some(graph.loc(pred)),
-                ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
-            });
+            return Err(self.enabled_expected_boolean(pred, &shown));
         };
         if b { self.enabled_continue(acts, s0, s1) } else { Ok(false) }
+    }
+
+    /// `Assert.fail(TLC_EXPECTED_EXPRESSION_IN_COMPUTING, {"ENABLED", "boolean", bval, pred})`
+    /// (`Tool.java:3128-3131`), where `shown` is `bval.toString()`.
+    fn enabled_expected_boolean(&mut self, pred: ExprId, shown: &str) -> EvalError {
+        let graph = self.tool().graph.clone();
+        let message =
+            self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["ENABLED", "boolean", shown, &graph.expr_tlc_text(pred)]);
+        EvalError { loc: Some(graph.loc(pred)), ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message) }
     }
 
     /// `x' \in S` and `x' \subseteq S`: bind the primed variable to each element in turn if it
