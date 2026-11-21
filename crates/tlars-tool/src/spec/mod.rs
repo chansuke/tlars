@@ -1406,15 +1406,38 @@ fn config_symmetry(
             message: "The symmetry operator must specify a set of functions.".to_string(),
         });
     };
-    let values = set.snapshot().to_vec();
-    let mut generators = Vec::with_capacity(values.len());
+    // `((SetEnumValue) fcns).elements().all()`: `SetEnumValue.Enumerator` normalises in its
+    // constructor, so the count compared below is of distinct permutations.
+    let values: Vec<Value> = crate::value::order::normalized(&mut ev, set).map_err(uncaught)?.to_vec();
     for v in &values {
-        let Value::FcnRcd(fcn) = v else {
+        if !matches!(v, Value::FcnRcd(_)) {
             return Err(SpecError::Unexpected {
                 class: "java.lang.RuntimeException",
                 message: "The symmetry values must be function records.".to_string(),
             });
-        };
+        }
+    }
+    let args: Vec<ExprOrOpArg> = match graph.expr(body) {
+        ExprNode::OpAppl { args, .. } => args.to_vec(),
+        // `(OpApplNode) opDef.getBody()` on another node kind.
+        _ => return Err(unimplemented("a SYMMETRY whose definition body is not an operator application")),
+    };
+    // `argNodes.length >= values.size()`: as many permuted sets as permutations means every
+    // symmetry set holds at most one element, and TLC then warns and uses no symmetry at all.
+    let mut offenders = SymmetrySetList::default();
+    if args.len() >= values.len() {
+        for arg in &args {
+            offenders.add(config, &graph, arg)?;
+        }
+        offenders.warn(out)?;
+        return Ok(Box::new([]));
+    }
+    // `MVPerms.permutationSubgroup((Enumerable) fcns)`, which reads the domain/range pairs
+    // off each function record. The check that both are model values lives there, so it is
+    // only reached once TLC has decided there are permutations to compute at all.
+    let mut generators = Vec::with_capacity(values.len());
+    for v in &values {
+        let Value::FcnRcd(fcn) = v else { unreachable!("every value was checked to be a function record") };
         let (domain, images) = fcn.snapshot();
         let Some(domain) = domain else {
             return Err(unimplemented("a SYMMETRY function whose domain is an interval (TLC raises a NullPointerException)"));
@@ -1432,21 +1455,6 @@ fn config_symmetry(
             }
         }
         generators.push(crate::symmetry::Generator { pairs });
-    }
-    let args: Vec<ExprOrOpArg> = match graph.expr(body) {
-        ExprNode::OpAppl { args, .. } => args.to_vec(),
-        // `(OpApplNode) opDef.getBody()` on another node kind.
-        _ => return Err(unimplemented("a SYMMETRY whose definition body is not an operator application")),
-    };
-    // `argNodes.length >= values.size()`: as many permuted sets as permutations means every
-    // symmetry set holds at most one element, and TLC then warns and uses no symmetry at all.
-    let mut offenders = SymmetrySetList::default();
-    if args.len() >= values.len() {
-        for arg in &args {
-            offenders.add(config, &graph, arg)?;
-        }
-        offenders.warn(out)?;
-        return Ok(Box::new([]));
     }
     let subgroup = crate::symmetry::permutation_group(&mut ev, &generators, &tool.model_values).map_err(uncaught)?;
     // A set none of whose elements the subgroup permutes is an offender too, and this time
