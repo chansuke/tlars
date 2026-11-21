@@ -22,6 +22,30 @@ impl Write for Captured {
     }
 }
 
+/// Undoes the recorder's escaping in one left-to-right pass: a transcript can hold a
+/// literal `\n` of its own (a message TLC embedded in a string), which two passes of
+/// `replace` would turn into a newline.
+fn unescape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
 fn specs_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/specs")
 }
@@ -93,7 +117,7 @@ fn spec_runs_match_tlc() {
         let f: Vec<&str> = line.split('\u{1f}').collect();
         let case = f[0];
         let expected_status: i32 = f[1].parse().expect("status");
-        let expected = f[2].replace("\\n", "\n").replace("\\\\", "\\");
+        let expected = unescape(f[2]);
         cases.push(case.to_string());
         let (status, actual) = run_tlars(case);
         if status != expected_status || actual.trim_end() != expected.trim_end() {
