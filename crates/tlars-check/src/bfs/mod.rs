@@ -322,7 +322,7 @@ impl<'a> ModelChecker<'a> {
             Err(Halt::Eval(e)) => {
                 // `modelCheckImpl`'s `catch (Throwable e)` around `doInit`: the state the
                 // functor was working on, if any, is printed with the message.
-                let ec = eval_error_code(&e);
+                let ec = init_error_code(&e);
                 // `getMessage()` of a `StackOverflowError` is null, so TLC substitutes its
                 // own explanation (`ModelChecker.java:182-190`).
                 let message = match e.kind {
@@ -1245,6 +1245,22 @@ impl tlars_tool::NextSink for Collect<'_> {
             self.states.push(state);
         }
         Ok(())
+    }
+}
+
+/// `modelCheckImpl`'s `catch (Throwable)` around `doInit` (`ModelChecker.java:170-180`),
+/// which classifies by a different rule than `doNextFailed`: only an
+/// `Assert.TLCRuntimeException` hands over its own error code, and everything else is
+/// `EC.GENERAL`. An `EvalException` is a `StatefulRuntimeException`, a sibling of that class
+/// and not a subclass, so an `Assert(FALSE, ..)` that fails the initial predicate's
+/// invariant reports `EC.GENERAL` here where `doNextFailed` would report
+/// `TLC_VALUE_ASSERT_FAILED`. It only shows when the call-stack replay below finishes
+/// without failing again, because otherwise the replay's own code wins.
+fn init_error_code(e: &EvalError) -> Ec {
+    use tlars_tool::EvalErrorKind;
+    match e.kind {
+        EvalErrorKind::Runtime => e.ec,
+        _ => Ec::GENERAL,
     }
 }
 
