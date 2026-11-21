@@ -30,8 +30,8 @@ pub(crate) enum Resolved {
     Var(tlars_sany::graph::DeclId),
     /// A definition TLC overrides with a Java method tlars does not implement. Keeping it
     /// apart from `Undef` is what lets every caller stop as unimplemented instead of
-    /// reporting an undefined operator.
-    Unimplemented,
+    /// reporting an undefined operator. The level is the override's `minLevel`.
+    Unimplemented { min_level: u8 },
 }
 
 impl<'t> Ev<'t> {
@@ -110,7 +110,7 @@ impl<'t> Ev<'t> {
                 Resolved::OpRcd(lines) => Binding::OpRcd(lines),
                 // `lookup` returns the unimplemented `MethodValue` itself; passing it on as
                 // a value makes the use site report it.
-                Resolved::Var(_) | Resolved::Unimplemented => Binding::Value(Value::Undef),
+                Resolved::Var(_) | Resolved::Unimplemented { .. } => Binding::Value(Value::Undef),
             },
             ExprOrOpArg::Absent => unreachable!("only CASE's OTHER guard is absent"),
         }
@@ -236,7 +236,7 @@ impl<'t> Ev<'t> {
                 Resolved::Binding(Binding::Lambda(_) | Binding::ExceptAt(_)) => {
                     return Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()));
                 }
-                Resolved::Unimplemented => {
+                Resolved::Unimplemented { .. } => {
                     let name = self.symbol_name(op);
                     return Err(EvalError::unimplemented(format!("the Java implementation of {name}")));
                 }
@@ -934,7 +934,7 @@ impl<'t> Ev<'t> {
         control: EvalControl,
     ) -> EvalResult<Value> {
         match resolved {
-            Resolved::Unimplemented => {
+            Resolved::Unimplemented { .. } => {
                 let name = self.symbol_name(op);
                 Err(EvalError::unimplemented(format!("the Java implementation of {name}")))
             }
@@ -1206,10 +1206,13 @@ impl<'t> Ev<'t> {
                         level = level.max(self.level_bound(e, &tc));
                     }
                     // A Java override contributes its declared `minLevel`, which is how
-                    // `TLCGet` stays out of constant folding (`:270-276`).
+                    // `TLCGet` stays out of constant folding (`:270-276`). An override tlars
+                    // does not implement is a `MethodValue` to TLC all the same, so it
+                    // contributes its own `minLevel` and not level 0.
                     Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
                         level = level.max(crate::modules::min_level(id));
                     }
+                    Resolved::Unimplemented { min_level } => level = level.max(min_level),
                     _ => {}
                 }
                 level
@@ -1268,7 +1271,7 @@ fn resolved(b: &OpBinding, d: OpDefId) -> Resolved {
             let _ = d;
             Resolved::Value(Value::Undef)
         }
-        OpBinding::Unimplemented => Resolved::Unimplemented,
+        OpBinding::Unimplemented { min_level } => Resolved::Unimplemented { min_level: *min_level },
     }
 }
 

@@ -280,9 +280,12 @@ impl CfgBind<'_> {
             for &d in m.op_defs.iter() {
                 let def = graph.op_def(d);
                 let Some(body) = def.body else { continue };
-                let binding = match crate::modules::NativeId::of_module(&module, &graph.interner().text(def.name)) {
+                let name = graph.interner().text(def.name);
+                let binding = match crate::modules::NativeId::of_module(&module, &name) {
                     Some(id) => OpBinding::Native(id),
-                    None if def.module == mid => OpBinding::Unimplemented,
+                    None if def.module == mid => {
+                        OpBinding::Unimplemented { min_level: crate::modules::unimplemented_min_level(&module, &name) }
+                    }
                     None => continue,
                 };
                 self.bodies[body.index()] = Some(binding.clone());
@@ -306,7 +309,7 @@ impl CfgBind<'_> {
                 OpBinding::Table(lines) => DeclBinding::Table(lines.clone()),
                 OpBinding::Value(v) => DeclBinding::Value(v.clone()),
                 OpBinding::Native(id) => DeclBinding::Native(*id),
-                OpBinding::Unimplemented => return Err(unimplemented("a constant overridden with an unimplemented Java method")),
+                OpBinding::Unimplemented { .. } => return Err(unimplemented("a constant overridden with an unimplemented Java method")),
             });
             self.defns.insert(lhs, Some(val));
             overridden.push(graph.interner().text(lhs).to_string());
@@ -406,7 +409,7 @@ fn decl_binding(val: &OpBinding) -> DeclBinding {
     match val {
         OpBinding::Value(v) => DeclBinding::Value(v.clone()),
         OpBinding::Table(lines) => DeclBinding::Table(lines.clone()),
-        OpBinding::Native(_) | OpBinding::Replaced(_) | OpBinding::Unimplemented => {
+        OpBinding::Native(_) | OpBinding::Replaced(_) | OpBinding::Unimplemented { .. } => {
             unreachable!("a cfg constant table holds only values and operator records")
         }
     }
@@ -1356,7 +1359,7 @@ fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: 
             // `processModuleOverrides` puts a `defns` entry only for a definition that has a
             // matching Java method; tlars binds every definition of a `tlc2.module` class,
             // so a name that lands here may well be an ordinary definition for TLC.
-            Some(OpBinding::Unimplemented) => {
+            Some(OpBinding::Unimplemented { .. }) => {
                 let what = format!("the Java override of the POSTCONDITION {name} (M3 unit 6)");
                 return (Box::new([]), Some(format!("tlars does not implement {what} yet")));
             }
@@ -1583,7 +1586,7 @@ fn binding_string(tool: &Tool, binding: &OpBinding, out: &dyn Report) -> Result<
             crate::value::print::op_rcd_string(&mut ev, lines).map_err(uncaught)
         }
         OpBinding::Native(id) => Ok(format!("<Java Method: {}>", id.op().signature)),
-        OpBinding::Replaced(_) | OpBinding::Unimplemented => Err(unimplemented("the printed form of this cfg binding")),
+        OpBinding::Replaced(_) | OpBinding::Unimplemented { .. } => Err(unimplemented("the printed form of this cfg binding")),
     }
 }
 

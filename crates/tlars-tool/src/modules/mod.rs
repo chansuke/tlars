@@ -123,6 +123,32 @@ natives! {
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
 }
 
+/// `@Evaluation(minLevel = ...)` / `@TLAPlusOperator(minLevel = ...)` of the overrides tlars
+/// does not implement yet. Every other method in `tlc2.module` keeps the annotation's default
+/// of 0, so only these appear here: a level of 1 or more is what keeps a definition out of
+/// `processConstantDefns` (`SymbolNodeValueLookupProvider.java:270-276`).
+static UNIMPLEMENTED_MIN_LEVELS: &[(&str, &str, u8)] = &[
+    // `TLCExt.java:100`, `LevelConstants.ActionLevel`.
+    ("TLCExt", "PickSuccessor", 2),
+    // `TLCExt.java:198`, `TLCExt.java:210`.
+    ("TLCExt", "CounterExample", 1),
+    ("TLCExt", "Trace", 1),
+    // `_Possible.java:52`, `LevelConstants.VariableLevel`.
+    ("_Possible", "_Counts", 1),
+    // `_JsonTrace.java:39`, `_TLCTrace.java:87`.
+    ("_JsonTrace", "_TLCState", 1),
+    ("_TLCTrace", "_TLCState", 1),
+];
+
+/// The `minLevel` of the Java override of `module!tla_name`, 0 where the annotation leaves
+/// the default or the definition has no override at all.
+pub(crate) fn unimplemented_min_level(module: &str, tla_name: &str) -> u8 {
+    UNIMPLEMENTED_MIN_LEVELS
+        .iter()
+        .find(|(m, n, _)| *m == module && *n == tla_name)
+        .map_or(0, |&(_, _, level)| level)
+}
+
 /// The `tlc2.module` classes. A module with one of these names has its own definitions
 /// bound to unimplemented natives first and then to [`REGISTRY`]'s, so a definition TLC
 /// overrides in Java is never evaluated from its TLA+ body.
