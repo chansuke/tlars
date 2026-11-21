@@ -127,11 +127,11 @@ pub(crate) fn permutations(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
         if done {
             break;
         }
-        for j in i + 1..len {
-            for k in 0..len {
-                if !in_use[k] {
-                    in_use[k] = true;
-                    idx_array[j] = k;
+        for slot in &mut idx_array[i + 1..] {
+            for (k, used) in in_use.iter_mut().enumerate() {
+                if !*used {
+                    *used = true;
+                    *slot = k;
                     break;
                 }
             }

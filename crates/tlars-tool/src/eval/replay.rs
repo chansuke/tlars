@@ -18,7 +18,7 @@ impl<'t> Ev<'t> {
             Ok(()) | Err(Halt::Stop) => {}
             Err(Halt::Eval(e)) => return Err(e),
         }
-        Ok(sink.found.map(|state| StateInfo { state, action: None }))
+        Ok(sink.found.map(|state| StateInfo { state, action: None, fp: Some(fp) }))
     }
 
     /// `getState(fp, pred)` starts with `IdThread.setCurrentState(pred)` (`Tool.java:3786`),
@@ -36,7 +36,7 @@ impl<'t> Ev<'t> {
                 Err(Halt::Eval(e)) => return Err(e),
             }
             if let Some((state, action)) = sink.found {
-                return Ok(Some(StateInfo { state, action: Some(action) }));
+                return Ok(Some(StateInfo { state, action: Some(action), fp: None }));
             }
         }
         Ok(None)

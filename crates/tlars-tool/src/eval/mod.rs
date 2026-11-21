@@ -25,7 +25,7 @@ use crate::error::{EvalError, EvalResult, Flow};
 use crate::ctx::Ctx;
 use crate::fp64::Fp;
 use crate::state::{PartialState, State};
-use crate::tool::{CheckId, ImpliedAction, ImpliedInit, Invariant, Tool};
+use crate::tool::{CheckId, CounterExampleDef, ImpliedAction, ImpliedInit, Invariant, Tool};
 use crate::value::Value;
 use tlars_msg::{Ec, Report};
 use tlars_sany::Atom;
@@ -158,6 +158,12 @@ impl CallStack {
 pub struct StateInfo {
     pub state: State,
     pub action: Option<ActionId>,
+    /// `TLCStateInfo.fp`, the fingerprint the step was looked up by. `fingerPrint()` answers
+    /// with it when it is there and computes one from the state otherwise, and
+    /// `AliasTLCStateInfo` copies it, so a step that carries one prints the fingerprint of
+    /// the original state even where an ALIAS replaced the variables. Only `getState(fp)`
+    /// sets it (`Tool.java:3759`); the successor lookups leave it empty.
+    pub fp: Option<Fp>,
 }
 
 /// `IStateFunctor`: receives every initial state generated (`DoInitFunctor`).
@@ -398,10 +404,19 @@ impl<'t> Ev<'t> {
     /// `TLCGetOrDefault("s:_possible", <<>>)` decoded: the names `_Track` has seen and their
     /// counts, in the order `@@` appended them. An unset register is the empty tuple, whose
     /// DOMAIN is empty.
+    ///
+    /// A spec can write the register itself. A non-empty tuple there gives `_Track` an
+    /// integer interval as `DOMAIN old`, so `name \in DOMAIN old` fails; TLC's error carries
+    /// a fingerprint stack trace through the expressions of `_Possible` and of the module it
+    /// generated, which the shortcut has no nodes for. The run stops instead of guessing it.
     fn possible_counts(&mut self) -> EvalResult<Vec<(Atom, i32)>> {
         let stored = self.tool.registers.lock().expect("registers").get_named(self.possible_register());
         match stored {
-            None | Some(Value::Tuple(_)) => Ok(Vec::new()),
+            None => Ok(Vec::new()),
+            Some(Value::Tuple(t)) if t.elems.is_empty() => Ok(Vec::new()),
+            Some(Value::Tuple(_)) => Err(crate::error::EvalError::unimplemented(
+                "a _POSSIBLE register a spec overwrote with a non-empty tuple, whose DOMAIN is an integer interval (M3 unit 5)".into(),
+            )),
             Some(Value::FcnRcd(fcn)) => {
                 let (domain, values) = fcn.snapshot();
                 let Some(domain) = domain else {
@@ -477,12 +492,7 @@ impl<'t> Ev<'t> {
     /// `Err` is what `MP.printError` is given; the caller decides whether that code becomes
     /// the run's.
     pub fn check_postconditions(&mut self) -> Result<(), (tlars_msg::Ec, Vec<String>)> {
-        // `getPostConditionSpecs()` is called outside the `try`, so a name it cannot resolve
-        // is an exception nobody meant to raise and no postcondition is checked.
-        if let Some(message) = &self.tool.postcondition_error {
-            let body = tlars_msg::unexpected_exception("java.lang.RuntimeException", message);
-            return Err((Ec::GENERAL, vec![body]));
-        }
+        debug_assert!(self.postcondition_exception(false).is_none(), "the caller catches the lookup's exception first");
         self.check_possible()?;
         let graph = self.tool.graph.clone();
         for i in 0..self.tool.postconditions.len() {
@@ -505,10 +515,30 @@ impl<'t> Ev<'t> {
         Ok(())
     }
 
-    /// Whether `checkPostConditionWithCounterExample` would have to bind
-    /// `TLCExt!CounterExample` instead of checking the postconditions plainly.
-    pub fn needs_counter_example(&self) -> bool {
-        self.tool.counter_example && !self.tool.postconditions.is_empty()
+    /// The `Assert.fail` of the two lookups a postcondition check runs before it checks
+    /// anything: `getCounterExampleDef()` (`Tool.java:3672`) and then `getPostConditionSpecs()`
+    /// (`Tool.java:3683`). Neither is inside a `try` of `checkPostCondition*`, so this is an
+    /// exception travelling out of the check, and every caller catches it where TLC does.
+    /// `counter_example` is false for `checkPostCondition()`, which looks up no counterexample
+    /// definition at all.
+    pub fn postcondition_exception(&self, counter_example: bool) -> Option<EvalError> {
+        // `Assert.fail(EC.GENERAL)`, which is given no parameters.
+        if counter_example && self.tool.counter_example == CounterExampleDef::NotEvaluating {
+            return Some(EvalError::runtime(Ec::GENERAL, self.out.text(Ec::GENERAL, &[])));
+        }
+        self.tool.postcondition_error.clone().filter(|e| matches!(e.kind, crate::error::EvalErrorKind::Runtime))
+    }
+
+    /// A name both lookups resolve for TLC, bound to a Java method tlars has not written.
+    /// TLC runs it, so there is no exception to catch and nothing may swallow this: a run
+    /// that agreed with TLC by staying quiet would be agreeing by accident.
+    pub fn postcondition_unimplemented(&self, counter_example: bool) -> Option<EvalError> {
+        // With no POSTCONDITION the counterexample binding is never read, so the check runs
+        // as it stands.
+        if counter_example && self.tool.counter_example == CounterExampleDef::Evaluating && !self.tool.postconditions.is_empty() {
+            return Some(EvalError::unimplemented("TLCExt!CounterExample (M3 unit 6)".into()));
+        }
+        self.tool.postcondition_error.clone().filter(|e| matches!(e.kind, crate::error::EvalErrorKind::Unimplemented))
     }
 
     /// `Tool.isValid(action, s0, s1)`: the predicate must be a boolean.

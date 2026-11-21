@@ -33,7 +33,7 @@ mod random;
 pub mod time;
 
 pub use concurrent_hashmap::JavaConcurrentHashMap;
-pub use exception::{class_cast, index_out_of_bounds};
+pub use exception::{class_cast, index_out_of_bounds, range_out_of_bounds, substring};
 pub use hashmap::{JavaHashMap, capacity_for_mappings, table_size_for};
 pub use hashset::JavaIntHashSet;
 pub use hashtable::{Elements, Hashtable};

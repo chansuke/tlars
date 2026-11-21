@@ -15,12 +15,12 @@ mod bindings;
 pub(crate) use bindings::{Bindings, DeclBinding, OpBinding, OpRcd};
 
 use crate::ctx::Ctx;
-use crate::error::EvalErrorKind;
+use crate::error::{EvalError, EvalErrorKind};
 use crate::eval::expr::Builtin;
 use crate::eval::{EvalControl, WorkerLocals};
 use crate::globals::TlcGlobals;
 use crate::state::{StateRef, VarTable};
-use crate::tool::{NamedCheck, PossibleCheck, Tool};
+use crate::tool::{CounterExampleDef, NamedCheck, PossibleCheck, Tool};
 use crate::value::Value;
 use tlars_msg::{Ec, Report};
 use tlars_sany::Atom;
@@ -145,7 +145,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         postconditions: Box::new([]),
         possible: Box::new([]),
         postcondition_error: None,
-        counter_example: false,
+        counter_example: CounterExampleDef::Absent,
         symmetry: Box::new([]),
         temporal: crate::tool::Temporal { fairness: Box::new([]), properties: Box::new([]) },
         fp64: crate::fp64::Fp64::new(globals.fp_index),
@@ -845,7 +845,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     let view = config_view(config, tool, defns)?;
     let symmetry = config_symmetry(config, tool, unprocessed, out)?;
     let (postconditions, postcondition_error) = config_postconditions(config, tool, defns, out);
-    let counter_example = defns.contains_key(&graph.interner().intern("CounterExample"));
+    let counter_example = config_counter_example(tool, defns);
 
     // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
     tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
@@ -1276,9 +1276,13 @@ fn named_checks(
 /// suppressed, and wires its `_Track` and `_CheckName` definitions in as constraints and
 /// post-conditions. tlars evaluates those two definitions directly (`Ev::track_possible` and
 /// `Ev::check_possible`), because its semantic graph is frozen before the cfg is processed and
-/// nothing can be added to it. The generated module is never printed, so the only thing the
-/// shortcut gives up is the intern tokens the generated names and `_Possible.tla` consume,
-/// which shift no other string's order relative to another.
+/// nothing can be added to it.
+///
+/// The shortcut gives up the intern tokens the generated names and `_Possible.tla` consume,
+/// which shift no other string's order relative to another, and the `_PossibleAC_*` entries
+/// TLC appends to `modelConstraints` and `actionConstraints` (`SpecProcessor.java:1864-1883`).
+/// Those are not checked anywhere, but `TLCGet("spec")` names them, so `spec_value` stops
+/// rather than answer with the constraints the cfg wrote on their own.
 fn config_possible(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<Box<[PossibleCheck]>, SpecError> {
     if config.possible.is_empty() {
         return Ok(Box::new([]));
@@ -1342,11 +1346,11 @@ fn trace_symbol(graph: &SemanticGraph) -> Option<SymbolRef> {
 /// when the search is over. Every name must be a 0-arity definition of `defns`; the first
 /// one that is not raises an `Assert.fail` that escapes `checkPostCondition`, so TLC then
 /// checks nothing at all. The lookups are pure, so they run here and the message waits.
-fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> (Box<[NamedCheck]>, Option<String>) {
+fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> (Box<[NamedCheck]>, Option<EvalError>) {
     let graph = tool.graph.clone();
     let mut checks = Vec::new();
     for name in &config.postconditions {
-        let fail = |ec: Ec| Some(out.text(ec, &["post condition", name]));
+        let fail = |ec: Ec| Some(EvalError::runtime(ec, out.text(ec, &["post condition", name])));
         match defn_of(defns, &graph, name) {
             None => return (Box::new([]), fail(Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED)),
             Some(OpBinding::Replaced(d)) => {
@@ -1361,12 +1365,27 @@ fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: 
             // so a name that lands here may well be an ordinary definition for TLC.
             Some(OpBinding::Unimplemented { .. }) => {
                 let what = format!("the Java override of the POSTCONDITION {name} (M3 unit 6)");
-                return (Box::new([]), Some(format!("tlars does not implement {what} yet")));
+                return (Box::new([]), Some(EvalError::unimplemented(what)));
             }
             Some(_) => return (Box::new([]), fail(Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT)),
         }
     }
     (checks.into(), None)
+}
+
+/// `Spec.getCounterExampleDef()` (`Spec.java:337-356`). `processModuleOverrides` leaves an
+/// `EvaluatingValue` under the name only for `TLCExt!CounterExample`'s Java method, so a
+/// definition of the spec's own fails the check whatever the cfg asks for.
+///
+/// TLC asks this only once the search is over, so the lookup must not intern the name: a
+/// token handed out here would shift every string the run interns afterwards.
+fn config_counter_example(tool: &Tool, defns: &Defns) -> CounterExampleDef {
+    let Some(name) = tool.graph.interner().interned("CounterExample") else { return CounterExampleDef::Absent };
+    match defns.get(&name).cloned().flatten() {
+        None => CounterExampleDef::Absent,
+        Some(OpBinding::Native(_) | OpBinding::Unimplemented { .. }) => CounterExampleDef::Evaluating,
+        Some(_) => CounterExampleDef::NotEvaluating,
+    }
 }
 
 /// `Tool.getSymmetryPerms` (`Tool.java:3836-3943`), the other half of what
@@ -1409,15 +1428,38 @@ fn config_symmetry(
             message: "The symmetry operator must specify a set of functions.".to_string(),
         });
     };
-    let values = set.snapshot().to_vec();
-    let mut generators = Vec::with_capacity(values.len());
+    // `((SetEnumValue) fcns).elements().all()`: `SetEnumValue.Enumerator` normalises in its
+    // constructor, so the count compared below is of distinct permutations.
+    let values: Vec<Value> = crate::value::order::normalized(&mut ev, set).map_err(uncaught)?.to_vec();
     for v in &values {
-        let Value::FcnRcd(fcn) = v else {
+        if !matches!(v, Value::FcnRcd(_)) {
             return Err(SpecError::Unexpected {
                 class: "java.lang.RuntimeException",
                 message: "The symmetry values must be function records.".to_string(),
             });
-        };
+        }
+    }
+    let args: Vec<ExprOrOpArg> = match graph.expr(body) {
+        ExprNode::OpAppl { args, .. } => args.to_vec(),
+        // `(OpApplNode) opDef.getBody()` on another node kind.
+        _ => return Err(unimplemented("a SYMMETRY whose definition body is not an operator application")),
+    };
+    // `argNodes.length >= values.size()`: as many permuted sets as permutations means every
+    // symmetry set holds at most one element, and TLC then warns and uses no symmetry at all.
+    let mut offenders = SymmetrySetList::default();
+    if args.len() >= values.len() {
+        for arg in &args {
+            offenders.add(config, &graph, arg)?;
+        }
+        offenders.warn(out)?;
+        return Ok(Box::new([]));
+    }
+    // `MVPerms.permutationSubgroup((Enumerable) fcns)`, which reads the domain/range pairs
+    // off each function record. The check that both are model values lives there, so it is
+    // only reached once TLC has decided there are permutations to compute at all.
+    let mut generators = Vec::with_capacity(values.len());
+    for v in &values {
+        let Value::FcnRcd(fcn) = v else { unreachable!("every value was checked to be a function record") };
         let (domain, images) = fcn.snapshot();
         let Some(domain) = domain else {
             return Err(unimplemented("a SYMMETRY function whose domain is an interval (TLC raises a NullPointerException)"));
@@ -1435,21 +1477,6 @@ fn config_symmetry(
             }
         }
         generators.push(crate::symmetry::Generator { pairs });
-    }
-    let args: Vec<ExprOrOpArg> = match graph.expr(body) {
-        ExprNode::OpAppl { args, .. } => args.to_vec(),
-        // `(OpApplNode) opDef.getBody()` on another node kind.
-        _ => return Err(unimplemented("a SYMMETRY whose definition body is not an operator application")),
-    };
-    // `argNodes.length >= values.size()`: as many permuted sets as permutations means every
-    // symmetry set holds at most one element, and TLC then warns and uses no symmetry at all.
-    let mut offenders = SymmetrySetList::default();
-    if args.len() >= values.len() {
-        for arg in &args {
-            offenders.add(config, &graph, arg)?;
-        }
-        offenders.warn(out)?;
-        return Ok(Box::new([]));
     }
     let subgroup = crate::symmetry::permutation_group(&mut ev, &generators, &tool.model_values).map_err(uncaught)?;
     // A set none of whose elements the subgroup permutes is an offender too, and this time
@@ -1484,11 +1511,19 @@ impl SymmetrySetList {
         };
         const PERMUTATIONS: &str = "Permutations";
         // `image.substring(PERMUTATIONS.length() + 1, image.length() - 1)`, which drops the
-        // opening parenthesis and the closing one.
-        let alias = match image.strip_prefix(PERMUTATIONS) {
-            Some(rest) => &rest[1..rest.len() - 1],
-            None => image,
+        // opening parenthesis and the closing one. TLC does not check that they are there,
+        // so an image that merely starts with the name and is too short to hold both — a
+        // `CONSTANT Permutations1` passed to the symmetry definition — asks for a range
+        // ending before it begins, and the JDK's exception escapes `getSymmetryPerms`.
+        let alias: String = if image.starts_with(PERMUTATIONS) {
+            let units = image.encode_utf16().count() as i64;
+            tlars_java::substring(image, PERMUTATIONS.encode_utf16().count() as i64 + 1, units - 1).map_err(|message| {
+                SpecError::Unexpected { class: "java.lang.StringIndexOutOfBoundsException", message }
+            })?
+        } else {
+            image.to_string()
         };
+        let alias = alias.as_str();
         let shown = config.overrides_reverse.get(&alias.to_string(), java_hash(alias)).cloned().unwrap_or_else(|| alias.to_string());
         self.names.push(shown);
         Ok(())

@@ -56,8 +56,8 @@ impl MvPerm {
     /// `MVPerm.compose(perm)` (`MVPerm.java:78-96`).
     fn compose(&self, ev: &mut Ev<'_>, other: &MvPerm, model_values: &[ModelValue]) -> EvalResult<MvPerm> {
         let mut res = MvPerm::empty(self.elems.len());
-        for i in 0..self.elems.len() {
-            match self.elems[i] {
+        for (i, slot) in self.elems.iter().enumerate() {
+            match *slot {
                 None => res.put_at(i, other.elems[i]),
                 Some(mv) => match other.elems[mv.index as usize] {
                     None => res.put_at(i, Some(mv)),
