@@ -526,14 +526,19 @@ impl<'t> Ev<'t> {
         if counter_example && self.tool.counter_example == CounterExampleDef::NotEvaluating {
             return Some(EvalError::runtime(Ec::GENERAL, self.out.text(Ec::GENERAL, &[])));
         }
-        self.tool.postcondition_error.clone()
+        self.tool.postcondition_error.clone().filter(|e| matches!(e.kind, crate::error::EvalErrorKind::Runtime))
     }
 
-    /// Whether `checkPostConditionWithCounterExample` has a counterexample to bind to
-    /// `TLCExt!CounterExample`, which tlars cannot build yet. With no POSTCONDITION the
-    /// binding is never read, so the check runs as it stands.
-    pub fn needs_counter_example(&self) -> bool {
-        self.tool.counter_example == CounterExampleDef::Evaluating && !self.tool.postconditions.is_empty()
+    /// A name both lookups resolve for TLC, bound to a Java method tlars has not written.
+    /// TLC runs it, so there is no exception to catch and nothing may swallow this: a run
+    /// that agreed with TLC by staying quiet would be agreeing by accident.
+    pub fn postcondition_unimplemented(&self, counter_example: bool) -> Option<EvalError> {
+        // With no POSTCONDITION the counterexample binding is never read, so the check runs
+        // as it stands.
+        if counter_example && self.tool.counter_example == CounterExampleDef::Evaluating && !self.tool.postconditions.is_empty() {
+            return Some(EvalError::unimplemented("TLCExt!CounterExample (M3 unit 6)".into()));
+        }
+        self.tool.postcondition_error.clone().filter(|e| matches!(e.kind, crate::error::EvalErrorKind::Unimplemented))
     }
 
     /// `Tool.isValid(action, s0, s1)`: the predicate must be a boolean.

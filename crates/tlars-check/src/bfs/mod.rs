@@ -239,8 +239,8 @@ impl<'a> ModelChecker<'a> {
                 if let Some(e) = ev.postcondition_exception(true) {
                     return self.init_postcondition_failed(&mut locals, &e);
                 }
-                if ev.needs_counter_example() {
-                    self.out.error(Ec::GENERAL, &["tlars does not implement TLCExt!CounterExample yet (M3 unit 6)"]);
+                if let Some(e) = ev.postcondition_unimplemented(true) {
+                    self.out.error(Ec::GENERAL, &[&e.message]);
                     return ec;
                 }
                 if let Err((ec, params)) = ev.check_postconditions() {
@@ -752,8 +752,8 @@ impl<'a> ModelChecker<'a> {
         if ev.postcondition_exception(true).is_some() {
             return;
         }
-        if ev.needs_counter_example() {
-            self.out.error(Ec::GENERAL, &["tlars does not implement TLCExt!CounterExample yet (M3 unit 6)"]);
+        if let Some(e) = ev.postcondition_unimplemented(true) {
+            self.out.error(Ec::GENERAL, &[&e.message]);
             return;
         }
         if let Err((ec, params)) = ev.check_postconditions() {
@@ -816,6 +816,9 @@ impl<'a> ModelChecker<'a> {
         if let Some(e) = ev.postcondition_exception(false) {
             let body = tlars_msg::unexpected_exception(java_class(&e), &e.message);
             return self.out.error(Ec::GENERAL, &[&body]);
+        }
+        if let Some(e) = ev.postcondition_unimplemented(false) {
+            return self.out.error(Ec::GENERAL, &[&e.message]);
         }
         match ev.check_postconditions() {
             Ok(()) => Ec::NO_ERROR,
