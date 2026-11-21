@@ -1,6 +1,7 @@
 tlc/standard/any_set/no_shipped_module
 tlc/standard/any_set/user_module_any_prints_name
 tlc/standard/any_set/user_module_gets_any_override
+tlc/standard/bags/subbag_two_keys
 tlc/standard/finite_sets/card_cap_finite_with_nat
 tlc/standard/finite_sets/card_cross
 tlc/standard/finite_sets/card_cross_empty_infinite
@@ -595,6 +596,11 @@ tlc/standard/tlc/to_string_string_quoted
 tlc/standard/tlc/to_string_tuple
 tlc/standard/tlc/to_string_usable_in_concat
 tlc/standard/tlc_eval/filter_over_nat_lazy_without_eval
+tlc/standard/tlc_ext/assert_eq_argument_error
+tlc/standard/tlc_ext/assert_eq_equal
+tlc/standard/tlc_ext/assert_eq_incomparable
+tlc/standard/tlc_ext/assert_eq_unequal
+tlc/standard/tlc_ext/assert_eq_unequal_structures
 tlc/standard/tlc_get_set/action_unknown_all_contexts
 tlc/standard/tlc_get_set/assume_all_empty
 tlc/standard/tlc_get_set/assume_config
