@@ -303,6 +303,16 @@ fn unknown_action_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
 /// `TLCGet("spec")` (`TLCGetSet.java:320-377`). PROPERTY fills `impliedinits`,
 /// `impliedactions` and `impliedtemporals`, which stay empty until M4.
 fn spec_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
+    // `processConfigPossible` appends the `_Track` wrappers of the generated module to
+    // `modelConstraints` and `actionConstraints` (`SpecProcessor.java:1864-1883`), so they
+    // are among the constraints this record names. tlars evaluates `_Track` directly and
+    // generates no module, and the names TLC would print carry the millisecond the module
+    // was named after, so there is nothing to answer with here.
+    if !ev.tool().possible.is_empty() {
+        return Err(EvalError::unimplemented(
+            "TLCGet(\"spec\") for a cfg with _POSSIBLE, whose constraints name the generated module (M3 unit 5)".into(),
+        ));
+    }
     let set = |elems: Vec<Value>| Value::set_enum_of(elems, false);
     let inits = ev.tool().init_actions().iter().map(|a| action_value(ev, a)).collect::<EvalResult<Vec<_>>>();
     let inits = set(inits?);

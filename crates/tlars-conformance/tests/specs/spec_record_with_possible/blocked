@@ -1,0 +1,3 @@
+TLC names the `_PossibleAC_*` definitions of the module it generated for _POSSIBLE, whose
+name carries the millisecond it was built at. The shortcut in `config_possible` generates no
+such module, so there is nothing to answer with.

@@ -1273,9 +1273,13 @@ fn named_checks(
 /// suppressed, and wires its `_Track` and `_CheckName` definitions in as constraints and
 /// post-conditions. tlars evaluates those two definitions directly (`Ev::track_possible` and
 /// `Ev::check_possible`), because its semantic graph is frozen before the cfg is processed and
-/// nothing can be added to it. The generated module is never printed, so the only thing the
-/// shortcut gives up is the intern tokens the generated names and `_Possible.tla` consume,
-/// which shift no other string's order relative to another.
+/// nothing can be added to it.
+///
+/// The shortcut gives up the intern tokens the generated names and `_Possible.tla` consume,
+/// which shift no other string's order relative to another, and the `_PossibleAC_*` entries
+/// TLC appends to `modelConstraints` and `actionConstraints` (`SpecProcessor.java:1864-1883`).
+/// Those are not checked anywhere, but `TLCGet("spec")` names them, so `spec_value` stops
+/// rather than answer with the constraints the cfg wrote on their own.
 fn config_possible(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<Box<[PossibleCheck]>, SpecError> {
     if config.possible.is_empty() {
         return Ok(Box::new([]));
