@@ -128,6 +128,26 @@ impl Registers {
     }
 }
 
+/// Per-worker effect state: what TLC keeps in `IdThread` locals and statics.
+pub(crate) struct Effects {
+    pub(crate) random: StateRandom,
+    /// The parent being expanded, set by `next_states` and by replay.
+    pub(crate) current: Option<(ExpansionId, Fp)>,
+}
+
+impl Effects {
+    pub(crate) fn new(run_seed: i64) -> Self {
+        Effects { random: StateRandom::new(run_seed), current: None }
+    }
+    /// `RandomEnumerableValues.reset()`: a fresh stream seeded with the run seed.
+    pub(crate) fn reset_random(&mut self, run_seed: i64) {
+        self.random = StateRandom::new(run_seed);
+    }
+    pub(crate) fn rng(&mut self) -> &mut JavaRandom {
+        self.random.for_draw(self.current)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Registers;
@@ -155,25 +175,5 @@ mod tests {
         }
         assert_eq!(registers.indexed().map(|(i, _)| i).collect::<Vec<_>>(), vec![0, 3, 4, 17]);
         assert_eq!(registers.indexed_len(), 18);
-    }
-}
-
-/// Per-worker effect state: what TLC keeps in `IdThread` locals and statics.
-pub(crate) struct Effects {
-    pub(crate) random: StateRandom,
-    /// The parent being expanded, set by `next_states` and by replay.
-    pub(crate) current: Option<(ExpansionId, Fp)>,
-}
-
-impl Effects {
-    pub(crate) fn new(run_seed: i64) -> Self {
-        Effects { random: StateRandom::new(run_seed), current: None }
-    }
-    /// `RandomEnumerableValues.reset()`: a fresh stream seeded with the run seed.
-    pub(crate) fn reset_random(&mut self, run_seed: i64) {
-        self.random = StateRandom::new(run_seed);
-    }
-    pub(crate) fn rng(&mut self) -> &mut JavaRandom {
-        self.random.for_draw(self.current)
     }
 }
