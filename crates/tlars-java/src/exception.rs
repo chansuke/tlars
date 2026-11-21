@@ -27,6 +27,12 @@ pub fn substring(s: &str, begin: i64, end: i64) -> Result<String, String> {
     Ok(String::from_utf16_lossy(&units[begin as usize..end as usize]))
 }
 
+/// `ClassCastException`'s message for two classes that share a class loader, which is where
+/// every `tlc2.value.impl` class lives when TLC runs from its jar.
+pub fn class_cast(from: &str, to: &str) -> String {
+    format!("class {from} cannot be cast to class {to} ({from} and {to} are in unnamed module of loader 'app')")
+}
+
 #[cfg(test)]
 mod tests {
     /// What JDK 21's `String.substring(13, length() - 1)` answers, which is how TLC cuts
@@ -43,10 +49,4 @@ mod tests {
         // A supplementary character is a surrogate pair, so the cut can split it.
         assert_eq!(super::substring("\u{1f600}", 1, 2), Ok("\u{fffd}".to_string()));
     }
-}
-
-/// `ClassCastException`'s message for two classes that share a class loader, which is where
-/// every `tlc2.value.impl` class lives when TLC runs from its jar.
-pub fn class_cast(from: &str, to: &str) -> String {
-    format!("class {from} cannot be cast to class {to} ({from} and {to} are in unnamed module of loader 'app')")
 }

@@ -920,7 +920,7 @@ impl<'a> ModelChecker<'a> {
                 }
             }
             if let Some(succ) = succ {
-                self.print_last(ev, &cur.state, cur.fp, succ, &[], false, 2)?;
+                self.print_last(ev, cur, succ, &[], false, 2)?;
             }
             return Ok(());
         }
@@ -972,11 +972,18 @@ impl<'a> ModelChecker<'a> {
             Some(succ) => succ.state_ref(),
             None => StateRef::Full(&cur.state),
         };
-        if !self.print_successor(ev, &pred, pred_fp, &cur.state, next, &trace, prev, number)? {
+        // `sinfo = getState(s1.fingerPrint(), s0.state)`, then `s1`'s own line. This lookup
+        // caches no fingerprint, so an ALIAS that changes a variable makes `fp:` the
+        // alias's own.
+        let fp = ev.fingerprint(&cur.state)?;
+        let Some(step) = ev.successor_from_fp(&pred, pred_fp, fp)? else {
+            self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
             return Ok(());
-        }
+        };
+        let line = TraceLine { label: ev.state_label(&step), fp: step.fp, next, trace: &trace, prev, number };
+        self.print_line(ev, &PartialState::from_state(&step.state), line)?;
         if let Some(succ) = succ {
-            self.print_last(ev, &cur.state, cur.fp, succ, &trace, true, number + 1)?;
+            self.print_last(ev, cur, succ, &trace, true, number + 1)?;
         }
         Ok(())
     }
@@ -990,8 +997,7 @@ impl<'a> ModelChecker<'a> {
     fn print_last(
         &self,
         ev: &mut Ev<'_>,
-        pred: &State,
-        pred_fp: tlars_tool::Fp,
+        pred: &Queued,
         succ: Succ<'_>,
         trace: &[PartialState],
         suffix: bool,
@@ -1001,7 +1007,7 @@ impl<'a> ModelChecker<'a> {
             Succ::Complete(state) => PartialState::from_state(state),
             Succ::Partial(s1) => s1.copy_out(),
         };
-        match ev.successor_matching(pred, pred_fp, &target) {
+        match ev.successor_matching(&pred.state, pred.fp, &target) {
             Ok(Some((state, action))) => {
                 // `evalAlias(sinfo, s2, prefix, si1, sinfo)` (`TLCTrace.java:439`) binds
                 // `Trace` to the prefix and the two states after it. The initial-`s1`
@@ -1023,33 +1029,6 @@ impl<'a> ModelChecker<'a> {
                     number,
                 };
                 self.print_line(ev, &state, line)?;
-                Ok(true)
-            }
-            Ok(None) => {
-                self.out.error(Ec::TLC_FAILED_TO_RECOVER_INIT, &[]);
-                Ok(false)
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    fn print_successor(
-        &self,
-        ev: &mut Ev<'_>,
-        pred: &State,
-        pred_fp: tlars_tool::Fp,
-        state: &State,
-        next: StateRef<'_>,
-        trace: &[PartialState],
-        prev: Option<&tlars_tool::Aliased>,
-        number: usize,
-    ) -> Result<bool, EvalError> {
-        let fp = ev.fingerprint(state)?;
-        match ev.successor_from_fp(pred, pred_fp, fp) {
-            Ok(Some(step)) => {
-                let line =
-                    TraceLine { label: ev.state_label(&step), fp: step.fp, next, trace, prev, number };
-                self.print_line(ev, &PartialState::from_state(&step.state), line)?;
                 Ok(true)
             }
             Ok(None) => {
