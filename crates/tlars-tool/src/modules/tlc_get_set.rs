@@ -388,11 +388,11 @@ fn value_hash(ev: &mut Ev<'_>, v: &Value) -> EvalResult<i32> {
 /// built as a `HashMap` keyed by `IntValue`, so the domain comes out in that map's iteration
 /// order. Only indices worker 0 wrote appear, which with one worker is every index written.
 fn all_values(ev: &mut Ev<'_>) -> EvalResult<Value> {
-    let indexed: Vec<(usize, Value)> = {
+    let (indexed, capacity) = {
         let registers = ev.tool().registers.lock().expect("registers");
-        registers.indexed().iter().enumerate().filter_map(|(i, v)| v.clone().map(|v| (i, v))).collect()
+        let indexed: Vec<(usize, Value)> = registers.indexed().map(|(i, v)| (i, v.clone())).collect();
+        (indexed, registers.indexed_len())
     };
-    let capacity = ev.tool().registers.lock().expect("registers").indexed().len();
     let mut map = tlars_java::JavaHashMap::with_capacity(capacity);
     for (i, v) in indexed {
         let key = Value::Int(i32::try_from(i).expect("a register index fits an int"));
