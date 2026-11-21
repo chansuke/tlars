@@ -70,7 +70,7 @@ impl State {
         State { values: values.into(), level: INIT_LEVEL }
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot { values: self.values.iter().map(|v| Some(v.clone())).collect() }
+        Snapshot { values: self.values.iter().map(|v| Some(v.clone())).collect(), fun: None }
     }
 }
 
@@ -124,7 +124,7 @@ impl PartialState {
         Some(State { values: self.slots.iter().map(|v| v.clone().expect("all assigned")).collect(), level: self.level })
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot { values: self.slots.clone() }
+        Snapshot { values: self.slots.clone(), fun: None }
     }
     pub(crate) fn copy(&self) -> PartialState {
         PartialState { slots: self.slots.clone(), level: self.level }
@@ -219,15 +219,20 @@ impl StateRef<'_> {
     }
 
     /// `s.copy()` as `LazyValue`'s cache keeps it; `None` for `Null`.
-    pub(crate) fn snapshot(&self) -> Option<Snapshot> {
+    pub(crate) fn snapshot(&self, vars: &VarTable) -> Option<Snapshot> {
         match self {
             StateRef::Null => None,
-            StateRef::Empty => Some(Snapshot { values: Box::new([]) }),
+            StateRef::Empty => Some(Snapshot { values: Box::new([]), fun: None }),
             StateRef::Full(s) => Some(s.snapshot()),
             StateRef::Partial(p) => Some(p.snapshot()),
-            // `TLCStateFun.copy` is never reached: ENABLED evaluates with KeepLazy cleared
-            // and the thunks it conses are not cachable.
-            StateRef::Fun(_) => None,
+            // `TLCStateFun.copy()` returns `this` (`TLCStateFun.java:66-71`), so the cache
+            // keeps the ENABLED state itself: both the bindings `isSubset` reads through
+            // `vars[]` and the identity its fast path compares. ENABLED does cons cachable
+            // thunks (`getLetContext`, `getOpContext(.., true)`), so this is reached.
+            StateRef::Fun(f) => {
+                let values = vars.names.iter().map(|&n| f.lookup(n).cloned()).collect();
+                Some(Snapshot { values, fun: f.cell.clone() })
+            }
         }
     }
 }
@@ -236,13 +241,22 @@ impl StateRef<'_> {
 pub(crate) struct Snapshot {
     /// The value of each `vars[]` slot, as `isSubset` reads it out of the cached state.
     values: Box<[Option<Value>]>,
+    /// The cached `TLCStateFun`, for `isSubset`'s `s1 == s2` fast path.
+    fun: Option<Arc<FunCell>>,
 }
 
 impl Snapshot {
     /// `TLCState.isSubset(s1, s2)` (`TLCState.java:259-291`), with `self` as `s2`: every
     /// variable `self` has a value for has the same value in `s1`. An equality that throws
-    /// makes the answer unknown, which is not a cache hit.
+    /// makes the answer unknown, which is not a cache hit, but two states that *are* the same
+    /// object answer yes before any value is compared.
     pub(crate) fn covers(&self, ev: &mut crate::eval::Ev<'_>, s1: &StateRef<'_>) -> bool {
+        if let (Some(cached), StateRef::Fun(f)) = (&self.fun, s1)
+            && let Some(cell) = &f.cell
+            && Arc::ptr_eq(cached, cell)
+        {
+            return true;
+        }
         for i in 0..self.values.len() {
             let Some(val2) = self.values[i].clone() else { continue };
             let name = ev.tool().vars().names[i];
