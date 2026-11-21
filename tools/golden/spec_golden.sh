@@ -8,6 +8,9 @@
 # rewritten to <dir>, which crates/tlars-check/tests/spec_golden.rs normalizes the same way as
 # the conformance harness.
 #
+# A case with an `unimplemented` file has no transcript to match (tlars stops instead of
+# guessing at what TLC does), so it is skipped here.
+#
 # Run inside `nix develop` from the repository root, optionally with case names to re-record.
 set -u
 cases=crates/tlars-check/tests/specs
@@ -19,6 +22,7 @@ if [ ${#names[@]} -eq 0 ]; then
   for d in "$cases"/*/; do names+=("$(basename "$d")"); done
 fi
 for name in "${names[@]}"; do
+  if [ -f "$cases/$name/unimplemented" ]; then continue; fi
   dir=$(mktemp -d)
   cp "$cases/$name"/* "$dir/"
   args=()

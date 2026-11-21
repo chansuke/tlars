@@ -160,6 +160,10 @@ impl Tool {
         }
         self.globals.properties.iter().rev().find(|(k, _)| k == name).map(|(_, v)| v.clone())
     }
+    /// `Boolean.getBoolean(name)`: true only for a property that reads `true`, in any case.
+    pub(crate) fn property_is_true(&self, name: &str) -> bool {
+        self.property(name).is_some_and(|v| v.eq_ignore_ascii_case("true"))
+    }
     /// `System.setProperty(name, value)`.
     pub(crate) fn set_property(&self, name: &str, value: String) {
         let mut set = self.set_properties.lock().expect("system properties");

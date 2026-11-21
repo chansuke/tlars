@@ -15,11 +15,19 @@ use crate::value::Value;
 use tlars_msg::Ec;
 use tlars_sany::graph::{ExprId, ExprNode, ExprOrOpArg, SymbolRef};
 
+/// `tlc2.tool.impl.Tool.CDOT_KEY` (`Tool.java:137`), read through `Boolean.getBoolean` at
+/// every `\cdot` (`:1490`, `:2774`, `:3373`), so `-D` on the command line and
+/// `TLCSet("-D...", TRUE)` both turn it on.
+const CDOT_KEY: &str = "tlc2.tool.impl.Tool.cdot";
+
 /// `Assert.fail("The current version of TLC does not support action composition. ...")`,
 /// shared by `evalAppl`, `getNextStatesAppl` and `enabledAppl` (`Tool.java:1527`, `:2804`,
-/// `:3389`). The `tlc2.tool.impl.Tool.cdot` property is read at class load, and tlars has no
-/// way to set it, so the incomplete implementation behind it is unreachable.
+/// `:3389`). With the property set, TLC runs the incomplete implementation behind it
+/// instead, which tlars does not have.
 pub(crate) fn cdot_unsupported(ev: &mut Ev<'_>, pred: ExprId) -> EvalError {
+    if ev.tool().property_is_true(CDOT_KEY) {
+        return EvalError::unimplemented(format!("the experimental action composition behind {CDOT_KEY}=true"));
+    }
     let graph = &ev.tool().graph;
     let reason = "The current version of TLC does not support action composition.  An incomplete implementation can be \
                   enabled via the tlc2.tool.impl.Tool.cdot=true java property."
