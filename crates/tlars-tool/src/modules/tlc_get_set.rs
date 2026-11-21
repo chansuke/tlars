@@ -498,16 +498,18 @@ pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
                 }
                 return Ok(Value::Bool(true));
             }
-            // `synchronized (mc.theStateQueue) { println; System.in.read(); }`: the prompt is
-            // a plain line, not an MP message, and the run goes on after one byte. Reading
-            // it under the `stdin` lock is what the Java monitor does, since nothing else
-              // touches the queue while a worker waits (`TLCGetSet.java:518-535`).
+            // `synchronized (mc.theStateQueue) { println; System.in.read(); }`
+            // (`TLCGetSet.java:518-535`): the prompt is a plain line, not an MP message, and
+            // the run goes on after one byte. Both happen inside one critical section, so the
+            // lock comes first and no second pause can print its prompt in between. TLC holds
+            // the *state queue*, which also stops the other workers from dequeuing; with one
+            // worker there is nothing else to stop, and M6 has to take the queue here.
             "pause" => {
                 // `mainChecker instanceof ModelChecker`: with no model checker, nothing
                 // prompts and nothing is read.
                 if asked && ev.tool().main_checker().is_some() {
-                    ev.out().raw("Press enter to resume model checking.\n");
                     let mut stdin = ev.tool().stdin.lock().expect("stdin");
+                    ev.out().raw("Press enter to resume model checking.\n");
                     let mut byte = [0u8; 1];
                     // `catch (IOException e) { throw new EvalException(EC.GENERAL, e.getMessage()) }`;
                     // end of file is `read() == -1`, not an exception, so the run resumes.
