@@ -825,7 +825,7 @@ impl<'a> ModelChecker<'a> {
         // (`TLCTrace.java:350-370`).
         if fps.len() <= 1 {
             self.out.error(Ec::TLC_BEHAVIOR_UP_TO_THIS_POINT, &[]);
-            let step = tlars_tool::StateInfo { state: cur.state.clone(), action: None };
+            let step = tlars_tool::StateInfo { state: cur.state.clone(), action: None, fp: None };
             match &succ {
                 // `printInvariantViolationStateTraceState(new TLCStateInfo(s1))`, the one
                 // trace print that does not go through `evalAlias`.
@@ -921,7 +921,7 @@ impl<'a> ModelChecker<'a> {
             Ok(Some((state, action))) => {
                 match ev.complete(&state) {
                     Some(complete) => {
-                        let step = tlars_tool::StateInfo { state: complete.clone(), action: Some(action) };
+                        let step = tlars_tool::StateInfo { state: complete.clone(), action: Some(action), fp: None };
                         let mut trace = trace.to_vec();
                         trace.push(complete.clone());
                         // `evalAlias(sinfo, s2, ..)` with `sinfo` the state itself: `s2` is
@@ -991,9 +991,11 @@ impl<'a> ModelChecker<'a> {
         let shown = ev.print_aliased(&aliased, if difftrace { prev } else { None })?;
         // `currentStateInfo.fingerPrint()` for the `fp:` field: a value a variable may not
         // hold fails here, and the failure replaces the rest of the trace. An alias that
-        // leaves a variable unbound has no fingerprint, which TLC prints as `-1`.
+        // leaves a variable unbound has no fingerprint, which TLC prints as `-1`. A step the
+        // trace was looked up by carries that fingerprint and answers with it, so the `fp:`
+        // of the trace's initial state is the original state's even under an ALIAS.
         let fp = match ev.aliased_fingerprint(&aliased)? {
-            Some(fp) => fp.raw() as i64,
+            Some(computed) => step.fp.unwrap_or(computed).raw() as i64,
             None => -1,
         };
         self.out.state(Ec::TLC_STATE_PRINT2, &[&number.to_string(), &label, &shown, &fp.to_string()]);

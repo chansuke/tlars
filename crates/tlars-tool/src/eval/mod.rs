@@ -158,6 +158,12 @@ impl CallStack {
 pub struct StateInfo {
     pub state: State,
     pub action: Option<ActionId>,
+    /// `TLCStateInfo.fp`, the fingerprint the step was looked up by. `fingerPrint()` answers
+    /// with it when it is there and computes one from the state otherwise, and
+    /// `AliasTLCStateInfo` copies it, so a step that carries one prints the fingerprint of
+    /// the original state even where an ALIAS replaced the variables. Only `getState(fp)`
+    /// sets it (`Tool.java:3759`); the successor lookups leave it empty.
+    pub fp: Option<Fp>,
 }
 
 /// `IStateFunctor`: receives every initial state generated (`DoInitFunctor`).
