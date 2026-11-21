@@ -1369,8 +1369,12 @@ fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: 
 /// `Spec.getCounterExampleDef()` (`Spec.java:337-356`). `processModuleOverrides` leaves an
 /// `EvaluatingValue` under the name only for `TLCExt!CounterExample`'s Java method, so a
 /// definition of the spec's own fails the check whatever the cfg asks for.
+///
+/// TLC asks this only once the search is over, so the lookup must not intern the name: a
+/// token handed out here would shift every string the run interns afterwards.
 fn config_counter_example(tool: &Tool, defns: &Defns) -> CounterExampleDef {
-    match defn_of(defns, &tool.graph, "CounterExample") {
+    let Some(name) = tool.graph.interner().interned("CounterExample") else { return CounterExampleDef::Absent };
+    match defns.get(&name).cloned().flatten() {
         None => CounterExampleDef::Absent,
         Some(OpBinding::Native(_) | OpBinding::Unimplemented) => CounterExampleDef::Evaluating,
         Some(_) => CounterExampleDef::NotEvaluating,

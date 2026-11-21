@@ -96,6 +96,13 @@ impl Interner {
         a
     }
 
+    /// The atom of `s` if it has one already, without handing out a token. A table lookup
+    /// that only decides whether a name is known uses it, so asking the question cannot
+    /// shift the order of the strings interned after it.
+    pub fn interned(&self, s: &str) -> Option<Atom> {
+        self.table.read().expect("intern table").index.get(s).copied()
+    }
+
     /// `UniqueString.uidToUniqueString`: the atom with token `tok`, if handed out.
     pub fn uid_to_atom(&self, tok: i32) -> Option<Atom> {
         let n = self.len();
