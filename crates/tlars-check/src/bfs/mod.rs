@@ -65,6 +65,21 @@ impl ErrSlot {
         *slot = Some(Recorded { state, ec, keep_call_stack });
         true
     }
+
+    /// `AbstractChecker.errState`, as `modelCheckImpl` prints it beside the message of an
+    /// exception raised after `doInit`: the state a violation of the initial predicate
+    /// names, and nothing for an error that names no single state.
+    pub(crate) fn error_state(&self) -> Option<State> {
+        let slot = self.first.lock().expect("error slot");
+        match &slot.as_ref()?.state {
+            ErrState::InvariantInitial { state, .. } => Some(state.clone()),
+            ErrState::Invariant { state, .. } | ErrState::ImpliedAction { state, .. } => Some(state.clone()),
+            ErrState::Deadlock { state } => Some(state.state.clone()),
+            ErrState::Eval { pred, .. } => Some(pred.state.clone()),
+            ErrState::Incomplete { pred, .. } => Some(pred.state.clone()),
+            ErrState::Liveness => None,
+        }
+    }
 }
 
 /// Per-worker counters (`Worker.statesGenerated`, `maxLevel`), summed by the reader.
@@ -213,11 +228,24 @@ impl<'a> ModelChecker<'a> {
             Err((ec, summary)) => {
                 if summary {
                     self.print_summary(false);
-                } else {
-                    // `doInit` recorded an error code rather than throwing: the
-                    // postconditions still run, over the error state as counterexample,
-                    // and whatever they report does not change the code (`:160-169`).
-                    self.run_postconditions(&mut locals, true);
+                    return ec;
+                }
+                // `doInit` recorded an error code rather than throwing: the postconditions
+                // still run, over the error state as counterexample, and whatever they
+                // report does not change the code (`:160-169`). An exception from one of
+                // their lookups is a different matter: it is raised inside
+                // `modelCheckImpl`'s own `try`.
+                let mut ev = self.tool.ev(&mut locals, self.out);
+                if let Some(e) = ev.postcondition_exception(true) {
+                    return self.init_postcondition_failed(&mut locals, &e);
+                }
+                if ev.needs_counter_example() {
+                    self.out.error(Ec::GENERAL, &["tlars does not implement TLCExt!CounterExample yet (M3 unit 6)"]);
+                    return ec;
+                }
+                if let Err((ec, params)) = ev.check_postconditions() {
+                    let params: Vec<&str> = params.iter().map(String::as_str).collect();
+                    self.out.error(ec, &params);
                 }
                 return ec;
             }
@@ -255,7 +283,7 @@ impl<'a> ModelChecker<'a> {
         if !errored {
             // `result = tool.checkPostCondition()` before 2193: a failing postcondition is
             // the run's result and `reportSuccess` is skipped (`ModelChecker.java:287-295`).
-            result = self.run_postconditions(&mut locals, false);
+            result = self.run_postconditions(&mut locals);
             if result != Ec::NO_ERROR {
                 self.print_summary(false);
                 return result;
@@ -717,7 +745,13 @@ impl<'a> ModelChecker<'a> {
             }
         }
         // `tool.checkPostConditionWithCounterExample(new CounterExample(trace, isConsole))`.
-        // The code it reports never becomes the run's: the counterexample's does.
+        // The code it reports never becomes the run's: the counterexample's does. An
+        // exception from one of its lookups leaves `Worker.doNext` for `Worker.run`'s
+        // `catch (Throwable)`, whose `setErrState(.., EC.GENERAL)` answers false because the
+        // violation already recorded one, so nothing at all is printed (`Worker.java:618`).
+        if ev.postcondition_exception(true).is_some() {
+            return;
+        }
         if ev.needs_counter_example() {
             self.out.error(Ec::GENERAL, &["tlars does not implement TLCExt!CounterExample yet (M3 unit 6)"]);
             return;
@@ -773,13 +807,15 @@ impl<'a> ModelChecker<'a> {
         }
     }
 
-    /// `tool.checkPostCondition()` / `checkPostConditionWithCounterExample(..)` and the
-    /// `MP.printError` of whatever they report. Returns the code so the caller can make it
-    /// the run's result where TLC does.
-    fn run_postconditions(&self, locals: &mut WorkerLocals, counter_example: bool) -> Ec {
+    /// `tool.checkPostCondition()` after a clean run (`ModelChecker.java:292`), which is
+    /// outside every `try` of `modelCheckImpl`: an exception from its lookup travels out to
+    /// `TLC.process`, which reports it as a `java.lang.RuntimeException`. Returns the code so
+    /// the caller can make it the run's result.
+    fn run_postconditions(&self, locals: &mut WorkerLocals) -> Ec {
         let mut ev = self.tool.ev(locals, self.out);
-        if counter_example && ev.needs_counter_example() {
-            return self.out.error(Ec::GENERAL, &["tlars does not implement TLCExt!CounterExample yet (M3 unit 6)"]);
+        if let Some(e) = ev.postcondition_exception(false) {
+            let body = tlars_msg::unexpected_exception(java_class(&e), &e.message);
+            return self.out.error(Ec::GENERAL, &[&body]);
         }
         match ev.check_postconditions() {
             Ok(()) => Ec::NO_ERROR,
@@ -788,6 +824,39 @@ impl<'a> ModelChecker<'a> {
                 self.out.error(ec, &params)
             }
         }
+    }
+
+    /// `modelCheckImpl`'s own `catch (Throwable e)` (`ModelChecker.java:170-224`) for an
+    /// exception that `checkPostConditionWithCounterExample` raised after `doInit` recorded a
+    /// violation: 2102 carries the message and the error state, `doInit` is replayed under a
+    /// `CallStackTool`, and the exception's code ends the run instead of the violation's.
+    fn init_postcondition_failed(&mut self, locals: &mut WorkerLocals, e: &EvalError) -> Ec {
+        // `if (e instanceof Assert.TLCRuntimeException) result = e.errorCode; else result =
+        // EC.GENERAL` (`ModelChecker.java:178-182`). `EvalException` extends
+        // `StatefulRuntimeException`, not `TLCRuntimeException`, so only an `Assert.fail`
+        // hands its own code over.
+        let ec = if matches!(e.kind, tlars_tool::EvalErrorKind::Runtime) { e.ec } else { Ec::GENERAL };
+        match self.err.error_state() {
+            Some(state) => {
+                let shown = {
+                    let mut ev = self.tool.ev(locals, self.out);
+                    ev.print_state(&state, None)
+                };
+                match shown {
+                    Ok(shown) => self.out.error(Ec::TLC_INITIAL_STATE, &[&e.message, &shown]),
+                    Err(e) => {
+                        let body = tlars_msg::unexpected_exception(java_class(&e), &e.message);
+                        return self.out.error(Ec::GENERAL, &[&body]);
+                    }
+                };
+            }
+            None => {
+                self.out.error(Ec::GENERAL, &[&e.message]);
+            }
+        }
+        let result = self.replay_init_call_stack(ec);
+        self.print_summary(false);
+        result
     }
 
     /// `ModelChecker.doNext` (`ModelChecker.java:416-480`), which the replay runs instead of

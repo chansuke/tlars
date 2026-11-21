@@ -76,6 +76,20 @@ pub(crate) struct AliasSpec {
     pub(crate) trace_symbol: Option<tlars_sany::graph::SymbolRef>,
 }
 
+/// `Spec.getCounterExampleDef()` (`Spec.java:337-356`): what `defns` holds for
+/// `CounterExample`, which decides whether the counterexample is bound at all.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CounterExampleDef {
+    /// `defns.get("CounterExample") == null`: not used anywhere in the spec, so the
+    /// POSTCONDITIONs are checked with an empty context.
+    Absent,
+    /// The `EvaluatingValue` of `TLCExt!CounterExample`, which binds the printed trace.
+    Evaluating,
+    /// Anything else under that name, a definition of the spec's own among them:
+    /// `Assert.fail(EC.GENERAL)`, whatever the cfg asks for.
+    NotEvaluating,
+}
+
 /// Temporal part handed to the liveness checker (`Liveness.parseLiveness` input).
 pub struct Temporal {
     pub fairness: Box<[(ExprId, Ctx)]>,
@@ -105,12 +119,14 @@ pub struct Tool {
     /// The cfg's `_POSSIBLE` predicates, in cfg order. They are checked ahead of
     /// `postconditions`, as `getPostConditionSpecs()` orders them.
     pub(crate) possible: Box<[PossibleCheck]>,
-    /// The framed message of the `Assert.fail` that `getPostConditionSpecs` raises on the
-    /// first name it cannot resolve. It leaves TLC with no postconditions at all.
-    pub(crate) postcondition_error: Option<String>,
-    /// Whether `TLCExt!CounterExample` is in scope, which is what `getCounterExampleDef`
-    /// tests before it binds the counterexample for `checkPostConditionWithCounterExample`.
-    pub(crate) counter_example: bool,
+    /// The `Assert.fail` that `getPostConditionSpecs` raises on the first name it cannot
+    /// resolve. It leaves TLC with no postconditions at all, and no `checkPostCondition*`
+    /// catches it, so each caller handles it where TLC does.
+    pub(crate) postcondition_error: Option<crate::error::EvalError>,
+    /// What `getCounterExampleDef()` finds, which every
+    /// `checkPostConditionWithCounterExample` asks for before it looks at the
+    /// POSTCONDITIONs.
+    pub(crate) counter_example: CounterExampleDef,
     /// Closed permutation group of SYMMETRY (`MVPerms`), empty if none.
     pub(crate) symmetry: Box<[MvPerm]>,
     pub(crate) temporal: Temporal,

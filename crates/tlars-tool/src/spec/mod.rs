@@ -15,12 +15,12 @@ mod bindings;
 pub(crate) use bindings::{Bindings, DeclBinding, OpBinding, OpRcd};
 
 use crate::ctx::Ctx;
-use crate::error::EvalErrorKind;
+use crate::error::{EvalError, EvalErrorKind};
 use crate::eval::expr::Builtin;
 use crate::eval::{EvalControl, WorkerLocals};
 use crate::globals::TlcGlobals;
 use crate::state::{StateRef, VarTable};
-use crate::tool::{NamedCheck, PossibleCheck, Tool};
+use crate::tool::{CounterExampleDef, NamedCheck, PossibleCheck, Tool};
 use crate::value::Value;
 use tlars_msg::{Ec, Report};
 use tlars_sany::Atom;
@@ -145,7 +145,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         postconditions: Box::new([]),
         possible: Box::new([]),
         postcondition_error: None,
-        counter_example: false,
+        counter_example: CounterExampleDef::Absent,
         symmetry: Box::new([]),
         temporal: crate::tool::Temporal { fairness: Box::new([]), properties: Box::new([]) },
         fp64: crate::fp64::Fp64::new(globals.fp_index),
@@ -842,7 +842,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     let view = config_view(config, tool, defns)?;
     let symmetry = config_symmetry(config, tool, unprocessed, out)?;
     let (postconditions, postcondition_error) = config_postconditions(config, tool, defns, out);
-    let counter_example = defns.contains_key(&graph.interner().intern("CounterExample"));
+    let counter_example = config_counter_example(tool, defns);
 
     // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
     tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
@@ -1339,11 +1339,11 @@ fn trace_symbol(graph: &SemanticGraph) -> Option<SymbolRef> {
 /// when the search is over. Every name must be a 0-arity definition of `defns`; the first
 /// one that is not raises an `Assert.fail` that escapes `checkPostCondition`, so TLC then
 /// checks nothing at all. The lookups are pure, so they run here and the message waits.
-fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> (Box<[NamedCheck]>, Option<String>) {
+fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> (Box<[NamedCheck]>, Option<EvalError>) {
     let graph = tool.graph.clone();
     let mut checks = Vec::new();
     for name in &config.postconditions {
-        let fail = |ec: Ec| Some(out.text(ec, &["post condition", name]));
+        let fail = |ec: Ec| Some(EvalError::runtime(ec, out.text(ec, &["post condition", name])));
         match defn_of(defns, &graph, name) {
             None => return (Box::new([]), fail(Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED)),
             Some(OpBinding::Replaced(d)) => {
@@ -1358,12 +1358,23 @@ fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: 
             // so a name that lands here may well be an ordinary definition for TLC.
             Some(OpBinding::Unimplemented) => {
                 let what = format!("the Java override of the POSTCONDITION {name} (M3 unit 6)");
-                return (Box::new([]), Some(format!("tlars does not implement {what} yet")));
+                return (Box::new([]), Some(EvalError::unimplemented(what)));
             }
             Some(_) => return (Box::new([]), fail(Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT)),
         }
     }
     (checks.into(), None)
+}
+
+/// `Spec.getCounterExampleDef()` (`Spec.java:337-356`). `processModuleOverrides` leaves an
+/// `EvaluatingValue` under the name only for `TLCExt!CounterExample`'s Java method, so a
+/// definition of the spec's own fails the check whatever the cfg asks for.
+fn config_counter_example(tool: &Tool, defns: &Defns) -> CounterExampleDef {
+    match defn_of(defns, &tool.graph, "CounterExample") {
+        None => CounterExampleDef::Absent,
+        Some(OpBinding::Native(_) | OpBinding::Unimplemented) => CounterExampleDef::Evaluating,
+        Some(_) => CounterExampleDef::NotEvaluating,
+    }
 }
 
 /// `Tool.getSymmetryPerms` (`Tool.java:3836-3943`), the other half of what
