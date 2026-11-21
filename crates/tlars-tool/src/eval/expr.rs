@@ -150,7 +150,11 @@ impl<'t> Ev<'t> {
                     let name = tool.graph.decl(d).name;
                     match s0.get(name, tool.vars.slot_of(name)) {
                         Some(v) => Resolved::Value(v.clone()),
-                        None => Resolved::Var(d),
+                        // `getVar` reads the node back only for a `VariableDeclKind` symbol
+                        // (`SymbolNodeValueLookupProvider.java:66-81`), so a constant with no
+                        // value stays what every other caller sees: nothing.
+                        None if is_var_decl => Resolved::Var(d),
+                        None => Resolved::Value(Value::Undef),
                     }
                 }
             },
