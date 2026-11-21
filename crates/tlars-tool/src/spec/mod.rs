@@ -258,11 +258,12 @@ impl CfgBind<'_> {
         Ok(())
     }
 
-    /// `processModuleOverrides` (`SpecProcessor.java:2119-2190`) for the standard modules:
-    /// each module named like a `tlc2.module` class has the bodies of its definitions (its
-    /// extended ones included) bound to the class's methods, and the method also lands in
-    /// `defns` under the definition's name. A later module rebinds a shared definition.
-    /// Methods tlars does not implement yet stay unimplemented natives.
+    /// `processModuleOverrides` (`SpecProcessor.java:2119-2330`): each definition that has a
+    /// Java override gets its body bound to that method, and the method also lands in `defns`
+    /// under the definition's name. A later module rebinds a shared definition. Methods tlars
+    /// does not implement yet stay unimplemented natives. Which definitions those are is
+    /// `modules::JAVA_OVERRIDES`, read out of the pinned Java; a definition of `_Possible` or
+    /// `TLCExt` that has no Java method behind it is an ordinary TLA+ definition.
     fn module_overrides(&mut self) {
         let graph = self.graph;
         // `TLCBuiltInOverrides.get()` hands over class *literals*, and reading a method's
@@ -272,21 +273,16 @@ impl CfgBind<'_> {
         // `tlc2.tool.Action` does load here (measured against TLC, see
         // `fidelity::class_statics`), and tlars has no earlier step that builds an action.
         graph.interner().ensure(tlars_sany::JavaClass::Action);
-        for (mid, m) in graph.modules() {
+        for (_, m) in graph.modules() {
             let module = graph.interner().text(m.name);
-            if !crate::modules::JAVA_MODULES.contains(&&*module) {
-                continue;
-            }
             for &d in m.op_defs.iter() {
                 let def = graph.op_def(d);
                 let Some(body) = def.body else { continue };
                 let name = graph.interner().text(def.name);
+                let Some(java) = crate::modules::java_override(&module, &name) else { continue };
                 let binding = match crate::modules::NativeId::of_module(&module, &name) {
                     Some(id) => OpBinding::Native(id),
-                    None if def.module == mid => {
-                        OpBinding::Unimplemented { min_level: crate::modules::unimplemented_min_level(&module, &name) }
-                    }
-                    None => continue,
+                    None => OpBinding::Unimplemented { min_level: java.min_level },
                 };
                 self.bodies[body.index()] = Some(binding.clone());
                 self.defns.insert(def.name, Some(binding));

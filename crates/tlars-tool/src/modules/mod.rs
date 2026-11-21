@@ -7,14 +7,22 @@
 //! Naturals ends up bound to `Integers.Plus`. Overrides replace bodies for *evaluation
 //! only*; SANY still level-checks the TLA+ text. User `.class` overrides are not supported
 //! in v1 (see DESIGN.md).
+//!
+//! Which definitions have an override at all is [`java_overrides::JAVA_OVERRIDES`], read out
+//! of the pinned Java by `xtask gen-fidelity`. [`REGISTRY`] is the part of it tlars
+//! implements; the rest stops evaluation as unimplemented. Everything else, including the
+//! other definitions of a module that does have a Java class, is an ordinary TLA+ definition.
 
 mod finite_sets;
+mod java_overrides;
 mod naturals;
 mod sequences;
 pub(crate) mod tlc;
 mod tlc_get_set;
 
 pub(crate) use naturals::eval_exception;
+
+pub(crate) use java_overrides::{JAVA_OVERRIDES, JavaOverride};
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
@@ -123,39 +131,12 @@ natives! {
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
 }
 
-/// `@Evaluation(minLevel = ...)` / `@TLAPlusOperator(minLevel = ...)` of the overrides tlars
-/// does not implement yet. Every other method in `tlc2.module` keeps the annotation's default
-/// of 0, so only these appear here: a level of 1 or more is what keeps a definition out of
-/// `processConstantDefns` (`SymbolNodeValueLookupProvider.java:270-276`).
-static UNIMPLEMENTED_MIN_LEVELS: &[(&str, &str, u8)] = &[
-    // `TLCExt.java:100`, `LevelConstants.ActionLevel`.
-    ("TLCExt", "PickSuccessor", 2),
-    // `TLCExt.java:198`, `TLCExt.java:210`.
-    ("TLCExt", "CounterExample", 1),
-    ("TLCExt", "Trace", 1),
-    // `_Possible.java:52`, `LevelConstants.VariableLevel`.
-    ("_Possible", "_Counts", 1),
-    // `_JsonTrace.java:39`, `_TLCTrace.java:87`.
-    ("_JsonTrace", "_TLCState", 1),
-    ("_TLCTrace", "_TLCState", 1),
-];
-
-/// The `minLevel` of the Java override of `module!tla_name`, 0 where the annotation leaves
-/// the default or the definition has no override at all.
-pub(crate) fn unimplemented_min_level(module: &str, tla_name: &str) -> u8 {
-    UNIMPLEMENTED_MIN_LEVELS
-        .iter()
-        .find(|(m, n, _)| *m == module && *n == tla_name)
-        .map_or(0, |&(_, _, level)| level)
+/// The Java override `processModuleOverrides` binds to `module!tla_name`, if any. A
+/// definition with no entry here is an ordinary TLA+ definition, evaluated from its body,
+/// whatever the module it lives in is named.
+pub(crate) fn java_override(module: &str, tla_name: &str) -> Option<&'static JavaOverride> {
+    JAVA_OVERRIDES.iter().find(|o| o.module == module && o.tla_name == tla_name)
 }
-
-/// The `tlc2.module` classes. A module with one of these names has its own definitions
-/// bound to unimplemented natives first and then to [`REGISTRY`]'s, so a definition TLC
-/// overrides in Java is never evaluated from its TLA+ body.
-pub(crate) const JAVA_MODULES: &[&str] = &[
-    "AnySet", "Bags", "FiniteSets", "Integers", "Json", "Naturals", "Randomization", "Sequences", "Strings", "TLC",
-    "TLCEval", "TLCExt", "TLCGetSet", "TransitiveClosure", "_JsonTrace", "_Possible", "_TLCTrace",
-];
 
 impl NativeId {
     pub(crate) fn of_module(module: &str, tla_name: &str) -> Option<NativeId> {
@@ -223,4 +204,35 @@ fn wrap(ev: &Ev<'_>, op: &NativeOp, e: EvalError) -> EvalError {
     }
     let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[op.signature, &e.message]);
     EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{JAVA_OVERRIDES, REGISTRY, java_overrides::OverrideKind, java_override};
+
+    /// Every native stands for a Java override TLC really has, with the same `minLevel` and,
+    /// where TLC wraps the method in a `MethodValue`, the same parameter count. A native for
+    /// an operator TLC evaluates from its TLA+ body would be a parity bug that no corpus case
+    /// need cover.
+    #[test]
+    fn every_native_mirrors_a_java_override() {
+        for op in REGISTRY {
+            let o = java_override(op.module, op.tla_name)
+                .unwrap_or_else(|| panic!("{}!{} is a native but TLC has no override for it", op.module, op.tla_name));
+            assert_eq!(op.min_level, o.min_level, "{}!{} minLevel", op.module, op.tla_name);
+            if o.kind == OverrideKind::Method {
+                assert_eq!(op.params.len(), usize::from(o.params), "{}!{} arity of {}", op.module, op.tla_name, o.java);
+            }
+        }
+    }
+
+    /// The generated table is keyed by `(module, tla_name)`, so a repeated key would make
+    /// `java_override` pick by position.
+    #[test]
+    fn java_overrides_are_unique() {
+        for (i, o) in JAVA_OVERRIDES.iter().enumerate() {
+            let first = JAVA_OVERRIDES.iter().position(|p| (p.module, p.tla_name) == (o.module, o.tla_name));
+            assert_eq!(first, Some(i), "{}!{} appears twice", o.module, o.tla_name);
+        }
+    }
 }

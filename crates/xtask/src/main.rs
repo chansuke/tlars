@@ -4,7 +4,8 @@
 //!
 //!   xtask gen-fidelity [--check]   class-static UniqueStrings, BuiltInOperators, Operators +
 //!                                  synonyms, SyntaxTreeConstants names, StandardModules/*.tla,
-//!                                  FP64.Polys, EC/MP catalogue cross-check
+//!                                  FP64.Polys, EC/MP catalogue cross-check, the Java module
+//!                                  override set (tlc2/module)
 //!   xtask bench run|compare      end-to-end benchmarks over tlaplus/Examples (see bench.rs)
 //!   xtask jj2rs emit [--check]     TLC's JavaCC parser, its token manager and SANY's parser
 //!                                  support classes -> tlars-sany/src/parser/generated.rs, so
@@ -23,6 +24,7 @@
 mod bench;
 mod catalog;
 mod conformance;
+mod java_overrides;
 mod jj2rs;
 mod json;
 
@@ -145,7 +147,11 @@ fn gen_fidelity(tlaplus: &Path, check: bool) -> Result<(), String> {
         path: workspace_root().join("crates/tlars-sany/src/error_codes.rs"),
         contents: catalog::sany_error_codes(&tlc, &cat)?,
     };
-    let mut outputs = vec![fp64_polys(&tlc)?, msg_catalog, sany_codes];
+    let java_overrides = Generated {
+        path: workspace_root().join("crates/tlars-tool/src/modules/java_overrides.rs"),
+        contents: java_overrides::generate(&tlc)?,
+    };
+    let mut outputs = vec![fp64_polys(&tlc)?, msg_catalog, sany_codes, java_overrides];
     outputs.extend(standard_modules(&tlc)?);
     let mut stale = Vec::new();
     for out in &outputs {
