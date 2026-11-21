@@ -3,6 +3,12 @@
 //! exit status and normalised `-tool` transcript TLC at the pinned revision produced for it
 //! (recorded by `tools/golden/spec_golden.sh`). tlars runs the same arguments in-process and
 //! must agree on both.
+//!
+//! A fixture holding a `blocked` file asks for the opposite: tlars must stop at a construct
+//! it does not implement and say so, because TLC's output depends on something tlars has no
+//! way to produce. Agreeing by accident is a failure there too, as it is in
+//! `xtask conformance run`, and so is still announcing a construct for a fixture with no
+//! `blocked` file.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -61,7 +67,7 @@ fn materialize(case: &str, dir: &Path) -> Vec<String> {
         let text = std::fs::read_to_string(&path).expect("fixture file");
         if name == "args" {
             extra.extend(text.lines().filter(|l| !l.is_empty()).map(str::to_string));
-        } else {
+        } else if name != "blocked" {
             std::fs::write(dir.join(&name), text).expect("write fixture");
         }
     }
@@ -77,7 +83,9 @@ fn materialize(case: &str, dir: &Path) -> Vec<String> {
 }
 
 /// tlars on one fixture, in-process on a thread with a stack as large as TLC's `-Xss`.
-fn run_tlars(case: &str) -> (i32, String) {
+/// The flag is `EvalError::unimplemented` reported out of band, as the corpus harness reads
+/// it: a spec's own `Print` could otherwise imitate the text.
+fn run_tlars(case: &str) -> (i32, String, bool) {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("spec_golden").join(case);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).expect("clear scratch");
@@ -85,7 +93,8 @@ fn run_tlars(case: &str) -> (i32, String) {
     std::fs::create_dir_all(&dir).expect("scratch");
     let args = materialize(case, &dir);
     let out = Captured::default();
-    let (captured, scratch) = (out.clone(), dir.clone());
+    let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (captured, scratch, announced) = (out.clone(), dir.clone(), flag.clone());
     let status = std::thread::Builder::new()
         .stack_size(256 << 20)
         .spawn(move || {
@@ -97,14 +106,15 @@ fn run_tlars(case: &str) -> (i32, String) {
                 stderr: Box::new(std::io::sink()),
                 stdin: Box::new(std::io::empty()),
                 env: tlars_check::Env::hermetic(),
-                unimplemented: None,
+                unimplemented: Some(announced),
             })
         })
         .expect("spawn")
         .join()
         .expect("tlars panicked");
     let text = String::from_utf8_lossy(&out.0.lock().expect("lock")).into_owned();
-    (status as i32, transcript::normalize(&text, &dir.display().to_string(), true))
+    let transcript = transcript::normalize(&text, &dir.display().to_string(), true);
+    (status as i32, transcript, flag.load(std::sync::atomic::Ordering::Relaxed))
 }
 
 #[test]
@@ -119,8 +129,17 @@ fn spec_runs_match_tlc() {
         let expected_status: i32 = f[1].parse().expect("status");
         let expected = unescape(f[2]);
         cases.push(case.to_string());
-        let (status, actual) = run_tlars(case);
-        if status != expected_status || actual.trim_end() != expected.trim_end() {
+        let (status, actual, announced) = run_tlars(case);
+        let blocked = specs_dir().join(case).join("blocked").exists();
+        if blocked {
+            if !announced {
+                failures.push(format!("{case}: tlars no longer stops at an unimplemented construct; drop the `blocked` file\n  tlars ({status}):\n{actual}"));
+            }
+            continue;
+        }
+        if announced {
+            failures.push(format!("{case}: tlars stopped at an unimplemented construct\n  tlars ({status}):\n{actual}"));
+        } else if status != expected_status || actual.trim_end() != expected.trim_end() {
             failures.push(format!("{case}\n  tlars ({status}):\n{actual}\n  tlc   ({expected_status}):\n{expected}"));
         }
     }
