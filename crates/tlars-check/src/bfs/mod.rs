@@ -17,7 +17,9 @@ use std::sync::Mutex;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{AtomicU32, AtomicU64};
 use tlars_msg::{Ec, Report};
-use tlars_tool::{ActionId, CheckId, Ev, EvalError, Flow, Halt, ImpliedAction, Invariant, PartialState, State, Tool, WorkerLocals};
+use tlars_tool::{
+    ActionId, CheckId, Ev, EvalError, Flow, Halt, ImpliedAction, Invariant, PartialState, State, StateRef, Tool, WorkerLocals,
+};
 
 /// `ModelChecker.modelCheck` (`ModelChecker.java:133-352`), with `TLC.process`'s `RunMode`
 /// branch above it. The caller already printed the banner.
@@ -702,7 +704,18 @@ impl<'a> ModelChecker<'a> {
     /// The rebuild regenerates states, so anything the initial predicate or the next-state
     /// relation prints is printed again.
     pub(crate) fn post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool) {
-        self.rebuild_post_condition_trace(ev, cur, succ, written);
+        let Some(trace) = self.rebuild_post_condition_trace(ev, cur, succ, written) else { return };
+        // The ALIAS over each action of the trace, before the trace is wrapped in a
+        // `CounterExample` (`Worker.java:666-674`). It is the `Context.Empty` overload, so
+        // `TLCExt!Trace` is not bound, and what it prints or writes to a register is what a
+        // POSTCONDITION then sees. An error it does not catch itself leaves `doPostCondition`
+        // without checking anything.
+        for i in 0..trace.len() {
+            let successor = if i + 1 < trace.len() { &trace[i + 1] } else { &trace[i] };
+            if ev.eval_alias(&trace[i], StateRef::Full(successor), None).is_err() {
+                return;
+            }
+        }
         // `tool.checkPostConditionWithCounterExample(new CounterExample(trace, isConsole))`.
         // The code it reports never becomes the run's: the counterexample's does.
         if ev.needs_counter_example() {
@@ -715,38 +728,47 @@ impl<'a> ModelChecker<'a> {
         }
     }
 
-    fn rebuild_post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool) {
+    /// The trace `doPostCondition` builds, regenerating every state as `tlc.getTraceInfo`
+    /// and `tool.getState` do, so anything the initial predicate or the next-state relation
+    /// prints is printed again. `None` is the `ArrayIndexOutOfBoundsException` an incomplete
+    /// successor raises, which leaves `doPostCondition` before the ALIAS pass.
+    fn rebuild_post_condition_trace(
+        &self,
+        ev: &mut Ev<'_>,
+        cur: &Queued,
+        succ: Option<Succ<'_>>,
+        written: bool,
+    ) -> Option<Vec<State>> {
         let fps = self.traces.fingerprints_to(cur.ptr);
-        let prefix_of_cur = |ev: &mut Ev<'_>| {
+        let prefix_of_cur = |ev: &mut Ev<'_>| -> Option<Vec<State>> {
             // `tlc.getTraceInfo(curState)` followed by `tool.getState(curState, last)`.
-            if let Ok(Some(steps)) = crate::trace::reconstruct(ev, &fps[..fps.len() - 1])
-                && let Some(last) = steps.last()
-            {
-                let (pred, pred_fp) = (last.state.clone(), fps[fps.len() - 2]);
-                let _ = ev.successor_from_fp(&pred, pred_fp, cur.fp);
-            }
+            let steps = crate::trace::reconstruct(ev, &fps[..fps.len() - 1]).ok()??;
+            let last = steps.last()?;
+            let (pred, pred_fp) = (last.state.clone(), fps[fps.len() - 2]);
+            let mut trace: Vec<State> = steps.iter().map(|s| s.state.clone()).collect();
+            trace.push(ev.successor_from_fp(&pred, pred_fp, cur.fp).ok()??.state);
+            Some(trace)
         };
         match succ {
             // `curState.isInitial() && succState == null`: the initial state alone.
-            None if fps.len() <= 1 => {
-                let _ = ev.state_from_fp(cur.fp);
-            }
+            None if fps.len() <= 1 => Some(vec![ev.state_from_fp(cur.fp).ok()??.state]),
             None => prefix_of_cur(ev),
-            // An incomplete successor has no trace record, and `getTraceInfo` fails on it
-            // before anything is regenerated.
-            Some(Succ::Partial(_)) => {}
+            // An incomplete successor was never written to the trace, so `getTraceInfo`
+            // indexes past its end and nothing is regenerated or checked.
+            Some(Succ::Partial(_)) => None,
             Some(Succ::Complete(state)) => {
-                let Ok(fp) = ev.fingerprint(state) else { return };
-                if written {
+                let fp = ev.fingerprint(state).ok()?;
+                let mut trace = if written {
                     // `getTraceInfo(succState)` is the trace up to and including `cur`.
-                    let _ = crate::trace::reconstruct(ev, &fps);
+                    crate::trace::reconstruct(ev, &fps).ok()??.iter().map(|s| s.state.clone()).collect()
                 } else if fps.len() <= 1 {
                     // Fully assigned but never written, from an initial state.
-                    let _ = ev.state_from_fp(cur.fp);
+                    vec![ev.state_from_fp(cur.fp).ok()??.state]
                 } else {
-                    prefix_of_cur(ev);
-                }
-                let _ = ev.successor_from_fp(&cur.state, cur.fp, fp);
+                    prefix_of_cur(ev)?
+                };
+                trace.push(ev.successor_from_fp(&cur.state, cur.fp, fp).ok()??.state);
+                Some(trace)
             }
         }
     }
