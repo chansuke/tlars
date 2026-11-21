@@ -126,7 +126,8 @@ impl PartialState {
     pub(crate) fn snapshot(&self) -> Snapshot {
         Snapshot(self.slots.clone())
     }
-    pub(crate) fn copy(&self) -> PartialState {
+    /// `TLCState.copy()`.
+    pub fn copy(&self) -> PartialState {
         PartialState { slots: self.slots.clone(), level: self.level }
     }
     pub(crate) fn from_values(values: &[Value]) -> PartialState {

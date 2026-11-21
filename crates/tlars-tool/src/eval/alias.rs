@@ -20,8 +20,10 @@ const EVAL_ERROR: &str = "_ALIASEvalError";
 /// One trace state as `evalAlias` left it: either the state itself (no ALIAS, or an ALIAS
 /// that is not a record) or the alias record with the state its variable-named fields bind.
 pub struct Aliased {
-    /// `AliasTLCStateInfo.getOriginalState()`.
-    pub(crate) original: State,
+    /// `AliasTLCStateInfo.getOriginalState()`. The last state of a counterexample may be a
+    /// successor the next-state relation left incomplete, which TLC holds as a state with
+    /// nulls in it, so this is the partial form.
+    pub(crate) original: PartialState,
     pub(crate) record: Option<AliasRecord>,
 }
 
@@ -34,19 +36,14 @@ pub(crate) struct AliasRecord {
 }
 
 impl Aliased {
-    fn plain(original: State) -> Aliased {
+    fn plain(original: PartialState) -> Aliased {
         Aliased { original, record: None }
-    }
-    /// Whether the state that gets printed is the original one, which decides what
-    /// `-difftrace` diffs against (`StatePrinter.getPreviousState`).
-    fn is_original(&self) -> bool {
-        self.record.is_none()
     }
     /// `lookup(var)` of the state being printed: the derived state first, then the record's
     /// own fields, so a field that is not a variable is still found.
     fn lookup(&self, name: Atom, vars: &crate::state::VarTable) -> Option<Value> {
         match &self.record {
-            None => vars.slot_of(name).map(|slot| self.original.get(slot).clone()),
+            None => vars.slot_of(name).and_then(|slot| self.original.lookup(slot)).cloned(),
             Some(rcd) => {
                 if let Some(slot) = vars.slot_of(name)
                     && let Some(v) = rcd.state.lookup(slot)
@@ -69,8 +66,8 @@ impl Ev<'_> {
     /// `trace` is the behaviour up to and including `current`, which the `Supplier` overload
     /// binds to `TLCExt!Trace`. `None` is the `Context.Empty` overload the initial-state
     /// printer and `Worker.doPostCondition` use.
-    pub fn eval_alias(&mut self, current: &State, successor: StateRef<'_>, trace: Option<&[State]>) -> EvalResult<Aliased> {
-        let Some(alias) = &self.tool.alias else { return Ok(Aliased::plain(current.clone())) };
+    pub fn eval_alias(&mut self, current: &PartialState, successor: StateRef<'_>, trace: Option<&[PartialState]>) -> EvalResult<Aliased> {
+        let Some(alias) = &self.tool.alias else { return Ok(Aliased::plain(current.copy())) };
         let body = alias.body.clone();
         let trace_symbol = alias.trace_symbol;
         let message = match body {
@@ -78,14 +75,17 @@ impl Ev<'_> {
             Ok(body) => {
                 let ctx = match (trace, trace_symbol) {
                     (Some(states), Some(sym)) => {
-                        let records: Vec<Value> = states.iter().map(|s| self.state_record(s)).collect();
+                        let mut records: Vec<Value> = Vec::with_capacity(states.len());
+                        for s in states {
+                            records.push(self.state_record(s)?);
+                        }
                         crate::ctx::Ctx::EMPTY.cons(sym, crate::ctx::Binding::Value(Value::tuple(records)))
                     }
                     _ => crate::ctx::Ctx::EMPTY,
                 };
-                match self.eval(body, &ctx, StateRef::Full(current), successor, EvalControl::CLEAR) {
+                match self.eval(body, &ctx, StateRef::Partial(current), successor, EvalControl::CLEAR) {
                     Ok(v) => match self.alias_record(&v)? {
-                        Some(record) => return Ok(Aliased { original: current.clone(), record: Some(record) }),
+                        Some(record) => return Ok(Aliased { original: current.copy(), record: Some(record) }),
                         // `toState()` returned null: not a record, so TLC prints the state.
                         None => None,
                     },
@@ -97,35 +97,52 @@ impl Ev<'_> {
             }
         };
         match message {
-            None => Ok(Aliased::plain(current.clone())),
+            None => Ok(Aliased::plain(current.copy())),
             // `new RecordValue((RecordValue) current.toRecordValue(), _ALIASEvalError,
             // new StringValue(e.getMessage())).toState()`.
             Some(message) => {
                 let interner = self.tool.graph.interner().clone();
-                let mut names: Vec<Atom> = Vec::with_capacity(current.len() + 1);
-                let mut values: Vec<Value> = Vec::with_capacity(current.len() + 1);
-                for i in 0..current.len() {
+                let var_count = self.tool.var_count();
+                let mut names: Vec<Atom> = Vec::with_capacity(var_count + 1);
+                let mut values: Vec<Value> = Vec::with_capacity(var_count + 1);
+                for i in 0..var_count {
+                    let Some(value) = current.lookup(self.tool.vars.slot(i)) else {
+                        // `toRecordValue()` of a state with an unassigned variable puts a
+                        // null in the record, which every later read of it treats as its
+                        // own kind of value.
+                        return Err(EvalError::unimplemented(
+                            "an ALIAS that fails on a successor the next-state relation left incomplete (M3)".into(),
+                        ));
+                    };
                     names.push(self.tool.vars.names[i]);
-                    values.push(current.get(self.tool.vars.slot(i)).clone());
+                    values.push(value.clone());
                 }
                 names.push(interner.intern(EVAL_ERROR));
                 values.push(Value::Str(interner.intern(&message)));
                 let rcd = Value::Record(Value::record_arc(names, values, false));
                 let record = self.alias_record(&rcd)?.expect("a record converts to a state");
-                Ok(Aliased { original: current.clone(), record: Some(record) })
+                Ok(Aliased { original: current.copy(), record: Some(record) })
             }
         }
     }
 
     /// `new RecordValue(state)`: a record of every variable, in `vars[]` order.
-    fn state_record(&mut self, s: &State) -> Value {
-        let mut names = Vec::with_capacity(s.len());
-        let mut values = Vec::with_capacity(s.len());
-        for i in 0..s.len() {
+    fn state_record(&mut self, s: &PartialState) -> EvalResult<Value> {
+        let var_count = self.tool.var_count();
+        let mut names = Vec::with_capacity(var_count);
+        let mut values = Vec::with_capacity(var_count);
+        for i in 0..var_count {
+            let Some(value) = s.lookup(self.tool.vars.slot(i)) else {
+                // A record field holding a Java null, which every read of it then treats as
+                // its own kind of value.
+                return Err(EvalError::unimplemented(
+                    "TLCExt!Trace over a successor the next-state relation left incomplete (M3)".into(),
+                ));
+            };
             names.push(self.tool.vars.names[i]);
-            values.push(s.get(self.tool.vars.slot(i)).clone());
+            values.push(value.clone());
         }
-        Value::Record(Value::record_arc(names, values, false))
+        Ok(Value::Record(Value::record_arc(names, values, false)))
     }
 
     /// `Value.toState()` (`RecordValue.java:858-889`, `FcnRcdValue.java:659-666`): a record,
@@ -161,7 +178,13 @@ impl Ev<'_> {
     /// unchanged. An `_ALIASEvalError` field is always shown.
     pub fn print_aliased(&mut self, a: &Aliased, prev: Option<&Aliased>) -> EvalResult<String> {
         let Some(rcd) = &a.record else {
-            return self.print_state(&a.original, prev.map(|p| &p.original));
+            // `toString()` / `toString(lastState)` of the state itself. An incomplete
+            // successor prints its unassigned variables as `null` and is never diffed,
+            // because it is the last state of its trace.
+            return match (a.original.freeze(), prev.and_then(|p| p.original.freeze())) {
+                (Some(state), prev) => self.print_state(&state, prev.as_ref()),
+                (None, _) => Ok(self.print_partial_state(&a.original)),
+            };
         };
         let interner = self.tool.graph.interner().clone();
         let format_name = interner.intern(FORMAT);
@@ -205,7 +228,7 @@ impl Ev<'_> {
     /// initial state that violates an invariant or an implied init (`ModelChecker.java:1218`
     /// and `:1230`). It is the `Context.Empty` overload, so `TLCExt!Trace` is not bound.
     pub fn print_initial_violation(&mut self, s: &State) -> EvalResult<String> {
-        let aliased = self.eval_alias(s, StateRef::Full(s), None)?;
+        let aliased = self.eval_alias(&PartialState::from_state(s), StateRef::Full(s), None)?;
         self.print_aliased(&aliased, None)
     }
 
@@ -214,7 +237,10 @@ impl Ev<'_> {
     /// them has no fingerprint to print.
     pub fn aliased_fingerprint(&mut self, a: &Aliased) -> EvalResult<Option<Fp>> {
         match &a.record {
-            None => self.fingerprint(&a.original).map(Some),
+            None => match a.original.freeze() {
+                None => Ok(None),
+                Some(state) => self.fingerprint(&state).map(Some),
+            },
             Some(rcd) => match rcd.state.freeze() {
                 None => Ok(None),
                 Some(state) => self.fingerprint(&state).map(Some),

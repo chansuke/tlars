@@ -712,7 +712,7 @@ impl<'a> ModelChecker<'a> {
         // without checking anything.
         for i in 0..trace.len() {
             let successor = if i + 1 < trace.len() { &trace[i + 1] } else { &trace[i] };
-            if ev.eval_alias(&trace[i], StateRef::Full(successor), None).is_err() {
+            if ev.eval_alias(&PartialState::from_state(&trace[i]), StateRef::Full(successor), None).is_err() {
                 return;
             }
         }
@@ -835,17 +835,23 @@ impl<'a> ModelChecker<'a> {
                     let fp = ev.fingerprint(&cur.state)?.raw() as i64;
                     self.out.state(Ec::TLC_STATE_PRINT2, &["1", &label, &shown, &fp.to_string()]);
                 }
+                // `prefix` is `new TLCStateInfo[0]` once `s1` is initial
+                // (`ConcurrentTLCTrace.java:208-212`), so `TLCExt!Trace` is the empty tuple
+                // for both states, and `s2` answers a prime even where it is incomplete.
                 Some(succ) => {
-                    let next = match succ {
-                        Succ::Complete(state) => Some((*state).clone()),
-                        Succ::Partial(_) => None,
+                    let line = TraceLine {
+                        label: ev.state_label(&step),
+                        fp: None,
+                        next: succ.state_ref(),
+                        trace: &[],
+                        prev: None,
+                        number: 1,
                     };
-                    let trace = [cur.state.clone()];
-                    self.print_state(ev, &step, next.as_ref(), &trace, None, 1)?;
+                    self.print_line(ev, &PartialState::from_state(&cur.state), line)?;
                 }
             }
             if let Some(succ) = succ {
-                self.print_last(ev, &cur.state, cur.fp, succ, &[cur.state.clone()], 2)?;
+                self.print_last(ev, &cur.state, cur.fp, succ, &[], false, 2)?;
             }
             return Ok(());
         }
@@ -864,16 +870,24 @@ impl<'a> ModelChecker<'a> {
         };
         // `Trace` is the behaviour up to and including the state being printed, so it grows
         // as the trace is walked.
-        let mut trace: Vec<State> = Vec::with_capacity(prefix.len() + 2);
+        let mut trace: Vec<PartialState> = Vec::with_capacity(prefix.len() + 2);
         let mut printed: Option<tlars_tool::Aliased> = None;
         let mut number = 0;
         for (i, step) in prefix.iter().enumerate() {
             number += 1;
-            trace.push(step.state.clone());
+            trace.push(PartialState::from_state(&step.state));
             // Every state's successor is the next one in the trace; the last of the prefix
             // is followed by `s1`.
-            let next = prefix.get(i + 1).map(|s| s.state.clone()).unwrap_or_else(|| cur.state.clone());
-            printed = Some(self.print_state(ev, step, Some(&next), &trace, printed.as_ref(), number)?);
+            let next = prefix.get(i + 1).map(|s| &s.state).unwrap_or(&cur.state);
+            let line = TraceLine {
+                label: ev.state_label(step),
+                fp: step.fp,
+                next: StateRef::Full(next),
+                trace: &trace,
+                prev: printed.as_ref(),
+                number,
+            };
+            printed = Some(self.print_line(ev, &PartialState::from_state(&step.state), line)?);
         }
         // `s1` itself is regenerated from the last prefix state only *after* that state has
         // been printed, which is why a `Print` in the next-state relation shows up between
@@ -881,19 +895,19 @@ impl<'a> ModelChecker<'a> {
         let pred = prefix.last().expect("a prefix of at least one state").state.clone();
         let pred_fp = fps[fps.len() - 2];
         number += 1;
-        trace.push(cur.state.clone());
+        trace.push(PartialState::from_state(&cur.state));
         // `if (s2 == null) lastPrinted = null`: the final state of a trace is printed whole.
         let prev = succ.as_ref().and(printed.as_ref());
+        // `s2 == null ? sinfo.state : s2`: an incomplete successor is still `s2`.
         let next = match &succ {
-            Some(Succ::Complete(state)) => Some((*state).clone()),
-            // An incomplete successor is still `s2`, so `s1` is not the final state.
-            Some(Succ::Partial(_)) | None => None,
+            Some(succ) => succ.state_ref(),
+            None => StateRef::Full(&cur.state),
         };
-        if !self.print_successor(ev, &pred, pred_fp, Succ::Complete(&cur.state), next.as_ref(), &trace, prev, number)? {
+        if !self.print_successor(ev, &pred, pred_fp, &cur.state, next, &trace, prev, number)? {
             return Ok(());
         }
         if let Some(succ) = succ {
-            self.print_last(ev, &cur.state, cur.fp, succ, &trace, number + 1)?;
+            self.print_last(ev, &cur.state, cur.fp, succ, &trace, true, number + 1)?;
         }
         Ok(())
     }
@@ -910,31 +924,36 @@ impl<'a> ModelChecker<'a> {
         pred: &State,
         pred_fp: tlars_tool::Fp,
         succ: Succ<'_>,
-        trace: &[State],
+        trace: &[PartialState],
+        suffix: bool,
         number: usize,
     ) -> Result<bool, EvalError> {
         let target = match succ {
-            Succ::Complete(state) => tlars_tool::PartialState::from_state(state),
+            Succ::Complete(state) => PartialState::from_state(state),
             Succ::Partial(s1) => s1.copy_out(),
         };
         match ev.successor_matching(pred, pred_fp, &target) {
             Ok(Some((state, action))) => {
-                match ev.complete(&state) {
-                    Some(complete) => {
-                        let step = tlars_tool::StateInfo { state: complete.clone(), action: Some(action), fp: None };
-                        let mut trace = trace.to_vec();
-                        trace.push(complete.clone());
-                        // `evalAlias(sinfo, s2, ..)` with `sinfo` the state itself: `s2` is
-                        // the final state, so its own values answer a prime.
-                        self.print_state(ev, &step, Some(&complete), &trace, None, number)?;
-                    }
-                    None => {
-                        // An incomplete state has no fingerprint, so TLC prints `-1`.
-                        let label = ev.action_label(action);
-                        let shown = ev.print_partial_state(&state);
-                        self.out.state(Ec::TLC_STATE_PRINT2, &[&number.to_string(), &label, &shown, "-1"]);
-                    }
+                // `evalAlias(sinfo, s2, prefix, si1, sinfo)` (`TLCTrace.java:439`) binds
+                // `Trace` to the prefix and the two states after it. The initial-`s1`
+                // branch calls the overload without a suffix, so there `Trace` stays the
+                // empty prefix (`TLCTrace.java:368`).
+                let mut trace: Vec<PartialState> = trace.iter().map(PartialState::copy).collect();
+                if suffix {
+                    trace.push(state.copy());
                 }
+                // `evalAlias(sinfo, s2, ..)` with `sinfo` the state itself: `s2` is the
+                // final state, so its own values answer a prime. An incomplete one goes
+                // through the ALIAS too, and has no fingerprint, which TLC prints as `-1`.
+                let line = TraceLine {
+                    label: ev.action_label(action),
+                    fp: None,
+                    next: StateRef::Partial(&state),
+                    trace: &trace,
+                    prev: None,
+                    number,
+                };
+                self.print_line(ev, &state, line)?;
                 Ok(true)
             }
             Ok(None) => {
@@ -950,17 +969,18 @@ impl<'a> ModelChecker<'a> {
         ev: &mut Ev<'_>,
         pred: &State,
         pred_fp: tlars_tool::Fp,
-        succ: Succ<'_>,
-        next: Option<&State>,
-        trace: &[State],
+        state: &State,
+        next: StateRef<'_>,
+        trace: &[PartialState],
         prev: Option<&tlars_tool::Aliased>,
         number: usize,
     ) -> Result<bool, EvalError> {
-        let Succ::Complete(state) = succ else { unreachable!("only the last state may be incomplete") };
         let fp = ev.fingerprint(state)?;
         match ev.successor_from_fp(pred, pred_fp, fp) {
             Ok(Some(step)) => {
-                self.print_state(ev, &step, next, trace, prev, number)?;
+                let line =
+                    TraceLine { label: ev.state_label(&step), fp: step.fp, next, trace, prev, number };
+                self.print_line(ev, &PartialState::from_state(&step.state), line)?;
                 Ok(true)
             }
             Ok(None) => {
@@ -973,34 +993,38 @@ impl<'a> ModelChecker<'a> {
 
     /// `StatePrinter.printInvariantViolationStateTraceState`: 2217 with the state number, the
     /// action label, the state and its fingerprint.
-    fn print_state(
-        &self,
-        ev: &mut Ev<'_>,
-        step: &tlars_tool::StateInfo,
-        next: Option<&State>,
-        trace: &[State],
-        prev: Option<&tlars_tool::Aliased>,
-        number: usize,
-    ) -> Result<tlars_tool::Aliased, EvalError> {
+    fn print_line(&self, ev: &mut Ev<'_>, current: &PartialState, line: TraceLine<'_>) -> Result<tlars_tool::Aliased, EvalError> {
         let difftrace = self.tool.globals().difftrace;
-        let label = ev.state_label(step);
-        // `evalAlias(info, successor, prefix)`: the successor a prime reads is the next
-        // trace state, or the state itself when there is none.
-        let successor = next.unwrap_or(&step.state);
-        let aliased = ev.eval_alias(&step.state, tlars_tool::StateRef::Full(successor), Some(trace))?;
-        let shown = ev.print_aliased(&aliased, if difftrace { prev } else { None })?;
+        let aliased = ev.eval_alias(current, line.next, Some(line.trace))?;
+        let shown = ev.print_aliased(&aliased, if difftrace { line.prev } else { None })?;
         // `currentStateInfo.fingerPrint()` for the `fp:` field: a value a variable may not
-        // hold fails here, and the failure replaces the rest of the trace. An alias that
-        // leaves a variable unbound has no fingerprint, which TLC prints as `-1`. A step the
+        // hold fails here, and the failure replaces the rest of the trace. A state that is
+        // not completely assigned has no fingerprint, which TLC prints as `-1`. A step the
         // trace was looked up by carries that fingerprint and answers with it, so the `fp:`
         // of the trace's initial state is the original state's even under an ALIAS.
         let fp = match ev.aliased_fingerprint(&aliased)? {
-            Some(computed) => step.fp.unwrap_or(computed).raw() as i64,
+            Some(computed) => line.fp.unwrap_or(computed).raw() as i64,
             None => -1,
         };
-        self.out.state(Ec::TLC_STATE_PRINT2, &[&number.to_string(), &label, &shown, &fp.to_string()]);
+        self.out.state(Ec::TLC_STATE_PRINT2, &[&line.number.to_string(), &line.label, &shown, &fp.to_string()]);
         Ok(aliased)
     }
+}
+
+/// What `printInvariantViolationStateTraceState` and `evalAlias` need about one 2217 line
+/// besides the state itself.
+struct TraceLine<'a> {
+    /// `TLCStateInfo.info`.
+    label: String,
+    /// `TLCStateInfo.fp`, the fingerprint the state was looked up by, where there is one.
+    fp: Option<tlars_tool::Fp>,
+    /// The successor a prime reads: `s2`, or the state itself where it is the last.
+    next: StateRef<'a>,
+    /// What `TLCExt!Trace` is bound to.
+    trace: &'a [PartialState],
+    /// The predecessor as printed, which `-difftrace` diffs against.
+    prev: Option<&'a tlars_tool::Aliased>,
+    number: usize,
 }
 
 /// `DoInitFunctor.addElement` (`ModelChecker.java:1136-1250`).
@@ -1124,6 +1148,16 @@ fn java_class(e: &EvalError) -> &str {
 pub(crate) enum Succ<'a> {
     Complete(&'a State),
     Partial(&'a PartialState),
+}
+
+impl<'a> Succ<'a> {
+    /// `s2` as the successor an ALIAS reads a prime from, incomplete or not.
+    fn state_ref(&self) -> StateRef<'a> {
+        match *self {
+            Succ::Complete(state) => StateRef::Full(state),
+            Succ::Partial(state) => StateRef::Partial(state),
+        }
+    }
 }
 
 /// `TLCGlobals.progressInterval`.
