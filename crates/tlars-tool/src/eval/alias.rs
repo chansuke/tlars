@@ -70,6 +70,15 @@ impl Ev<'_> {
         let Some(alias) = &self.tool.alias else { return Ok(Aliased::plain(current.copy())) };
         let body = alias.body.clone();
         let trace_symbol = alias.trace_symbol;
+        // `IdThread.setCurrentState(current.state)` (`Tool.java:1687` and `:1736`): a
+        // RandomElement draw inside the ALIAS re-seeds with this state's fingerprint, just
+        // as one inside the next-state relation re-seeds with the parent's. A state the
+        // next-state relation left incomplete has no fingerprint, and TLC's own re-seeding
+        // fails at the first draw, so none is recorded for it.
+        if let Some(state) = current.freeze() {
+            let fp = self.fingerprint(&state)?;
+            self.begin_expansion(fp);
+        }
         let message = match body {
             Err(message) => Some(message),
             Ok(body) => {
@@ -83,15 +92,14 @@ impl Ev<'_> {
                     }
                     _ => crate::ctx::Ctx::EMPTY,
                 };
-                match self.eval(body, &ctx, StateRef::Partial(current), successor, EvalControl::CLEAR) {
-                    Ok(v) => match self.alias_record(&v)? {
-                        Some(record) => return Ok(Aliased { original: current.copy(), record: Some(record) }),
-                        // `toState()` returned null: not a record, so TLC prints the state.
-                        None => None,
-                    },
-                    Err(e) if matches!(e.kind, EvalErrorKind::Eval | EvalErrorKind::Runtime | EvalErrorKind::Fingerprint { .. }) => {
-                        Some(e.message)
-                    }
+                // `toState()` is inside the `try`, so a normalisation it runs can fail and
+                // be caught like any other failure of the ALIAS.
+                let aliased = self.eval(body, &ctx, StateRef::Partial(current), successor, EvalControl::CLEAR).and_then(|v| self.alias_record(&v));
+                match aliased {
+                    Ok(Some(record)) => return Ok(Aliased { original: current.copy(), record: Some(record) }),
+                    // `toState()` returned null: not a record, so TLC prints the state.
+                    Ok(None) => None,
+                    Err(e) if caught_by_eval_alias(&e) => Some(e.message),
                     Err(e) => return Err(e),
                 }
             }
@@ -247,6 +255,12 @@ impl Ev<'_> {
             },
         }
     }
+}
+
+/// `catch (EvalException | TLCRuntimeException e)` of `evalAlias`: anything else, an
+/// unimplemented construct among them, leaves the trace printer.
+fn caught_by_eval_alias(e: &EvalError) -> bool {
+    matches!(e.kind, EvalErrorKind::Eval | EvalErrorKind::Runtime | EvalErrorKind::Fingerprint { .. })
 }
 
 /// `String.format(format, key, value)` for the two `%s` of a `PrintTLCState` field. Any
