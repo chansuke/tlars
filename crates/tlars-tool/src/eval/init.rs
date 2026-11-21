@@ -280,7 +280,7 @@ impl<'t> Ev<'t> {
         kind: Assign,
     ) -> Flow {
         let graph = self.tool.graph.clone();
-        let Some(slot) = self.get_var(args[0].expect_expr(), c, false) else {
+        let Some(slot) = self.get_var_slot(args[0].expect_expr(), c, false) else {
             // Not an assignment: TLC casts the value to a BoolValue without checking.
             let v = self.eval(pred, c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
             let Value::Bool(b) = v else { return Err(EvalError::class_cast(v.java_class(), "BoolValue").into()) };

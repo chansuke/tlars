@@ -269,7 +269,7 @@ impl<'t> Ev<'t> {
             Builtin::Unimplemented("<>") => Err(temporal(self, "<>")),
             Builtin::Unchanged => self.enabled_unchanged(arg(0), acts, c, s0, s1),
             Builtin::Eq => {
-                let Some(slot) = self.get_primed_var(args[0].expect_expr(), c, true) else {
+                let Some(var) = self.get_primed_var(args[0].expect_expr(), c, true) else {
                     // Not an assignment: TLC casts the value to a BoolValue without checking.
                     let v = self.eval(pred, c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
                     let Value::Bool(b) = v else { return Err(EvalError::class_cast(v.java_class(), "BoolValue")) };
@@ -278,11 +278,12 @@ impl<'t> Ev<'t> {
                     }
                     return self.enabled_continue(acts, s0, s1);
                 };
-                let lval = s1.lookup(slot).cloned();
+                let name = self.var_name(var);
+                let lval = s1.lookup(name).cloned();
                 let rval = self.eval(args[1].expect_expr(), c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
                 match lval {
                     None => {
-                        let s2 = s1.bind(slot, rval);
+                        let s2 = s1.bind(name, rval);
                         self.enabled_continue(acts, s0, &s2)
                     }
                     Some(lval) => {
@@ -352,7 +353,7 @@ impl<'t> Ev<'t> {
         subset: bool,
     ) -> EvalResult<bool> {
         let graph = self.tool().graph.clone();
-        let Some(slot) = self.get_primed_var(args[0].expect_expr(), c, true) else {
+        let Some(var) = self.get_primed_var(args[0].expect_expr(), c, true) else {
             let v = self.eval(pred, c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
             let Value::Bool(b) = v else { return Err(EvalError::class_cast(v.java_class(), "BoolValue")) };
             if !b {
@@ -360,7 +361,8 @@ impl<'t> Ev<'t> {
             }
             return self.enabled_continue(acts, s0, s1);
         };
-        let lval = s1.lookup(slot).cloned();
+        let name = self.var_name(var);
+        let lval = s1.lookup(name).cloned();
         let rval = self.eval(args[1].expect_expr(), c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
         let rval = if subset { self.set_source(args[1].expect_expr(), crate::value::subset(rval)) } else { rval };
         match lval {
@@ -372,7 +374,7 @@ impl<'t> Ev<'t> {
                 }
                 let mut elems = rval.elements(self, crate::value::enumerate::EnumOrder::Native)?.expect("an enumerable value enumerates");
                 while let Some(elem) = elems.next(self)? {
-                    let s2 = s1.bind(slot, elem);
+                    let s2 = s1.bind(name, elem);
                     if self.enabled_continue(acts, s0, &s2)? {
                         return Ok(true);
                     }
@@ -437,21 +439,22 @@ impl<'t> Ev<'t> {
     fn enabled_unchanged_impl(&mut self, expr: ExprId, acts: Acts<'_>, c: &Ctx, s0: StateRef<'_>, s1: &FunState) -> EvalResult<bool> {
         let graph = self.tool().graph.clone();
         // `getVar(expr, c, true)`: the cutoff keeps the search inside the ENABLED branch.
-        if let Some(slot) = self.get_var(expr, c, true) {
+        if let Some(var) = self.get_var(expr, c, true) {
+            let name = self.var_name(var);
             // Unlike `processUnchanged`, the old value comes from evaluating the expression,
             // not from `s0.lookup` (`Tool.java:3512-3515`).
             let v0 = self.eval(expr, c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
-            match s1.lookup(slot).cloned() {
+            match s1.lookup(name).cloned() {
                 None => {
-                    let s2 = s1.bind(slot, v0);
+                    let s2 = s1.bind(name, v0);
                     return self.enabled_continue(acts, s0, &s2);
                 }
                 Some(v1) => {
                     if v1.tlc_equals(self, &v0)? {
                         return self.enabled_continue(acts, s0, s1);
                     }
-                    let name = graph.interner().text(self.tool().vars().names[slot.index()]).to_string();
-                    crate::value::warn(self, Ec::TLC_UNCHANGED_VARIABLE_CHANGED, &[&name, &graph.expr_tlc_text(expr)])?;
+                    let shown = graph.interner().text(name).to_string();
+                    crate::value::warn(self, Ec::TLC_UNCHANGED_VARIABLE_CHANGED, &[&shown, &graph.expr_tlc_text(expr)])?;
                     return Ok(false);
                 }
             }

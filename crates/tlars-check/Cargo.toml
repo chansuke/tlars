@@ -9,3 +9,8 @@ tlars-java = { path = "../tlars-java" }
 tlars-msg = { path = "../tlars-msg" }
 tlars-sany = { path = "../tlars-sany" }
 tlars-tool = { path = "../tlars-tool" }
+
+[dev-dependencies]
+# `transcript::normalize`, so a golden test compares transcripts the way the corpus runner
+# does. A dev-dependency may point back at this crate.
+tlars-conformance = { path = "../tlars-conformance" }

@@ -57,6 +57,7 @@ dependencies = [
 name = "tlars-check"
 version = "0.0.0"
 dependencies = [
+ "tlars-conformance",
  "tlars-java",
  "tlars-msg",
  "tlars-sany",

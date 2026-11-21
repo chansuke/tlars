@@ -24,7 +24,10 @@ pub(crate) enum Resolved {
     Native(crate::modules::NativeId),
     /// cfg `op(a, b) = v` (`OpRcdValue`, an `OpValue`).
     OpRcd(crate::spec::OpRcd),
-    Var(crate::state::VarSlot),
+    /// A state variable the state holds no value for, where `lookup` returns the
+    /// `OpDeclNode` itself. It is the declaration, not a `vars[]` slot: ENABLED can reach one
+    /// an instantiated module declares, which has no slot.
+    Var(tlars_sany::graph::DeclId),
     /// A definition TLC overrides with a Java method tlars does not implement. Keeping it
     /// apart from `Undef` is what lets every caller stop as unimplemented instead of
     /// reporting an undefined operator.
@@ -141,15 +144,15 @@ impl<'t> Ev<'t> {
                 Some(crate::spec::DeclBinding::Op(op)) => Resolved::UserOp(*op),
                 Some(crate::spec::DeclBinding::Native(id)) => Resolved::Native(*id),
                 // `Spec.lookup(opNode, c, s, cutoff)` (`Spec.java:450-468`): a declaration
-                // with no tool object is read from the state, by the slot `setLoc` gave its
-                // name. An unbound one leaves `lookup` returning the node itself.
-                None => match tool.vars.slot_of(tool.graph.decl(d).name) {
-                    Some(slot) => match s0.get(slot) {
+                // with no tool object is read from the state by name. An unbound one leaves
+                // `lookup` returning the node itself.
+                None => {
+                    let name = tool.graph.decl(d).name;
+                    match s0.get(name, tool.vars.slot_of(name)) {
                         Some(v) => Resolved::Value(v.clone()),
-                        None => Resolved::Var(slot),
-                    },
-                    None => Resolved::Value(Value::Undef),
-                },
+                        None => Resolved::Var(d),
+                    }
+                }
             },
             // A formal parameter the context does not bind, which happens when TLC walks a
             // definition body without expanding its parameters (`processConfigSpec`'s level
@@ -1000,9 +1003,35 @@ impl<'t> Ev<'t> {
         fcn.fcn_context(self, &arg)
     }
 
+    /// `getVar`, as the callers that bind a `TLCStateMut` use it: the `vars[]` slot of the
+    /// declaration found. A declaration outside `vars[]` has no slot, and `TLCStateMut.lookup`
+    /// answers `null` for its name; only ENABLED's cutoff reaches one, and there the state is
+    /// a `TLCStateFun` keyed by name.
+    pub(crate) fn get_var_slot(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+        let decl = self.get_var(expr, c, cutoff)?;
+        self.var_slot(decl)
+    }
+
+    /// `getPrimedVar`, likewise.
+    pub(crate) fn get_primed_var_slot(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+        let decl = self.get_primed_var(expr, c, cutoff)?;
+        self.var_slot(decl)
+    }
+
+    /// `UniqueString.getVarLoc()` of a declaration's name.
+    pub(crate) fn var_slot(&self, decl: tlars_sany::graph::DeclId) -> Option<crate::state::VarSlot> {
+        let tool = self.tool();
+        tool.vars.slot_of(tool.graph.decl(decl).name)
+    }
+
+    /// `var.getName()`, which is how a `TLCStateFun` is keyed.
+    pub(crate) fn var_name(&self, decl: tlars_sany::graph::DeclId) -> Atom {
+        self.tool().graph.decl(decl).name
+    }
+
     /// `Spec.getVar(expr, c, cutoff)` (`SymbolNodeValueLookupProvider.java:29-84`): the state
     /// variable `expr` denotes, if any.
-    pub(crate) fn get_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+    pub(crate) fn get_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<tlars_sany::graph::DeclId> {
         let graph = self.tool().graph.clone();
         match graph.expr(expr) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
@@ -1020,7 +1049,7 @@ impl<'t> Ev<'t> {
                     let body = self.tool().graph.op_def(d).body;
                     body.and_then(|b| self.get_var(b, c, cutoff))
                 }
-                Resolved::Var(slot) => Some(slot),
+                Resolved::Var(d) => Some(d),
                 _ => None,
             },
             _ => None,
@@ -1028,7 +1057,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `Spec.getPrimedVar` (`Spec.java:138-205`): the variable `expr` primes, if any.
-    pub(crate) fn get_primed_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+    pub(crate) fn get_primed_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<tlars_sany::graph::DeclId> {
         let graph = self.tool().graph.clone();
         match graph.expr(expr) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {

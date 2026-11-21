@@ -1179,7 +1179,7 @@ fn check_subscript(tool: &Tool, subscript: ExprId, c: &Ctx, out: &dyn Report) ->
 /// `SubscriptCollector.enter`. The `Assert.fail(TLC_CANT_HANDLE_SUBSCRIPT, ...)` it raises on
 /// an expression it cannot walk is caught by the caller as "could not determine".
 fn collect_subscript(ev: &mut crate::eval::Ev<'_>, subscript: ExprId, c: &Ctx, found: &mut Vec<crate::state::VarSlot>) -> Result<(), ()> {
-    if let Some(slot) = ev.get_var(subscript, c, false) {
+    if let Some(slot) = ev.get_var_slot(subscript, c, false) {
         found.push(slot);
         return Ok(());
     }

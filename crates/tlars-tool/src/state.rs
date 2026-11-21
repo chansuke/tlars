@@ -70,7 +70,7 @@ impl State {
         State { values: values.into(), level: INIT_LEVEL }
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot(self.values.iter().map(|v| Some(v.clone())).collect())
+        Snapshot { values: self.values.iter().map(|v| Some(v.clone())).collect() }
     }
 }
 
@@ -124,7 +124,7 @@ impl PartialState {
         Some(State { values: self.slots.iter().map(|v| v.clone().expect("all assigned")).collect(), level: self.level })
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot(self.slots.clone())
+        Snapshot { values: self.slots.clone() }
     }
     pub(crate) fn copy(&self) -> PartialState {
         PartialState { slots: self.slots.clone(), level: self.level }
@@ -143,13 +143,18 @@ impl PartialState {
 }
 
 /// `TLCStateFun`: persistent bindings for ENABLED (bind returns a new state).
+///
+/// Keyed by variable *name*, not by [`VarSlot`]: `TLCStateFun.bind` keeps the `SymbolNode`
+/// `getVar` returned and `lookup` compares `var == cur.name.getName()`
+/// (`TLCStateFun.java:47-59`). ENABLED's cutoff can reach a variable an instantiated module
+/// declares, which has no slot in `vars[]` at all.
 pub struct FunState {
-    /// Cons list of `(slot, value)`, newest first, as `TLCStateFun.bind` conses.
+    /// Cons list of `(name, value)`, newest first, as `TLCStateFun.bind` conses.
     cell: Option<Arc<FunCell>>,
 }
 
 struct FunCell {
-    slot: VarSlot,
+    name: Atom,
     value: Value,
     next: Option<Arc<FunCell>>,
 }
@@ -157,14 +162,14 @@ struct FunCell {
 impl FunState {
     pub(crate) const EMPTY: FunState = FunState { cell: None };
 
-    pub(crate) fn bind(&self, slot: VarSlot, value: Value) -> FunState {
-        FunState { cell: Some(Arc::new(FunCell { slot, value, next: self.cell.clone() })) }
+    pub(crate) fn bind(&self, name: Atom, value: Value) -> FunState {
+        FunState { cell: Some(Arc::new(FunCell { name, value, next: self.cell.clone() })) }
     }
 
-    pub(crate) fn lookup(&self, slot: VarSlot) -> Option<&Value> {
+    pub(crate) fn lookup(&self, name: Atom) -> Option<&Value> {
         let mut cur = self.cell.as_deref();
         while let Some(cell) = cur {
-            if cell.slot == slot {
+            if cell.name == name {
                 return Some(&cell.value);
             }
             cur = cell.next.as_deref();
@@ -187,12 +192,14 @@ pub enum StateRef<'a> {
 
 impl StateRef<'_> {
     /// `s.lookup(name)`: the value of a variable, or `None` where TLC's state returns `null`.
-    pub(crate) fn get(&self, slot: VarSlot) -> Option<&Value> {
+    /// A `TLCStateMut` indexes `values` by `name.getVarLoc()` and returns `null` for a name
+    /// with no slot, while a `TLCStateFun` searches its cons list by name.
+    pub(crate) fn get(&self, name: Atom, slot: Option<VarSlot>) -> Option<&Value> {
         match self {
             StateRef::Empty | StateRef::Null => None,
-            StateRef::Full(s) => Some(s.get(slot)),
-            StateRef::Partial(p) => p.lookup(slot),
-            StateRef::Fun(f) => f.lookup(slot),
+            StateRef::Full(s) => slot.map(|slot| s.get(slot)),
+            StateRef::Partial(p) => slot.and_then(|slot| p.lookup(slot)),
+            StateRef::Fun(f) => f.lookup(name),
         }
     }
 
@@ -215,7 +222,7 @@ impl StateRef<'_> {
     pub(crate) fn snapshot(&self) -> Option<Snapshot> {
         match self {
             StateRef::Null => None,
-            StateRef::Empty => Some(Snapshot(Box::new([]))),
+            StateRef::Empty => Some(Snapshot { values: Box::new([]) }),
             StateRef::Full(s) => Some(s.snapshot()),
             StateRef::Partial(p) => Some(p.snapshot()),
             // `TLCStateFun.copy` is never reached: ENABLED evaluates with KeepLazy cleared
@@ -226,17 +233,20 @@ impl StateRef<'_> {
 }
 
 /// Copy of the assigned part of a state, for `LazyValue` cache guards (`TLCState.isSubset`).
-pub(crate) struct Snapshot(Box<[Option<Value>]>);
+pub(crate) struct Snapshot {
+    /// The value of each `vars[]` slot, as `isSubset` reads it out of the cached state.
+    values: Box<[Option<Value>]>,
+}
 
 impl Snapshot {
     /// `TLCState.isSubset(s1, s2)` (`TLCState.java:259-291`), with `self` as `s2`: every
     /// variable `self` has a value for has the same value in `s1`. An equality that throws
     /// makes the answer unknown, which is not a cache hit.
     pub(crate) fn covers(&self, ev: &mut crate::eval::Ev<'_>, s1: &StateRef<'_>) -> bool {
-        let slots = self.0.len();
-        for i in 0..slots {
-            let Some(val2) = self.0[i].clone() else { continue };
-            let val1 = s1.get(crate::state::VarSlot(i as u16)).cloned();
+        for i in 0..self.values.len() {
+            let Some(val2) = self.values[i].clone() else { continue };
+            let name = ev.tool().vars().names[i];
+            let val1 = s1.get(name, Some(VarSlot(i as u16))).cloned();
             let equal = match val1 {
                 None => false,
                 Some(val1) => matches!(val1.tlc_equals(ev, &val2), Ok(true)),
@@ -250,6 +260,6 @@ impl Snapshot {
 
     /// An empty snapshot stands for `TLCState.Empty`, which every state is a subset of.
     pub(crate) fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.values.is_empty()
     }
 }
