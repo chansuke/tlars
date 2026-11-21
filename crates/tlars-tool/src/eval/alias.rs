@@ -143,7 +143,9 @@ impl Ev<'_> {
             // lazy function is `null` and TLC prints the state itself.
             _ => return Ok(None),
         };
-        let (names, values) = crate::value::order::record_normalized(self, &rcd)?;
+        // `this.snapshot()`, not `normalize()`: the fields keep the order they were written
+        // in, and only a record that came from `FcnRcdValue.toRcd()` is sorted.
+        let (names, values) = rcd.snapshot();
         let (names, values) = (names.to_vec(), values.to_vec());
         let mut state = PartialState::empty(self.tool.var_count());
         for (name, value) in names.iter().zip(&values) {
