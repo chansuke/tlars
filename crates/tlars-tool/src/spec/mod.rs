@@ -1489,11 +1489,19 @@ impl SymmetrySetList {
         };
         const PERMUTATIONS: &str = "Permutations";
         // `image.substring(PERMUTATIONS.length() + 1, image.length() - 1)`, which drops the
-        // opening parenthesis and the closing one.
-        let alias = match image.strip_prefix(PERMUTATIONS) {
-            Some(rest) => &rest[1..rest.len() - 1],
-            None => image,
+        // opening parenthesis and the closing one. TLC does not check that they are there,
+        // so an image that merely starts with the name and is too short to hold both — a
+        // `CONSTANT Permutations1` passed to the symmetry definition — asks for a range
+        // ending before it begins, and the JDK's exception escapes `getSymmetryPerms`.
+        let alias: String = if image.starts_with(PERMUTATIONS) {
+            let units = image.encode_utf16().count() as i64;
+            tlars_java::substring(image, PERMUTATIONS.encode_utf16().count() as i64 + 1, units - 1).map_err(|message| {
+                SpecError::Unexpected { class: "java.lang.StringIndexOutOfBoundsException", message }
+            })?
+        } else {
+            image.to_string()
         };
+        let alias = alias.as_str();
         let shown = config.overrides_reverse.get(&alias.to_string(), java_hash(alias)).cloned().unwrap_or_else(|| alias.to_string());
         self.names.push(shown);
         Ok(())
