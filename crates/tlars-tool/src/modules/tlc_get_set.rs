@@ -336,7 +336,13 @@ fn spec_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
     let implied_inits = set(implied_inits?);
     let implied_actions = ev.tool().implied_actions.iter().map(|c| check_value(ev, c)).collect::<EvalResult<Vec<_>>>();
     let implied_actions = set(implied_actions?);
-    let implied_temporals = set(ev.tool().temporal().properties.iter().map(|_| Value::Undef).collect());
+    // `getImpliedTemporals()`, which only a cfg PROPERTY fills. Its `Action`s have to be in
+    // the record, so there is nothing to answer here until M4 implements them; a placeholder
+    // would leak an `UndefValue` into the set.
+    if !ev.tool().temporal().properties.is_empty() {
+        return Err(EvalError::unimplemented("TLCGet(\"spec\").impliedtemporals of a PROPERTY (M4)".into()));
+    }
+    let implied_temporals = set(Vec::new());
     let variables = ev.tool().vars().decls.iter().map(|&d| variable_value(ev, d)).collect::<EvalResult<Vec<_>>>();
     let variables = set(variables?);
     let action_constraints = ev.tool().action_constraints.iter().map(|c| constraint_value(ev, c)).collect::<EvalResult<Vec<_>>>();
