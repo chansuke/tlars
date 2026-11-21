@@ -409,7 +409,7 @@ impl<'t> Ev<'t> {
     /// integer interval as `DOMAIN old`, so `name \in DOMAIN old` fails; TLC's error carries
     /// a fingerprint stack trace through the expressions of `_Possible` and of the module it
     /// generated, which the shortcut has no nodes for. The run stops instead of guessing it.
-    fn possible_counts(&mut self) -> EvalResult<Vec<(Atom, i32)>> {
+    pub(crate) fn possible_counts(&mut self) -> EvalResult<Vec<(Atom, i32)>> {
         let stored = self.tool.registers.lock().expect("registers").get_named(self.possible_register());
         match stored {
             None => Ok(Vec::new()),
@@ -830,7 +830,7 @@ impl<'t> Ev<'t> {
 
 /// The `s:_possible` register's value and what `_Possible!_Counts` returns:
 /// `new FcnRcdValue(domain, values, false)` over the tracked names.
-fn possible_record(counts: Vec<(Atom, i32)>) -> Value {
+pub(crate) fn possible_record(counts: Vec<(Atom, i32)>) -> Value {
     let (domain, values): (Vec<Value>, Vec<Value>) = counts.into_iter().map(|(n, c)| (Value::Str(n), Value::Int(c))).unzip();
     Value::FcnRcd(Value::fcn_rcd_arc(domain, values, false))
 }

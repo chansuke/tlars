@@ -16,6 +16,7 @@
 mod finite_sets;
 mod java_overrides;
 mod naturals;
+mod possible;
 mod sequences;
 pub(crate) mod tlc;
 mod tlc_get_set;
@@ -129,6 +130,7 @@ natives! {
     "TLC" "@@" (V, V) Strict tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "_Possible" "_Counts" () Strict possible::counts, "public static tlc2.value.impl.Value tlc2.module._Possible.counts()", min_level 1;
 }
 
 /// The Java override `processModuleOverrides` binds to `module!tla_name`, if any. A
