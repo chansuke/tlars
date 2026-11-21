@@ -14,7 +14,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use tlars_msg::Report;
 use tlars_sany::Atom;
-use tlars_sany::graph::{ExprId, SemanticGraph};
+use tlars_sany::graph::{ExprId, OpDefId, SemanticGraph};
 
 /// Kinds of named checks; an id of one kind cannot be passed where another is expected.
 #[derive(Clone, Copy, Debug)]
@@ -45,6 +45,49 @@ pub(crate) struct NamedCheck {
     pub(crate) name: Atom,
     pub(crate) expr: ExprId,
     pub(crate) ctx: Ctx,
+    /// The definition the cfg named, when there was one. `TLCGet("spec")` reports a
+    /// constraint as its `OpDefNode`, so it prints the whole definition's location rather
+    /// than the body's (`TLCGetSet.constraint2Value`).
+    pub(crate) op_def: Option<OpDefId>,
+}
+
+/// One cfg `_POSSIBLE` predicate. TLC witnesses it by generating a module that wraps the
+/// predicate in `_Possible!_Track` and wires that in as a constraint, then checks
+/// `_Possible!_CheckName` as a post-condition (`SpecProcessor.processConfigPossible`,
+/// `PossibleAction`). tlars evaluates `_Track` and `_CheckName` directly instead of
+/// generating the module, and keeps the same `s:_possible` register they share.
+pub(crate) struct PossibleCheck {
+    /// The definition's name, which is the key `_Track` counts under and the `%1%` of 2780.
+    pub(crate) name: Atom,
+    /// The definition's body: what `_Track` evaluates, and the location 2780 reports, since
+    /// `PossibleAction.getPred()` hands back the user predicate's body.
+    pub(crate) expr: ExprId,
+    /// SANY's level of the definition. State level and below becomes a CONSTRAINT, action
+    /// level an ACTION_CONSTRAINT (`SpecProcessor.java:1861-1865`).
+    pub(crate) is_action: bool,
+}
+
+/// The cfg ALIAS: the definition body `getAliasSpec()` returns, or the framed message of
+/// the `Assert.fail` it raises instead.
+pub(crate) struct AliasSpec {
+    pub(crate) body: Result<ExprId, String>,
+    /// `TLCExt!Trace`, which `evalAlias` binds to the behaviour printed so far when the
+    /// module is in scope.
+    pub(crate) trace_symbol: Option<tlars_sany::graph::SymbolRef>,
+}
+
+/// `Spec.getCounterExampleDef()` (`Spec.java:337-356`): what `defns` holds for
+/// `CounterExample`, which decides whether the counterexample is bound at all.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CounterExampleDef {
+    /// `defns.get("CounterExample") == null`: not used anywhere in the spec, so the
+    /// POSTCONDITIONs are checked with an empty context.
+    Absent,
+    /// The `EvaluatingValue` of `TLCExt!CounterExample`, which binds the printed trace.
+    Evaluating,
+    /// Anything else under that name, a definition of the spec's own among them:
+    /// `Assert.fail(EC.GENERAL)`, whatever the cfg asks for.
+    NotEvaluating,
 }
 
 /// Temporal part handed to the liveness checker (`Liveness.parseLiveness` input).
@@ -65,8 +108,25 @@ pub struct Tool {
     pub(crate) model_constraints: Box<[NamedCheck]>,
     pub(crate) action_constraints: Box<[NamedCheck]>,
     pub(crate) view: Option<NamedCheck>,
-    pub(crate) alias: Option<NamedCheck>,
+    /// `Spec.hasAlias()` plus what `Spec.getAliasSpec()` would return. TLC resolves the
+    /// name every time it prints a trace state, so a name it cannot resolve is reported per
+    /// state as `_ALIASEvalError` rather than at startup.
+    pub(crate) alias: Option<AliasSpec>,
+    /// `Spec.getPostConditionSpecs()`, resolved here because the lookups and the arity
+    /// checks are pure. TLC runs them when the search ends, so a bad name is reported after
+    /// the search, not at startup: [`Tool::postcondition_error`] holds that message.
     pub(crate) postconditions: Box<[NamedCheck]>,
+    /// The cfg's `_POSSIBLE` predicates, in cfg order. They are checked ahead of
+    /// `postconditions`, as `getPostConditionSpecs()` orders them.
+    pub(crate) possible: Box<[PossibleCheck]>,
+    /// The `Assert.fail` that `getPostConditionSpecs` raises on the first name it cannot
+    /// resolve. It leaves TLC with no postconditions at all, and no `checkPostCondition*`
+    /// catches it, so each caller handles it where TLC does.
+    pub(crate) postcondition_error: Option<crate::error::EvalError>,
+    /// What `getCounterExampleDef()` finds, which every
+    /// `checkPostConditionWithCounterExample` asks for before it looks at the
+    /// POSTCONDITIONs.
+    pub(crate) counter_example: CounterExampleDef,
     /// Closed permutation group of SYMMETRY (`MVPerms`), empty if none.
     pub(crate) symmetry: Box<[MvPerm]>,
     pub(crate) temporal: Temporal,
@@ -74,6 +134,18 @@ pub struct Tool {
     pub(crate) globals: TlcGlobals,
     /// `ModelValue.mvs`, in creation order (cfg first).
     pub(crate) model_values: Box<[ModelValue]>,
+    /// `TLCSet`'s registers, which live in TLC's worker threads and so outlast any one
+    /// `WorkerLocals` (`effects::Registers`).
+    pub(crate) registers: std::sync::Mutex<crate::effects::Registers>,
+    /// What `TLCSet("-Dkey", v)` wrote, newest last. TLC calls `System.setProperty`, a JVM
+    /// global; tlars keeps it per run, so two runs in one process cannot see each other's.
+    pub(crate) set_properties: std::sync::Mutex<Vec<(String, String)>>,
+    /// `TLCGlobals.mainChecker` as `TLCGet`/`TLCSet` use it, set once by the checker. Unset
+    /// until then, which is TLC's `null`.
+    /// `System.in`: `TLCSet("pause", TRUE)` reads one byte from it under the lock TLC takes
+    /// on the state queue, so one paused worker at a time prompts and waits.
+    pub(crate) stdin: std::sync::Mutex<Box<dyn std::io::Read + Send>>,
+    pub(crate) main_checker: std::sync::OnceLock<Arc<dyn crate::effects::MainChecker>>,
 }
 
 impl Tool {
@@ -88,6 +160,33 @@ impl Tool {
     }
     pub fn globals(&self) -> &TlcGlobals {
         &self.globals
+    }
+    /// `TLCGlobals.mainChecker = this`: the checker publishes itself for `TLCGet`/`TLCSet`.
+    pub fn attach_main_checker(&self, checker: Arc<dyn crate::effects::MainChecker>) {
+        let _ = self.main_checker.set(checker);
+    }
+    pub(crate) fn main_checker(&self) -> Option<&dyn crate::effects::MainChecker> {
+        self.main_checker.get().map(|c| &**c)
+    }
+    /// `System.getProperty(name)`: what `TLCSet` wrote last, else the CLI's `-D` option.
+    pub(crate) fn property(&self, name: &str) -> Option<String> {
+        let set = self.set_properties.lock().expect("system properties");
+        if let Some((_, v)) = set.iter().rev().find(|(k, _)| k == name) {
+            return Some(v.clone());
+        }
+        self.globals.properties.iter().rev().find(|(k, _)| k == name).map(|(_, v)| v.clone())
+    }
+    /// `Boolean.getBoolean(name)`: true only for a property that reads `true`, in any case.
+    pub(crate) fn property_is_true(&self, name: &str) -> bool {
+        self.property(name).is_some_and(|v| v.eq_ignore_ascii_case("true"))
+    }
+    /// `System.setProperty(name, value)`.
+    pub(crate) fn set_property(&self, name: &str, value: String) {
+        let mut set = self.set_properties.lock().expect("system properties");
+        match set.iter_mut().find(|(k, _)| k == name) {
+            Some(slot) => slot.1 = value,
+            None => set.push((name.to_string(), value)),
+        }
     }
     /// Next-state actions in split order (= successor generation order).
     pub fn actions(&self) -> &[Action] {
@@ -129,6 +228,10 @@ impl Tool {
     }
     pub fn temporal(&self) -> &Temporal {
         &self.temporal
+    }
+    /// `Spec.hasAlias()`.
+    pub fn has_alias(&self) -> bool {
+        self.alias.is_some()
     }
     pub fn has_symmetry(&self) -> bool {
         !self.symmetry.is_empty()

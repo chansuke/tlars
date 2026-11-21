@@ -24,11 +24,14 @@ pub(crate) enum Resolved {
     Native(crate::modules::NativeId),
     /// cfg `op(a, b) = v` (`OpRcdValue`, an `OpValue`).
     OpRcd(crate::spec::OpRcd),
-    Var(crate::state::VarSlot),
+    /// A state variable the state holds no value for, where `lookup` returns the
+    /// `OpDeclNode` itself. It is the declaration, not a `vars[]` slot: ENABLED can reach one
+    /// an instantiated module declares, which has no slot.
+    Var(tlars_sany::graph::DeclId),
     /// A definition TLC overrides with a Java method tlars does not implement. Keeping it
     /// apart from `Undef` is what lets every caller stop as unimplemented instead of
-    /// reporting an undefined operator.
-    Unimplemented,
+    /// reporting an undefined operator. The level is the override's `minLevel`.
+    Unimplemented { min_level: u8 },
 }
 
 impl<'t> Ev<'t> {
@@ -107,7 +110,7 @@ impl<'t> Ev<'t> {
                 Resolved::OpRcd(lines) => Binding::OpRcd(lines),
                 // `lookup` returns the unimplemented `MethodValue` itself; passing it on as
                 // a value makes the use site report it.
-                Resolved::Var(_) | Resolved::Unimplemented => Binding::Value(Value::Undef),
+                Resolved::Var(_) | Resolved::Unimplemented { .. } => Binding::Value(Value::Undef),
             },
             ExprOrOpArg::Absent => unreachable!("only CASE's OTHER guard is absent"),
         }
@@ -128,10 +131,10 @@ impl<'t> Ev<'t> {
                 if let Some(b) = tool.bindings.op_def(d) {
                     return resolved(b, d);
                 }
-                if tool.graph.op_def(d).kind == OpDefKind::User {
-                    if let Some(b) = tool.graph.op_def(d).body.and_then(|e| tool.bindings.body_chain(&tool.graph, e)) {
-                        return resolved(&b, d);
-                    }
+                if tool.graph.op_def(d).kind == OpDefKind::User
+                    && let Some(b) = tool.graph.op_def(d).body.and_then(|e| tool.bindings.body_chain(&tool.graph, e))
+                {
+                    return resolved(&b, d);
                 }
                 Resolved::UserOp(d)
             }
@@ -141,15 +144,19 @@ impl<'t> Ev<'t> {
                 Some(crate::spec::DeclBinding::Op(op)) => Resolved::UserOp(*op),
                 Some(crate::spec::DeclBinding::Native(id)) => Resolved::Native(*id),
                 // `Spec.lookup(opNode, c, s, cutoff)` (`Spec.java:450-468`): a declaration
-                // with no tool object is read from the state, by the slot `setLoc` gave its
-                // name. An unbound one leaves `lookup` returning the node itself.
-                None => match tool.vars.slot_of(tool.graph.decl(d).name) {
-                    Some(slot) => match s0.get(slot) {
+                // with no tool object is read from the state by name. An unbound one leaves
+                // `lookup` returning the node itself.
+                None => {
+                    let name = tool.graph.decl(d).name;
+                    match s0.get(name, tool.vars.slot_of(name)) {
                         Some(v) => Resolved::Value(v.clone()),
-                        None => Resolved::Var(slot),
-                    },
-                    None => Resolved::Value(Value::Undef),
-                },
+                        // `getVar` reads the node back only for a `VariableDeclKind` symbol
+                        // (`SymbolNodeValueLookupProvider.java:66-81`), so a constant with no
+                        // value stays what every other caller sees: nothing.
+                        None if is_var_decl => Resolved::Var(d),
+                        None => Resolved::Value(Value::Undef),
+                    }
+                }
             },
             // A formal parameter the context does not bind, which happens when TLC walks a
             // definition body without expanding its parameters (`processConfigSpec`'s level
@@ -233,7 +240,7 @@ impl<'t> Ev<'t> {
                 Resolved::Binding(Binding::Lambda(_) | Binding::ExceptAt(_)) => {
                     return Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()));
                 }
-                Resolved::Unimplemented => {
+                Resolved::Unimplemented { .. } => {
                     let name = self.symbol_name(op);
                     return Err(EvalError::unimplemented(format!("the Java implementation of {name}")));
                 }
@@ -736,7 +743,7 @@ impl<'t> Ev<'t> {
                 Ok(Value::Bool(enabled))
             }
             Builtin::Nop => self.eval(arg(0), c, s0, s1, control),
-            Builtin::Cdot => Err(EvalError::unimplemented("action composition (A \\cdot B)".into())),
+            Builtin::Cdot => Err(super::enabled::cdot_unsupported(self, expr)),
             Builtin::Box | Builtin::TemporalExists | Builtin::TemporalForall => {
                 Err(EvalError::unimplemented("a temporal operator outside PROPERTY (M4)".into()))
             }
@@ -931,9 +938,13 @@ impl<'t> Ev<'t> {
         control: EvalControl,
     ) -> EvalResult<Value> {
         match resolved {
-            Resolved::Unimplemented => {
+            Resolved::Unimplemented { .. } => {
                 let name = self.symbol_name(op);
                 Err(EvalError::unimplemented(format!("the Java implementation of {name}")))
+            }
+            // `OpLambdaValue` is an `OpValue`, so TLC applies it here (`OpLambdaValue.eval`).
+            Resolved::Binding(Binding::Lambda(_)) => {
+                Err(EvalError::unimplemented("an operator argument bound to a LAMBDA (M2 unit 4)".into()))
             }
             Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
                 if args.len() != crate::modules::arity(id) {
@@ -1000,9 +1011,50 @@ impl<'t> Ev<'t> {
         fcn.fcn_context(self, &arg)
     }
 
+    /// `getVar`, as the callers that bind a `TLCStateMut` use it: the `vars[]` slot of the
+    /// declaration found. A declaration outside `vars[]` has no slot, and `TLCStateMut.lookup`
+    /// answers `null` for its name; only ENABLED's cutoff reaches one, and there the state is
+    /// a `TLCStateFun` keyed by name.
+    pub(crate) fn get_var_slot(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+        let decl = self.get_var(expr, c, cutoff)?;
+        self.var_slot(decl)
+    }
+
+    /// `getPrimedVar`, likewise.
+    pub(crate) fn get_primed_var_slot(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+        let decl = self.get_primed_var(expr, c, cutoff)?;
+        self.var_slot(decl)
+    }
+
+    /// `UniqueString.getVarLoc()` of a declaration's name.
+    pub(crate) fn var_slot(&self, decl: tlars_sany::graph::DeclId) -> Option<crate::state::VarSlot> {
+        let tool = self.tool();
+        tool.vars.slot_of(tool.graph.decl(decl).name)
+    }
+
+    /// `SemanticNode.toString()` of a symbol `lookup` returned in place of a value: its
+    /// location (`SemanticNode.java:481-489`). `None` for a theorem or assumption definition,
+    /// whose location the graph does not keep; TLC expands one before any caller prints it.
+    pub(crate) fn symbol_loc_text(&self, sym: SymbolRef) -> Option<String> {
+        let graph = &self.tool().graph;
+        let loc = match sym {
+            SymbolRef::OpDef(d) => graph.op_def(d).loc,
+            SymbolRef::Decl(d) => graph.decl(d).loc,
+            SymbolRef::Param(p) => graph.param(p).loc,
+            SymbolRef::Module(m) => graph.module(m).loc,
+            SymbolRef::Thm(_) => return None,
+        };
+        Some(loc.tlc_text(graph.interner()))
+    }
+
+    /// `var.getName()`, which is how a `TLCStateFun` is keyed.
+    pub(crate) fn var_name(&self, decl: tlars_sany::graph::DeclId) -> Atom {
+        self.tool().graph.decl(decl).name
+    }
+
     /// `Spec.getVar(expr, c, cutoff)` (`SymbolNodeValueLookupProvider.java:29-84`): the state
     /// variable `expr` denotes, if any.
-    pub(crate) fn get_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+    pub(crate) fn get_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<tlars_sany::graph::DeclId> {
         let graph = self.tool().graph.clone();
         match graph.expr(expr) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
@@ -1020,7 +1072,7 @@ impl<'t> Ev<'t> {
                     let body = self.tool().graph.op_def(d).body;
                     body.and_then(|b| self.get_var(b, c, cutoff))
                 }
-                Resolved::Var(slot) => Some(slot),
+                Resolved::Var(d) => Some(d),
                 _ => None,
             },
             _ => None,
@@ -1028,7 +1080,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `Spec.getPrimedVar` (`Spec.java:138-205`): the variable `expr` primes, if any.
-    pub(crate) fn get_primed_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<crate::state::VarSlot> {
+    pub(crate) fn get_primed_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<tlars_sany::graph::DeclId> {
         let graph = self.tool().graph.clone();
         match graph.expr(expr) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
@@ -1157,6 +1209,14 @@ impl<'t> Ev<'t> {
                         let (e, tc) = (t.expr, t.ctx.clone());
                         level = level.max(self.level_bound(e, &tc));
                     }
+                    // A Java override contributes its declared `minLevel`, which is how
+                    // `TLCGet` stays out of constant folding (`:270-276`). An override tlars
+                    // does not implement is a `MethodValue` to TLC all the same, so it
+                    // contributes its own `minLevel` and not level 0.
+                    Resolved::Native(id) | Resolved::Binding(Binding::Native(id)) => {
+                        level = level.max(crate::modules::min_level(id));
+                    }
+                    Resolved::Unimplemented { min_level } => level = level.max(min_level),
                     _ => {}
                 }
                 level
@@ -1215,7 +1275,7 @@ fn resolved(b: &OpBinding, d: OpDefId) -> Resolved {
             let _ = d;
             Resolved::Value(Value::Undef)
         }
-        OpBinding::Unimplemented => Resolved::Unimplemented,
+        OpBinding::Unimplemented { min_level } => Resolved::Unimplemented { min_level: *min_level },
     }
 }
 

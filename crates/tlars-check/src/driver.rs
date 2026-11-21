@@ -128,7 +128,9 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
         Err(SanyFailed::Exit(_)) => return Err(Exit::Returned(print_failure(out, Ec::TLC_PARSING_FAILED))),
     };
     let globals = globals(session);
-    let tool = match tlars_tool::build_tool(ToolInput { graph, config, globals, extras: session.options.extras.clone(), out }) {
+    // Handed over once: the `Tool` outlives this scope, and nothing else reads `System.in`.
+    let stdin = session.stdin.lock().expect("stdin").take().unwrap_or_else(|| Box::new(std::io::empty()));
+    let tool = match tlars_tool::build_tool(ToolInput { graph, config, globals, extras: session.options.extras.clone(), stdin, out }) {
         Ok(tool) => tool,
         Err(SpecError::Config { ec, params }) => {
             let params = params.iter().map(String::as_str).collect::<Vec<_>>();
@@ -278,6 +280,7 @@ fn globals(session: &Session<'_>) -> TlcGlobals {
         check_deadlock: o.deadlock_check,
         continue_after_violation: o.continue_after_violation,
         difftrace: o.difftrace,
+        use_view: o.view,
         expand: !o.terse,
         enum_bound: 2000,
         width: 80,
@@ -289,6 +292,8 @@ fn globals(session: &Session<'_>) -> TlcGlobals {
         seed: session.seed,
         aril: o.aril,
         no_timestamps: session.property_is_true("tlc2.output.MP.noTimestamps"),
+        properties: session.properties.clone(),
+        install_location: session.env.install_location.clone(),
     }
 }
 

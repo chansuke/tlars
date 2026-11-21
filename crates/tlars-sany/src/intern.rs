@@ -39,12 +39,16 @@ pub enum JavaClass {
     SyntaxTreeConstants,
     /// `Location.unknown`.
     Location,
-    /// TLC-side statics read at runtime (`TLCGetSet` keys, `Action.UNNAMED_ACTION`, ...).
+    /// `Action.UNNAMED_ACTION`.
+    Action,
+    /// TLC-side statics read at runtime (`TLCGetSet` keys).
     TlcRuntime,
+    /// `RecordValue`'s field-name statics, built by `TLCGet("spec")` and friends.
+    RecordValue,
 }
 
 impl JavaClass {
-    pub const COUNT: usize = 7;
+    pub const COUNT: usize = 9;
 }
 
 /// Session intern table. `Sync`: workers intern runtime strings (`\o`, `ToString`, JSON).
@@ -92,6 +96,13 @@ impl Interner {
         a
     }
 
+    /// The atom of `s` if it has one already, without handing out a token. A table lookup
+    /// that only decides whether a name is known uses it, so asking the question cannot
+    /// shift the order of the strings interned after it.
+    pub fn interned(&self, s: &str) -> Option<Atom> {
+        self.table.read().expect("intern table").index.get(s).copied()
+    }
+
     /// `UniqueString.uidToUniqueString`: the atom with token `tok`, if handed out.
     pub fn uid_to_atom(&self, tok: i32) -> Option<Atom> {
         let n = self.len();
@@ -107,10 +118,20 @@ impl Interner {
         tlars_java::string_hash_code(&self.text(a))
     }
 
-    /// Run `class`'s static initialiser once: intern its static strings in source order.
+    /// Run `class`'s static initialiser once: intern its static strings in source order. A
+    /// string an earlier event already interned keeps the token it got then, exactly as
+    /// `uniqueStringOf` hands back the existing `UniqueString`.
     pub fn ensure(&self, class: JavaClass) {
-        let _strings: &[&str] = crate::fidelity::class_statics(class);
-        todo!()
+        {
+            let mut done = self.initialised.lock().expect("class initialisers");
+            if done[class as usize] {
+                return;
+            }
+            done[class as usize] = true;
+        }
+        for s in crate::fidelity::class_statics(class) {
+            self.intern(s);
+        }
     }
 
     /// Number of tokens handed out; runtime strings created during search come after this.
@@ -120,5 +141,26 @@ impl Interner {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A class initialiser runs once, leaves the token a string already had, and hands out the
+    /// rest in source order: that order is what sorts the fields of a `TLCGet("stats")` record.
+    #[test]
+    fn class_initialiser_runs_once_and_keeps_earlier_tokens() {
+        let interner = Interner::new();
+        let stats = interner.intern("stats");
+        interner.ensure(JavaClass::TlcRuntime);
+        let after = interner.len();
+        interner.ensure(JavaClass::TlcRuntime);
+        assert_eq!(interner.len(), after, "a second ensure interns nothing");
+        assert_eq!(interner.intern("stats"), stats, "a string interned before keeps its token");
+        let order = ["worker", "duration", "generated", "diameter", "distinct", "initial", "queue"];
+        let tokens: Vec<i32> = order.iter().map(|s| interner.intern(s).tok()).collect();
+        assert!(tokens.windows(2).all(|w| w[0] < w[1]), "TLCGetSet declaration order, got {tokens:?}");
     }
 }

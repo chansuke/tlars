@@ -189,6 +189,26 @@ fn hashmap_order_matches_java() {
     }
 }
 
+/// `IdThread.namedRegisters`, which one thread only ever puts into: the key-set order has to
+/// match Java's, because it decides the order `getAllNamedRegisterValues` fills its result in.
+#[test]
+fn concurrent_hashmap_order_matches_java() {
+    use tlars_java::JavaConcurrentHashMap;
+    let eq = |a: &i32, b: &i32| a == b;
+    for line in golden("concurrent_hashmap.txt").lines() {
+        let (puts, expected) = line.split_once('\t').unwrap();
+        let mut m: JavaConcurrentHashMap<i32, i32> = JavaConcurrentHashMap::new();
+        for (i, k) in puts.split(',').filter(|k| !k.is_empty()).enumerate() {
+            // `Integer.hashCode()` is the value.
+            let k: i32 = k.parse().unwrap();
+            m.put(k, k, i as i32, eq);
+        }
+        assert!(!m.needs_tree_bin(), "the corpus stays below a tree bin: {line}");
+        let order: Vec<String> = m.iter().map(|(k, _)| k.to_string()).collect();
+        assert_eq!(order.join(","), expected, "{line}");
+    }
+}
+
 #[test]
 fn pretty_print_matches_tlc() {
     // "<width>\t<flat value>\t<expected>", the two texts escaped by `JavaGolden.esc`.

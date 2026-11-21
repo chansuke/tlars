@@ -36,49 +36,78 @@ impl VarTable {
     }
 }
 
+/// `TLCState.INIT_LEVEL`: an initial state is at level 1, so that `TLCGet("level")` in the
+/// first evaluation of the next-state relation is 1 (`TLCState.java:32-38`).
+pub const INIT_LEVEL: u32 = 1;
+
 /// A complete state. Cheap to clone; shared across workers.
 #[derive(Clone)]
-pub struct State(Arc<[Value]>);
+pub struct State {
+    values: Arc<[Value]>,
+    /// `TLCState.level`, as `setPredecessor` maintains it: one more than the predecessor's.
+    /// `TLCGet("level")` is the only reader; no equality, fingerprint or printing sees it.
+    level: u32,
+}
 
 impl State {
     pub fn get(&self, slot: VarSlot) -> &Value {
-        &self.0[slot.index()]
+        &self.values[slot.index()]
     }
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.values.len()
+    }
+    /// `TLCState.getLevel()`.
+    pub fn level(&self) -> u32 {
+        self.level
     }
     pub(crate) fn values(&self) -> &[Value] {
-        &self.0
+        &self.values
+    }
+    /// `new TLCStateMut(vals)`: the state a symmetry permutation produced, which
+    /// `fingerPrint` evaluates the VIEW against (`TLCStateMut.java:265-268`). The private
+    /// constructor leaves `level` at `INIT_LEVEL` (`TLCState.java:38`).
+    pub(crate) fn of_values(values: Vec<Value>) -> State {
+        State { values: values.into(), level: INIT_LEVEL }
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot(self.0.iter().map(|v| Some(v.clone())).collect())
+        Snapshot { values: self.values.iter().map(|v| Some(v.clone())).collect(), fun: None }
     }
 }
 
 /// The successor (or initial state) under construction. Generation binds a slot, recurses
 /// into the continuation, then unbinds: exactly `TLCState.bind` / `unbind`.
-pub struct PartialState(Box<[Option<Value>]>);
+pub struct PartialState {
+    slots: Box<[Option<Value>]>,
+    /// `TLCState.level`. `getNextStates` builds the successor as
+    /// `TLCState.Empty.createEmpty().setPredecessor(state)`, so it is the parent's level plus
+    /// one; the initial-state generator leaves it at `INIT_LEVEL`.
+    level: u32,
+}
 
 impl PartialState {
     pub(crate) fn empty(vars: usize) -> Self {
-        PartialState(vec![None; vars].into_boxed_slice())
+        PartialState { slots: vec![None; vars].into_boxed_slice(), level: INIT_LEVEL }
+    }
+    /// `TLCState.Empty.createEmpty().setPredecessor(s0)` (`TLCState.java:144-153`).
+    pub(crate) fn successor_of(vars: usize, s0: &State) -> Self {
+        PartialState { slots: vec![None; vars].into_boxed_slice(), level: s0.level.saturating_add(1) }
     }
     pub(crate) fn bind(&mut self, slot: VarSlot, v: Value) {
-        self.0[slot.index()] = Some(v);
+        self.slots[slot.index()] = Some(v);
     }
     pub(crate) fn unbind(&mut self, slot: VarSlot) {
-        self.0[slot.index()] = None;
+        self.slots[slot.index()] = None;
     }
     pub fn lookup(&self, slot: VarSlot) -> Option<&Value> {
-        self.0[slot.index()].as_ref()
+        self.slots[slot.index()].as_ref()
     }
     pub fn all_assigned(&self) -> bool {
-        self.0.iter().all(Option::is_some)
+        self.slots.iter().all(Option::is_some)
     }
     /// `TLCStateMut.getUnassigned()`, in the order it prints them: sorted by variable name.
     pub(crate) fn unassigned(&self, vars: &VarTable, interner: &tlars_sany::Interner) -> Vec<String> {
         let mut names: Vec<String> = self
-            .0
+            .slots
             .iter()
             .enumerate()
             .filter(|(_, v)| v.is_none())
@@ -92,20 +121,21 @@ impl PartialState {
         if !self.all_assigned() {
             return None;
         }
-        Some(State(self.0.iter().map(|v| v.clone().expect("all assigned")).collect()))
+        Some(State { values: self.slots.iter().map(|v| v.clone().expect("all assigned")).collect(), level: self.level })
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot(self.0.clone())
+        Snapshot { values: self.slots.clone(), fun: None }
     }
-    pub(crate) fn copy(&self) -> PartialState {
-        PartialState(self.0.clone())
+    /// `TLCState.copy()`.
+    pub fn copy(&self) -> PartialState {
+        PartialState { slots: self.slots.clone(), level: self.level }
     }
     pub(crate) fn from_values(values: &[Value]) -> PartialState {
-        PartialState(values.iter().map(|v| Some(v.clone())).collect())
+        PartialState { slots: values.iter().map(|v| Some(v.clone())).collect(), level: INIT_LEVEL }
     }
     /// A complete state as the partial form the equality search compares.
     pub fn from_state(s: &State) -> PartialState {
-        PartialState::from_values(s.values())
+        PartialState { slots: s.values().iter().map(|v| Some(v.clone())).collect(), level: s.level }
     }
     /// `copy()` for a caller outside this crate.
     pub fn copy_out(&self) -> PartialState {
@@ -114,13 +144,18 @@ impl PartialState {
 }
 
 /// `TLCStateFun`: persistent bindings for ENABLED (bind returns a new state).
+///
+/// Keyed by variable *name*, not by [`VarSlot`]: `TLCStateFun.bind` keeps the `SymbolNode`
+/// `getVar` returned and `lookup` compares `var == cur.name.getName()`
+/// (`TLCStateFun.java:47-59`). ENABLED's cutoff can reach a variable an instantiated module
+/// declares, which has no slot in `vars[]` at all.
 pub struct FunState {
-    /// Cons list of `(slot, value)`, newest first, as `TLCStateFun.bind` conses.
+    /// Cons list of `(name, value)`, newest first, as `TLCStateFun.bind` conses.
     cell: Option<Arc<FunCell>>,
 }
 
 struct FunCell {
-    slot: VarSlot,
+    name: Atom,
     value: Value,
     next: Option<Arc<FunCell>>,
 }
@@ -128,14 +163,14 @@ struct FunCell {
 impl FunState {
     pub(crate) const EMPTY: FunState = FunState { cell: None };
 
-    pub(crate) fn bind(&self, slot: VarSlot, value: Value) -> FunState {
-        FunState { cell: Some(Arc::new(FunCell { slot, value, next: self.cell.clone() })) }
+    pub(crate) fn bind(&self, name: Atom, value: Value) -> FunState {
+        FunState { cell: Some(Arc::new(FunCell { name, value, next: self.cell.clone() })) }
     }
 
-    pub(crate) fn lookup(&self, slot: VarSlot) -> Option<&Value> {
+    pub(crate) fn lookup(&self, name: Atom) -> Option<&Value> {
         let mut cur = self.cell.as_deref();
         while let Some(cell) = cur {
-            if cell.slot == slot {
+            if cell.name == name {
                 return Some(&cell.value);
             }
             cur = cell.next.as_deref();
@@ -158,12 +193,24 @@ pub enum StateRef<'a> {
 
 impl StateRef<'_> {
     /// `s.lookup(name)`: the value of a variable, or `None` where TLC's state returns `null`.
-    pub(crate) fn get(&self, slot: VarSlot) -> Option<&Value> {
+    /// A `TLCStateMut` indexes `values` by `name.getVarLoc()` and returns `null` for a name
+    /// with no slot, while a `TLCStateFun` searches its cons list by name.
+    pub(crate) fn get(&self, name: Atom, slot: Option<VarSlot>) -> Option<&Value> {
         match self {
             StateRef::Empty | StateRef::Null => None,
-            StateRef::Full(s) => Some(s.get(slot)),
-            StateRef::Partial(p) => p.lookup(slot),
-            StateRef::Fun(f) => f.lookup(slot),
+            StateRef::Full(s) => slot.map(|slot| s.get(slot)),
+            StateRef::Partial(p) => slot.and_then(|slot| p.lookup(slot)),
+            StateRef::Fun(f) => f.lookup(name),
+        }
+    }
+
+    /// `s0.getLevel()`. `TLCState.Empty` and `TLCStateFun.Empty` are plain `TLCState`s whose
+    /// level field still holds the value it starts at.
+    pub(crate) fn level(&self) -> u32 {
+        match self {
+            StateRef::Full(s) => s.level(),
+            StateRef::Partial(p) => p.level,
+            StateRef::Empty | StateRef::Null | StateRef::Fun(_) => INIT_LEVEL,
         }
     }
 
@@ -173,31 +220,48 @@ impl StateRef<'_> {
     }
 
     /// `s.copy()` as `LazyValue`'s cache keeps it; `None` for `Null`.
-    pub(crate) fn snapshot(&self) -> Option<Snapshot> {
+    pub(crate) fn snapshot(&self, vars: &VarTable) -> Option<Snapshot> {
         match self {
             StateRef::Null => None,
-            StateRef::Empty => Some(Snapshot(Box::new([]))),
+            StateRef::Empty => Some(Snapshot { values: Box::new([]), fun: None }),
             StateRef::Full(s) => Some(s.snapshot()),
             StateRef::Partial(p) => Some(p.snapshot()),
-            // `TLCStateFun.copy` is never reached: ENABLED evaluates with KeepLazy cleared
-            // and the thunks it conses are not cachable.
-            StateRef::Fun(_) => None,
+            // `TLCStateFun.copy()` returns `this` (`TLCStateFun.java:66-71`), so the cache
+            // keeps the ENABLED state itself: both the bindings `isSubset` reads through
+            // `vars[]` and the identity its fast path compares. ENABLED does cons cachable
+            // thunks (`getLetContext`, `getOpContext(.., true)`), so this is reached.
+            StateRef::Fun(f) => {
+                let values = vars.names.iter().map(|&n| f.lookup(n).cloned()).collect();
+                Some(Snapshot { values, fun: f.cell.clone() })
+            }
         }
     }
 }
 
 /// Copy of the assigned part of a state, for `LazyValue` cache guards (`TLCState.isSubset`).
-pub(crate) struct Snapshot(Box<[Option<Value>]>);
+pub(crate) struct Snapshot {
+    /// The value of each `vars[]` slot, as `isSubset` reads it out of the cached state.
+    values: Box<[Option<Value>]>,
+    /// The cached `TLCStateFun`, for `isSubset`'s `s1 == s2` fast path.
+    fun: Option<Arc<FunCell>>,
+}
 
 impl Snapshot {
     /// `TLCState.isSubset(s1, s2)` (`TLCState.java:259-291`), with `self` as `s2`: every
     /// variable `self` has a value for has the same value in `s1`. An equality that throws
-    /// makes the answer unknown, which is not a cache hit.
+    /// makes the answer unknown, which is not a cache hit, but two states that *are* the same
+    /// object answer yes before any value is compared.
     pub(crate) fn covers(&self, ev: &mut crate::eval::Ev<'_>, s1: &StateRef<'_>) -> bool {
-        let slots = self.0.len();
-        for i in 0..slots {
-            let Some(val2) = self.0[i].clone() else { continue };
-            let val1 = s1.get(crate::state::VarSlot(i as u16)).cloned();
+        if let (Some(cached), StateRef::Fun(f)) = (&self.fun, s1)
+            && let Some(cell) = &f.cell
+            && Arc::ptr_eq(cached, cell)
+        {
+            return true;
+        }
+        for i in 0..self.values.len() {
+            let Some(val2) = self.values[i].clone() else { continue };
+            let name = ev.tool().vars().names[i];
+            let val1 = s1.get(name, Some(VarSlot(i as u16))).cloned();
             let equal = match val1 {
                 None => false,
                 Some(val1) => matches!(val1.tlc_equals(ev, &val2), Ok(true)),
@@ -211,6 +275,6 @@ impl Snapshot {
 
     /// An empty snapshot stands for `TLCState.Empty`, which every state is a subset of.
     pub(crate) fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.values.is_empty()
     }
 }

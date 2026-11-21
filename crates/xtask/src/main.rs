@@ -4,7 +4,8 @@
 //!
 //!   xtask gen-fidelity [--check]   class-static UniqueStrings, BuiltInOperators, Operators +
 //!                                  synonyms, SyntaxTreeConstants names, StandardModules/*.tla,
-//!                                  FP64.Polys, EC/MP catalogue cross-check
+//!                                  FP64.Polys, EC/MP catalogue cross-check, the Java module
+//!                                  override set (tlc2/module)
 //!   xtask bench run|compare      end-to-end benchmarks over tlaplus/Examples (see bench.rs)
 //!   xtask jj2rs emit [--check]     TLC's JavaCC parser, its token manager and SANY's parser
 //!                                  support classes -> tlars-sany/src/parser/generated.rs, so
@@ -23,6 +24,7 @@
 mod bench;
 mod catalog;
 mod conformance;
+mod java_overrides;
 mod jj2rs;
 mod json;
 
@@ -36,9 +38,10 @@ enum Task {
     Jj2rsEmit { check: bool },
     ConformanceRecord(conformance::Args),
     ConformanceRun(conformance::Args),
+    NormalizeTranscript(PathBuf),
 }
 
-const USAGE: &str = "usage: xtask gen-fidelity [--check]\n       xtask bench run [--engine tlc|tlars] [--workers N] [--repeat N] [--filter TEXT] [--timeout SECS]\n       xtask bench compare <baseline.jsonl> <candidate.jsonl>\n       xtask jj2rs emit [--check]\n       xtask jj2rs survey <File.java>\n       xtask conformance record [--suite S] [--context C] [--filter TEXT] [--jobs N]\n       xtask conformance run [--suite S] [--context C] [--filter TEXT] [--jobs N] [--check|--update]";
+const USAGE: &str = "usage: xtask gen-fidelity [--check]\n       xtask bench run [--engine tlc|tlars] [--workers N] [--repeat N] [--filter TEXT] [--timeout SECS]\n       xtask bench compare <baseline.jsonl> <candidate.jsonl>\n       xtask jj2rs emit [--check]\n       xtask jj2rs survey <File.java>\n       xtask conformance record [--suite S] [--context C] [--filter TEXT] [--jobs N]\n       xtask conformance run [--suite S] [--context C] [--filter TEXT] [--jobs N] [--check|--update]\n       xtask normalize-transcript <directory> < transcript";
 
 fn parse_args(args: &[String]) -> Result<Task, String> {
     let strs: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -52,6 +55,7 @@ fn parse_args(args: &[String]) -> Result<Task, String> {
         ["bench", "run", rest @ ..] => parse_bench_run(rest).map(Task::BenchRun),
         ["conformance", "record", rest @ ..] => parse_conformance(rest).map(Task::ConformanceRecord),
         ["conformance", "run", rest @ ..] => parse_conformance(rest).map(Task::ConformanceRun),
+        ["normalize-transcript", dir] => Ok(Task::NormalizeTranscript(dir.into())),
         _ => Err(USAGE.into()),
     }
 }
@@ -143,7 +147,11 @@ fn gen_fidelity(tlaplus: &Path, check: bool) -> Result<(), String> {
         path: workspace_root().join("crates/tlars-sany/src/error_codes.rs"),
         contents: catalog::sany_error_codes(&tlc, &cat)?,
     };
-    let mut outputs = vec![fp64_polys(&tlc)?, msg_catalog, sany_codes];
+    let java_overrides = Generated {
+        path: workspace_root().join("crates/tlars-tool/src/modules/java_overrides.rs"),
+        contents: java_overrides::generate(&tlc)?,
+    };
+    let mut outputs = vec![fp64_polys(&tlc)?, msg_catalog, sany_codes, java_overrides];
     outputs.extend(standard_modules(&tlc)?);
     let mut stale = Vec::new();
     for out in &outputs {
@@ -225,9 +233,20 @@ fn main() {
         Task::Jj2rsEmit { check } => {
             jj2rs::emit(&tlaplus_src()?, &workspace_root().join("crates/tlars-sany/src/parser/generated.rs"), check)
         }
+        Task::NormalizeTranscript(dir) => normalize_transcript(&dir),
     });
     if let Err(e) = result {
         eprintln!("{e}");
         std::process::exit(1);
     }
+}
+
+/// The normalisation the conformance harness applies, over stdin: what
+/// `tools/golden/spec_golden.sh` records so that both sides of the spec golden are compared
+/// the same way.
+fn normalize_transcript(dir: &Path) -> Result<(), String> {
+    let mut text = String::new();
+    std::io::Read::read_to_string(&mut std::io::stdin(), &mut text).map_err(|e| e.to_string())?;
+    print!("{}", tlars_conformance::transcript::normalize(&text, &dir.display().to_string(), true));
+    Ok(())
 }

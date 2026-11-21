@@ -105,7 +105,7 @@ fn parse_exit_map(src: &str) -> Result<BTreeMap<String, &'static str>, String> {
 }
 
 /// Removes `//` and `/* */` comments outside string literals.
-fn strip_comments(src: &str) -> String {
+pub(crate) fn strip_comments(src: &str) -> String {
     let mut out = String::with_capacity(src.len());
     let mut chars = src.chars().peekable();
     while let Some(c) = chars.next() {

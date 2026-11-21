@@ -21,6 +21,7 @@
 //! pinned JDK 21, with `$TLA2TOOLS_JAR` on the class path for the one corpus that asks TLC
 //! itself rather than the JDK (`pprint.txt`).
 
+mod concurrent_hashmap;
 mod exception;
 mod hashmap;
 mod hashset;
@@ -31,7 +32,8 @@ mod pprint;
 mod random;
 pub mod time;
 
-pub use exception::{class_cast, index_out_of_bounds};
+pub use concurrent_hashmap::JavaConcurrentHashMap;
+pub use exception::{class_cast, index_out_of_bounds, range_out_of_bounds, substring};
 pub use hashmap::{JavaHashMap, capacity_for_mappings, table_size_for};
 pub use hashset::JavaIntHashSet;
 pub use hashtable::{Elements, Hashtable};

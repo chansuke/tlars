@@ -70,19 +70,25 @@ impl<'a> Worker<'a> {
             if mc.live.is_some() {
                 self.sink.live_successors = Some(SetOfStates::with_capacity(16 * self.sink.live_multiplier as usize));
             }
-            self.locals.set_level(cur.level);
             let generated_before = self.sink.generated;
             let mut ev = mc.tool.ev(&mut self.locals, mc.out);
-            let mut sink = WorkerSink { mc, worker: self.id, cur: &cur, st: &mut self.sink, seen: SharedPut(&*mc.fpset) };
+            let mut sink =
+                WorkerSink { mc, worker: self.id, stats: self.stats, cur: &cur, st: &mut self.sink, seen: SharedPut(&*mc.fpset) };
             outcome = ev.next_states(&cur.state, cur.fp, &mut sink);
             if let Err(Halt::Eval(e)) = &outcome {
                 mc.next_failed(&cur, None, e.clone());
             }
             // Deadlock = zero addElement calls, even if every successor was out of model.
-            if mc.check_deadlock && generated_before == self.sink.generated && mc.set_err(ErrState::Deadlock { state: cur.clone() }) {
-                mc.out.error(tlars_msg::Ec::TLC_DEADLOCK_REACHED, &[]);
+            // `doNextFailed` does not rethrow, so the check also runs after the next-state
+            // relation failed to evaluate; the error is already recorded then, which leaves
+            // `Worker.doNextSetErr` with nothing to print but still runs the postconditions.
+            if mc.check_deadlock && generated_before == self.sink.generated {
+                let first = mc.set_err(ErrState::Deadlock { state: cur.clone() });
                 let mut ev = mc.tool.ev(&mut self.locals, mc.out);
-                mc.print_trace_and_stop(&mut ev, &cur, None);
+                if first {
+                    mc.out.error(tlars_msg::Ec::TLC_DEADLOCK_REACHED, &[]);
+                    mc.print_trace_and_stop(&mut ev, &cur, None);
+                }
                 mc.post_condition_trace(&mut ev, &cur, None, false);
             }
             if let (Some(live), Some(succs)) = (mc.live.as_ref(), self.sink.live_successors.take()) {
@@ -92,7 +98,6 @@ impl<'a> Worker<'a> {
                 }
             }
             if let Some(slot) = self.stats {
-                mc.stats[slot].generated.store(self.sink.generated, Relaxed);
                 // `outDegree.addSample(unseenSuccessorStates)`, with 32 buckets and the last
                 // one holding the overflow.
                 let bucket = (self.sink.unseen as usize).min(31);
@@ -127,6 +132,8 @@ impl SeenOracle for SharedPut<'_> {
 struct WorkerSink<'s, O: SeenOracle> {
     mc: &'s ModelChecker<'s>,
     worker: u16,
+    /// Which `stats` slot to publish into; `None` for the call-stack replay's worker.
+    stats: Option<usize>,
     cur: &'s Queued,
     st: &'s mut SinkState,
     seen: O,
@@ -136,6 +143,12 @@ impl<O: SeenOracle> NextSink for WorkerSink<'_, O> {
     /// `Worker.addElement`.
     fn add_next(&mut self, ev: &mut Ev<'_>, s0: &State, action: ActionId, s1: &PartialState) -> Flow {
         self.st.generated += 1; // every call: duplicates and out-of-model successors too
+        // `Worker.statesGenerated` is a plain field the main thread reads as it goes, so the
+        // count has to be visible before this successor is checked: `TLCGet("generated")` in
+        // an invariant already includes it.
+        if let Some(slot) = self.stats {
+            self.mc.stats[slot].generated.store(self.st.generated, Relaxed);
+        }
         let Some(succ) = ev.complete(s1) else {
             return Err(self.mc.incomplete(self.cur, action, s1));
         };

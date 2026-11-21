@@ -33,6 +33,9 @@ pub struct Invocation<'a> {
     pub cwd: PathBuf,
     pub stdout: Box<dyn Write + Send + 'a>,
     pub stderr: Box<dyn Write + Send + 'a>,
+    /// What `System.in` reads. `TLCSet("pause", TRUE)` is its only reader: it takes one byte
+    /// and goes on, so a reader at end of file resumes the run at once.
+    pub stdin: Box<dyn std::io::Read + Send>,
     pub env: Env,
     /// Set by the run when a message reports a construct tlars does not implement. The
     /// conformance harness uses it to tell "blocked on a missing feature" from a real
@@ -49,6 +52,7 @@ impl Invocation<'static> {
             cwd: std::env::current_dir().unwrap_or_default(),
             stdout: Box::new(std::io::stdout()),
             stderr: Box::new(std::io::stderr()),
+            stdin: Box::new(std::io::stdin()),
             env: Env::process(),
             unimplemented: None,
         }
@@ -65,6 +69,9 @@ pub struct Env {
     /// Worker thread stack (TLC conformance recordings ran with `-Xss2m`).
     pub worker_stack_bytes: usize,
     pub host: HostInfo,
+    /// `TLCGlobals.Version.installLocation()`, the jar TLC runs from: where this tool lives.
+    /// `TLCGet("config").install` is its only reader.
+    pub install_location: String,
 }
 
 #[derive(Clone, Copy)]
@@ -96,6 +103,7 @@ impl Env {
             entropy: Entropy::Os,
             worker_stack_bytes: 64 << 20,
             host: HostInfo::current(),
+            install_location: std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default(),
         }
     }
 
@@ -107,6 +115,7 @@ impl Env {
             entropy: Entropy::Fixed(0),
             worker_stack_bytes: 64 << 20,
             host: HostInfo { os_name: "Linux".into(), os_version: "0".into(), os_arch: "amd64".into(), cores: 1 },
+            install_location: String::new(),
         }
     }
 

@@ -15,12 +15,12 @@ mod bindings;
 pub(crate) use bindings::{Bindings, DeclBinding, OpBinding, OpRcd};
 
 use crate::ctx::Ctx;
-use crate::error::EvalErrorKind;
+use crate::error::{EvalError, EvalErrorKind};
 use crate::eval::expr::Builtin;
 use crate::eval::{EvalControl, WorkerLocals};
 use crate::globals::TlcGlobals;
 use crate::state::{StateRef, VarTable};
-use crate::tool::{NamedCheck, Tool};
+use crate::tool::{CounterExampleDef, NamedCheck, PossibleCheck, Tool};
 use crate::value::Value;
 use tlars_msg::{Ec, Report};
 use tlars_sany::Atom;
@@ -71,6 +71,8 @@ pub struct ToolInput<'a> {
     pub config: ModelConfig,
     pub globals: TlcGlobals,
     pub extras: CliSpecExtras,
+    /// `System.in`, which `TLCSet("pause", TRUE)` waits on.
+    pub stdin: Box<dyn std::io::Read + Send>,
     pub out: &'a dyn Report,
 }
 
@@ -93,7 +95,7 @@ pub enum SpecError {
 /// `SpecProcessor` from the root-module lookup on (`SpecProcessor.java:468`); the SANY
 /// checks and TLC_STARTING before it are the caller's.
 pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
-    let ToolInput { graph, config, globals, extras, out } = input;
+    let ToolInput { graph, config, globals, extras, stdin, out } = input;
     if extras != CliSpecExtras::default() {
         todo!("M3: ParameterizedSpecObj extras");
     }
@@ -141,15 +143,25 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         view: None,
         alias: None,
         postconditions: Box::new([]),
+        possible: Box::new([]),
+        postcondition_error: None,
+        counter_example: CounterExampleDef::Absent,
         symmetry: Box::new([]),
         temporal: crate::tool::Temporal { fairness: Box::new([]), properties: Box::new([]) },
         fp64: crate::fp64::Fp64::new(globals.fp_index),
         model_values,
         globals,
+        registers: std::sync::Mutex::new(crate::effects::Registers::default()),
+        set_properties: std::sync::Mutex::new(Vec::new()),
+        stdin: std::sync::Mutex::new(stdin),
+        main_checker: std::sync::OnceLock::new(),
     };
     let mut defns = defns;
+    // `SpecProcessor.snapshot`, taken before `processConstantDefns` and reached through
+    // `Spec.unprocessedDefns`: SYMMETRY resolves against it.
+    let unprocessed = defns.clone();
     fold_constant_defns(&mut tool, &mut defns, out)?;
-    process_config(&config, &mut tool, &defns, out)?;
+    process_config(&config, &mut tool, &defns, &unprocessed, out)?;
     Ok(tool)
 }
 
@@ -246,25 +258,31 @@ impl CfgBind<'_> {
         Ok(())
     }
 
-    /// `processModuleOverrides` (`SpecProcessor.java:2119-2190`) for the standard modules:
-    /// each module named like a `tlc2.module` class has the bodies of its definitions (its
-    /// extended ones included) bound to the class's methods, and the method also lands in
-    /// `defns` under the definition's name. A later module rebinds a shared definition.
-    /// Methods tlars does not implement yet stay unimplemented natives.
+    /// `processModuleOverrides` (`SpecProcessor.java:2119-2330`): each definition that has a
+    /// Java override gets its body bound to that method, and the method also lands in `defns`
+    /// under the definition's name. A later module rebinds a shared definition. Methods tlars
+    /// does not implement yet stay unimplemented natives. Which definitions those are is
+    /// `modules::JAVA_OVERRIDES`, read out of the pinned Java; a definition of `_Possible` or
+    /// `TLCExt` that has no Java method behind it is an ordinary TLA+ definition.
     fn module_overrides(&mut self) {
         let graph = self.graph;
-        for (mid, m) in graph.modules() {
+        // `TLCBuiltInOverrides.get()` hands over class *literals*, and reading a method's
+        // annotations does not initialise its class, so `TLCGetSet`'s own `UniqueString`s are
+        // not interned here: they wait for the first read of one of its statics, which is the
+        // checker's `createConfig()` or an evaluated `TLCGet`/`TLCSet`.
+        // `tlc2.tool.Action` does load here (measured against TLC, see
+        // `fidelity::class_statics`), and tlars has no earlier step that builds an action.
+        graph.interner().ensure(tlars_sany::JavaClass::Action);
+        for (_, m) in graph.modules() {
             let module = graph.interner().text(m.name);
-            if !crate::modules::JAVA_MODULES.contains(&&*module) {
-                continue;
-            }
             for &d in m.op_defs.iter() {
                 let def = graph.op_def(d);
                 let Some(body) = def.body else { continue };
-                let binding = match crate::modules::NativeId::of_module(&module, &graph.interner().text(def.name)) {
+                let name = graph.interner().text(def.name);
+                let Some(java) = crate::modules::java_override(&module, &name) else { continue };
+                let binding = match crate::modules::NativeId::of_module(&module, &name) {
                     Some(id) => OpBinding::Native(id),
-                    None if def.module == mid => OpBinding::Unimplemented,
-                    None => continue,
+                    None => OpBinding::Unimplemented { min_level: java.min_level },
                 };
                 self.bodies[body.index()] = Some(binding.clone());
                 self.defns.insert(def.name, Some(binding));
@@ -287,7 +305,7 @@ impl CfgBind<'_> {
                 OpBinding::Table(lines) => DeclBinding::Table(lines.clone()),
                 OpBinding::Value(v) => DeclBinding::Value(v.clone()),
                 OpBinding::Native(id) => DeclBinding::Native(*id),
-                OpBinding::Unimplemented => return Err(unimplemented("a constant overridden with an unimplemented Java method")),
+                OpBinding::Unimplemented { .. } => return Err(unimplemented("a constant overridden with an unimplemented Java method")),
             });
             self.defns.insert(lhs, Some(val));
             overridden.push(graph.interner().text(lhs).to_string());
@@ -387,7 +405,7 @@ fn decl_binding(val: &OpBinding) -> DeclBinding {
     match val {
         OpBinding::Value(v) => DeclBinding::Value(v.clone()),
         OpBinding::Table(lines) => DeclBinding::Table(lines.clone()),
-        OpBinding::Native(_) | OpBinding::Replaced(_) | OpBinding::Unimplemented => {
+        OpBinding::Native(_) | OpBinding::Replaced(_) | OpBinding::Unimplemented { .. } => {
             unreachable!("a cfg constant table holds only values and operator records")
         }
     }
@@ -632,10 +650,14 @@ fn fold_module(tool: &mut Tool, defns: &mut Defns, graph: &SemanticGraph, m: &Mo
         if tool.bindings.body_chain(graph, body).is_some() {
             continue;
         }
-        if graph.level(body) != Level::Constant {
+        let mut locals = WorkerLocals::new(0, tool.globals.seed);
+        // `getLevelBound(body, Context.Empty)`, not SANY's own level (`:355`). The two differ
+        // where SANY's rule drops an argument the body never uses: `PrintT(ENABLED A)` is
+        // constant to SANY, because `PrintT(out) == TRUE` ignores `out`, while `getLevelBound`
+        // walks the arguments and finds the ENABLED.
+        if { tool.ev(&mut locals, out).level_bound(body, &Ctx::EMPTY) } != 0 {
             continue;
         }
-        let mut locals = WorkerLocals::new(0, tool.globals.seed);
         let folded = {
             let mut ev = tool.ev(&mut locals, out);
             ev.eval(body, &Ctx::EMPTY, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR)
@@ -729,7 +751,10 @@ fn fold_substituted_constant(
             if !matches!(e.kind, EvalErrorKind::Runtime | EvalErrorKind::Eval) {
                 return Err(unimplemented(&format!("a constant substitution that fails with: {}", e.message)));
             }
-            if graph.level(body) == Level::Constant {
+            // `getLevelBound(body, Context.Empty)`, not SANY's own level (`:330`), for the same
+            // reason as `fold_module`: SANY's rule drops an argument the body never uses, so
+            // `PrintT(ENABLED A)` is constant to SANY while `getLevelBound` finds the ENABLED.
+            if { tool.ev(&mut locals, out).level_bound(body, &Ctx::EMPTY) } == 0 {
                 return Ok(());
             }
             let addendum = match e.kind {
@@ -756,7 +781,7 @@ struct Pred {
 
 /// `processConfig` (`SpecProcessor.java:782-955`): INIT/NEXT/SPECIFICATION and the named
 /// checks. An empty cfg binds nothing, but a spec with variables still needs an INIT.
-fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dyn Report) -> Result<(), SpecError> {
+fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unprocessed: &Defns, out: &dyn Report) -> Result<(), SpecError> {
     let graph = tool.graph.clone();
     let mut pass = ConfigPass {
         init_preds: Vec::new(),
@@ -808,22 +833,31 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
     }
     let model_constraints = named_checks(&config.constraints, tool, defns, out, "constraint")?;
     let action_constraints = named_checks(&config.action_constraints, tool, defns, out, "action constraint")?;
-    if config.rl_reward.is_some() || config.periodic.is_some() || !config.possible.is_empty() || !config.postconditions.is_empty() {
-        return Err(unimplemented("_RL_REWARD, _PERIODIC, _POSSIBLE and POSTCONDITION (M3 unit 5)"));
+    if config.rl_reward.is_some() || config.periodic.is_some() {
+        return Err(unimplemented("_RL_REWARD and _PERIODIC (M5)"));
     }
-    if config.view.is_some() || config.symmetry.is_some() || config.alias.is_some() {
-        return Err(unimplemented("VIEW, SYMMETRY and ALIAS (M3 unit 5)"));
-    }
+    tool.possible = config_possible(config, tool, defns)?;
+    let alias = config_alias(config, tool, defns, out);
+    let view = config_view(config, tool, defns)?;
+    let symmetry = config_symmetry(config, tool, unprocessed, out)?;
+    let (postconditions, postcondition_error) = config_postconditions(config, tool, defns, out);
+    let counter_example = config_counter_example(tool, defns);
 
     // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
     tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
     let ConfigPass { init_preds, next_pred, invariants, temporals } = pass;
     tool.invariants = invariants
         .into_iter()
-        .map(|(name, p)| NamedCheck { name, expr: p.expr, ctx: p.ctx })
+        .map(|(name, p)| NamedCheck { name, expr: p.expr, ctx: p.ctx, op_def: p.op_def })
         .collect();
     tool.model_constraints = model_constraints.into();
     tool.action_constraints = action_constraints.into();
+    tool.view = view;
+    tool.alias = alias;
+    tool.symmetry = symmetry;
+    tool.postconditions = postconditions;
+    tool.postcondition_error = postcondition_error;
+    tool.counter_example = counter_example;
     tool.temporal = crate::tool::Temporal {
         fairness: temporals.into_iter().map(|p| (p.expr, p.ctx)).collect(),
         properties: Box::new([]),
@@ -842,7 +876,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, out: &dy
     tool.init_actions = init_preds
         .iter()
         .enumerate()
-        .map(|(i, p)| crate::actions::init_action(i, p.expr, &p.ctx, p.op_def))
+        .map(|(i, p)| crate::actions::init_action(&graph, i, p.expr, &p.ctx, p.op_def))
         .collect();
     tool.actions = actions.into();
     Ok(())
@@ -1144,7 +1178,7 @@ fn check_subscript(tool: &Tool, subscript: ExprId, c: &Ctx, out: &dyn Report) ->
 /// `SubscriptCollector.enter`. The `Assert.fail(TLC_CANT_HANDLE_SUBSCRIPT, ...)` it raises on
 /// an expression it cannot walk is caught by the caller as "could not determine".
 fn collect_subscript(ev: &mut crate::eval::Ev<'_>, subscript: ExprId, c: &Ctx, found: &mut Vec<crate::state::VarSlot>) -> Result<(), ()> {
-    if let Some(slot) = ev.get_var(subscript, c, false) {
+    if let Some(slot) = ev.get_var_slot(subscript, c, false) {
         found.push(slot);
         return Ok(());
     }
@@ -1207,7 +1241,7 @@ fn named_checks(
                     });
                 }
                 let body = graph.op_def(d).body.expect("a user definition has a body");
-                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY });
+                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) });
             }
             None => {
                 return Err(SpecError::Config {
@@ -1230,6 +1264,344 @@ fn named_checks(
     Ok(checks)
 }
 
+/// `processConfigPossible` (`SpecProcessor.java:1763-1892`). Every name must be a 0-arity,
+/// non-temporal definition.
+///
+/// TLC then writes a `_PossibleModule_<millis>` that EXTENDS the root module and `_Possible`,
+/// runs it through the parser, the semantic analyser and the level checker with every message
+/// suppressed, and wires its `_Track` and `_CheckName` definitions in as constraints and
+/// post-conditions. tlars evaluates those two definitions directly (`Ev::track_possible` and
+/// `Ev::check_possible`), because its semantic graph is frozen before the cfg is processed and
+/// nothing can be added to it.
+///
+/// The shortcut gives up the intern tokens the generated names and `_Possible.tla` consume,
+/// which shift no other string's order relative to another, and the `_PossibleAC_*` entries
+/// TLC appends to `modelConstraints` and `actionConstraints` (`SpecProcessor.java:1864-1883`).
+/// Those are not checked anywhere, but `TLCGet("spec")` names them, so `spec_value` stops
+/// rather than answer with the constraints the cfg wrote on their own.
+fn config_possible(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<Box<[PossibleCheck]>, SpecError> {
+    if config.possible.is_empty() {
+        return Ok(Box::new([]));
+    }
+    let graph = tool.graph.clone();
+    let mut checks = Vec::new();
+    for name in &config.possible {
+        let fail = |ec: Ec| SpecError::Config { ec, params: vec!["possible".to_string(), name.clone()] };
+        match defn_of(defns, &graph, name) {
+            None => return Err(fail(Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED)),
+            Some(OpBinding::Replaced(d)) => {
+                if !graph.op_def(d).params.is_empty() {
+                    return Err(fail(Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG));
+                }
+                // https://github.com/tlaplus/tlaplus/issues/827
+                if graph.op_level(d) >= Level::Temporal {
+                    return Err(SpecError::Config {
+                        ec: Ec::TLC_CONFIG_ID_HAS_VALUE,
+                        params: vec![
+                            "possible".to_string(),
+                            name.clone(),
+                            "a temporal formula; only state- and action-level predicates are supported".to_string(),
+                        ],
+                    });
+                }
+                let body = graph.op_def(d).body.expect("a user definition has a body");
+                checks.push(PossibleCheck { name: graph.op_def(d).name, expr: body, is_action: graph.op_level(d) > Level::State });
+            }
+            Some(_) => return Err(fail(Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT)),
+        }
+    }
+    Ok(checks.into())
+}
+
+/// `Spec.hasAlias` + `Spec.getAliasSpec` (`Spec.java:274-304`). TLC calls `getAliasSpec`
+/// once per printed trace state, so the lookup's failure is carried instead of raised: the
+/// name resolves against `defns`, which means a constant-level ALIAS has been folded to a
+/// value and fails as a constant.
+fn config_alias(config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> Option<crate::tool::AliasSpec> {
+    let name = config.alias.as_deref().filter(|s| !s.is_empty())?;
+    let graph = tool.graph.clone();
+    let fail = |ec: Ec| Err(out.text(ec, &["alias", name]));
+    let body = match defn_of(defns, &graph, name) {
+        None => fail(Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED),
+        Some(OpBinding::Replaced(d)) if !graph.op_def(d).params.is_empty() => fail(Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG),
+        Some(OpBinding::Replaced(d)) => Ok(graph.op_def(d).body.expect("a user definition has a body")),
+        Some(_) => fail(Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT),
+    };
+    Some(crate::tool::AliasSpec { body, trace_symbol: trace_symbol(&graph) })
+}
+
+/// `emt.getContext("TLCExt").getSymbol("Trace")`: the symbol `evalAlias` binds the printed
+/// prefix to, or `None` when the module is not in scope and `Trace` cannot appear.
+fn trace_symbol(graph: &SemanticGraph) -> Option<SymbolRef> {
+    let (_, module) = graph.modules().find(|(_, m)| &*graph.interner().text(m.name) == "TLCExt")?;
+    let d = *module.op_defs.iter().find(|&&d| &*graph.interner().text(graph.op_def(d).name) == "Trace")?;
+    Some(SymbolRef::OpDef(d))
+}
+
+/// `Spec.getPostConditionSpecs` (`Spec.java:406-435`), which `checkPostCondition` calls
+/// when the search is over. Every name must be a 0-arity definition of `defns`; the first
+/// one that is not raises an `Assert.fail` that escapes `checkPostCondition`, so TLC then
+/// checks nothing at all. The lookups are pure, so they run here and the message waits.
+fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> (Box<[NamedCheck]>, Option<EvalError>) {
+    let graph = tool.graph.clone();
+    let mut checks = Vec::new();
+    for name in &config.postconditions {
+        let fail = |ec: Ec| Some(EvalError::runtime(ec, out.text(ec, &["post condition", name])));
+        match defn_of(defns, &graph, name) {
+            None => return (Box::new([]), fail(Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED)),
+            Some(OpBinding::Replaced(d)) => {
+                if !graph.op_def(d).params.is_empty() {
+                    return (Box::new([]), fail(Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG));
+                }
+                let body = graph.op_def(d).body.expect("a user definition has a body");
+                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) });
+            }
+            // `processModuleOverrides` puts a `defns` entry only for a definition that has a
+            // matching Java method; tlars binds every definition of a `tlc2.module` class,
+            // so a name that lands here may well be an ordinary definition for TLC.
+            Some(OpBinding::Unimplemented { .. }) => {
+                let what = format!("the Java override of the POSTCONDITION {name} (M3 unit 6)");
+                return (Box::new([]), Some(EvalError::unimplemented(what)));
+            }
+            Some(_) => return (Box::new([]), fail(Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT)),
+        }
+    }
+    (checks.into(), None)
+}
+
+/// `Spec.getCounterExampleDef()` (`Spec.java:337-356`). `processModuleOverrides` leaves an
+/// `EvaluatingValue` under the name only for `TLCExt!CounterExample`'s Java method, so a
+/// definition of the spec's own fails the check whatever the cfg asks for.
+///
+/// TLC asks this only once the search is over, so the lookup must not intern the name: a
+/// token handed out here would shift every string the run interns afterwards.
+fn config_counter_example(tool: &Tool, defns: &Defns) -> CounterExampleDef {
+    let Some(name) = tool.graph.interner().interned("CounterExample") else { return CounterExampleDef::Absent };
+    match defns.get(&name).cloned().flatten() {
+        None => CounterExampleDef::Absent,
+        Some(OpBinding::Native(_) | OpBinding::Unimplemented { .. }) => CounterExampleDef::Evaluating,
+        Some(_) => CounterExampleDef::NotEvaluating,
+    }
+}
+
+/// `Tool.getSymmetryPerms` (`Tool.java:3836-3943`), the other half of what
+/// `TLCStateMut.setTool` computes. The name resolves against `unprocessedDefns`, the
+/// snapshot taken *before* `processConstantDefns`, so a constant-level symmetry definition
+/// is still a definition here — unlike VIEW and ALIAS.
+fn config_symmetry(
+    config: &ModelConfig,
+    tool: &Tool,
+    unprocessed: &Defns,
+    out: &dyn Report,
+) -> Result<Box<[crate::symmetry::MvPerm]>, SpecError> {
+    let Some(name) = config.symmetry.as_deref().filter(|s| !s.is_empty()) else { return Ok(Box::new([])) };
+    let graph = tool.graph.clone();
+    let d = match defn_of(unprocessed, &graph, name) {
+        None => {
+            return Err(SpecError::Config {
+                ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
+                params: vec!["symmetry function".to_string(), name.to_string()],
+            });
+        }
+        Some(OpBinding::Replaced(d)) => d,
+        // `Assert.fail(String)`: an exception nobody meant to raise, so `TLC.process`
+        // reports it as a `java.lang.RuntimeException`.
+        Some(_) => {
+            return Err(SpecError::Unexpected {
+                class: "java.lang.RuntimeException",
+                message: format!("The symmetry function {name} must specify a set of permutations."),
+            });
+        }
+    };
+    let body = graph.op_def(d).body.expect("a user definition has a body");
+    let mut locals = WorkerLocals::new(0, tool.globals.seed);
+    let mut ev = tool.ev(&mut locals, out);
+    let fcns = ev.eval(body, &Ctx::EMPTY, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR).map_err(uncaught)?;
+    // `!(fcns instanceof Enumerable) || !(fcns instanceof SetEnumValue)`.
+    let Value::SetEnum(set) = &fcns else {
+        return Err(SpecError::Unexpected {
+            class: "java.lang.RuntimeException",
+            message: "The symmetry operator must specify a set of functions.".to_string(),
+        });
+    };
+    // `((SetEnumValue) fcns).elements().all()`: `SetEnumValue.Enumerator` normalises in its
+    // constructor, so the count compared below is of distinct permutations.
+    let values: Vec<Value> = crate::value::order::normalized(&mut ev, set).map_err(uncaught)?.to_vec();
+    for v in &values {
+        if !matches!(v, Value::FcnRcd(_)) {
+            return Err(SpecError::Unexpected {
+                class: "java.lang.RuntimeException",
+                message: "The symmetry values must be function records.".to_string(),
+            });
+        }
+    }
+    let args: Vec<ExprOrOpArg> = match graph.expr(body) {
+        ExprNode::OpAppl { args, .. } => args.to_vec(),
+        // `(OpApplNode) opDef.getBody()` on another node kind.
+        _ => return Err(unimplemented("a SYMMETRY whose definition body is not an operator application")),
+    };
+    // `argNodes.length >= values.size()`: as many permuted sets as permutations means every
+    // symmetry set holds at most one element, and TLC then warns and uses no symmetry at all.
+    let mut offenders = SymmetrySetList::default();
+    if args.len() >= values.len() {
+        for arg in &args {
+            offenders.add(config, &graph, arg)?;
+        }
+        offenders.warn(out)?;
+        return Ok(Box::new([]));
+    }
+    // `MVPerms.permutationSubgroup((Enumerable) fcns)`, which reads the domain/range pairs
+    // off each function record. The check that both are model values lives there, so it is
+    // only reached once TLC has decided there are permutations to compute at all.
+    let mut generators = Vec::with_capacity(values.len());
+    for v in &values {
+        let Value::FcnRcd(fcn) = v else { unreachable!("every value was checked to be a function record") };
+        let (domain, images) = fcn.snapshot();
+        let Some(domain) = domain else {
+            return Err(unimplemented("a SYMMETRY function whose domain is an interval (TLC raises a NullPointerException)"));
+        };
+        let mut pairs = Vec::with_capacity(images.len());
+        for (dval, rval) in domain.iter().zip(images.iter()) {
+            match (dval, rval) {
+                (Value::Model(a), Value::Model(b)) => pairs.push((*a, *b)),
+                _ => {
+                    return Err(SpecError::Unexpected {
+                        class: "java.lang.RuntimeException",
+                        message: "Symmetry function must have model values as domain and range.".to_string(),
+                    });
+                }
+            }
+        }
+        generators.push(crate::symmetry::Generator { pairs });
+    }
+    let subgroup = crate::symmetry::permutation_group(&mut ev, &generators, &tool.model_values).map_err(uncaught)?;
+    // A set none of whose elements the subgroup permutes is an offender too, and this time
+    // TLC keeps the subgroup it computed and only warns.
+    let members: Vec<Atom> = subgroup.iter().flat_map(|p| p.images()).map(|mv| mv.name).collect();
+    for (arg, set) in permutation_set_args(tool, body) {
+        let elems = set.snapshot().to_vec();
+        let found = elems.iter().any(|e| matches!(e, Value::Model(mv) if members.contains(&mv.name)));
+        if !found {
+            offenders.add(config, &graph, &arg)?;
+        }
+    }
+    offenders.warn(out)?;
+    Ok(subgroup.into())
+}
+
+/// `cardinalityOneSetList` and `offenderCount` of `getSymmetryPerms` (`Tool.java:3861-3917`):
+/// the names warning 2300 lists, and how many there are, which also picks its plurals.
+#[derive(Default)]
+struct SymmetrySetList {
+    names: Vec<String>,
+}
+
+impl SymmetrySetList {
+    /// `addToSubTwoSizedSymmetrySetList` (`Tool.java:3923-3942`): the argument's token image,
+    /// unwrapped from `Permutations(..)`, then mapped back through the cfg's overrides so a
+    /// `CONSTANT S <- T` prints the name the spec uses.
+    fn add(&mut self, config: &ModelConfig, graph: &SemanticGraph, arg: &ExprOrOpArg) -> Result<(), SpecError> {
+        let ExprOrOpArg::Expr(node) = arg else { return Ok(()) };
+        let Some(image) = graph.human_readable_image(*node) else {
+            return Err(unimplemented("warning 2300 for a symmetry set whose token image was not kept (M3)"));
+        };
+        const PERMUTATIONS: &str = "Permutations";
+        // `image.substring(PERMUTATIONS.length() + 1, image.length() - 1)`, which drops the
+        // opening parenthesis and the closing one. TLC does not check that they are there,
+        // so an image that merely starts with the name and is too short to hold both — a
+        // `CONSTANT Permutations1` passed to the symmetry definition — asks for a range
+        // ending before it begins, and the JDK's exception escapes `getSymmetryPerms`.
+        let alias: String = if image.starts_with(PERMUTATIONS) {
+            let units = image.encode_utf16().count() as i64;
+            tlars_java::substring(image, PERMUTATIONS.encode_utf16().count() as i64 + 1, units - 1).map_err(|message| {
+                SpecError::Unexpected { class: "java.lang.StringIndexOutOfBoundsException", message }
+            })?
+        } else {
+            image.to_string()
+        };
+        let alias = alias.as_str();
+        let shown = config.overrides_reverse.get(&alias.to_string(), java_hash(alias)).cloned().unwrap_or_else(|| alias.to_string());
+        self.names.push(shown);
+        Ok(())
+    }
+
+    /// The `offenderCount > 0` warning, whose four parameters are the plurals TLC picks from
+    /// the count (`Tool.java:3909-3916`).
+    fn warn(&self, out: &dyn Report) -> Result<(), SpecError> {
+        if self.names.is_empty() {
+            return Ok(());
+        }
+        let many = self.names.len() > 1;
+        let (plurality, anti_plurality, to_have) = if many { ("s", "", "have") } else { ("", "s", "has") };
+        let list = self.names.join(", and ");
+        out.warning(Ec::TLC_SYMMETRY_SET_TOO_SMALL, &[plurality, &list, to_have, anti_plurality]).map_err(warning_as_error)
+    }
+}
+
+/// `getSetEnumValueFromArgumentNode` over every argument of the symmetry definition's body
+/// (`Tool.java:3944-3971`): the set a `Permutations(S)` argument permutes, but only where
+/// `S` is a name whose tool object is a `SetEnumValue`, which is what a cfg `S = {..}`
+/// leaves behind. An inline `Permutations({A, B})` yields nothing.
+fn permutation_set_args(tool: &Tool, body: ExprId) -> Vec<(ExprOrOpArg, std::sync::Arc<crate::value::SetEnumValue>)> {
+    let graph = &tool.graph;
+    let ExprNode::OpAppl { args, .. } = graph.expr(body) else { return Vec::new() };
+    let mut sets = Vec::new();
+    for arg in args.iter() {
+        let ExprOrOpArg::Expr(node) = arg else { continue };
+        let ExprNode::OpAppl { op, args: operands, .. } = graph.expr(*node) else { continue };
+        let SymbolRef::OpDef(outer) = op else { continue };
+        if &*graph.interner().text(graph.op_def(*outer).name) != "Permutations" || operands.len() != 1 {
+            continue;
+        }
+        let ExprOrOpArg::Expr(inner) = &operands[0] else { continue };
+        let ExprNode::OpAppl { op: inner_op, .. } = graph.expr(*inner) else { continue };
+        let bound = match inner_op {
+            SymbolRef::Decl(dec) => match &tool.bindings.decls[dec.index()] {
+                Some(DeclBinding::Value(v)) => Some(v.clone()),
+                _ => None,
+            },
+            SymbolRef::OpDef(d) => match tool.bindings.op_def(*d) {
+                Some(OpBinding::Value(v)) => Some(v.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(Value::SetEnum(set)) = bound {
+            sets.push((*arg, set));
+        }
+    }
+    sets
+}
+
+/// `Spec.getViewSpec` (`Spec.java:243-272`), which `TLCStateMut.setTool` calls from the
+/// `Tool` constructor: after `processConfig` and before the next-state relation is split.
+/// The name resolves against `defns`, so a VIEW whose definition `processConstantDefns`
+/// folded to a value is "not a definition" and fails as a constant.
+fn config_view(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<Option<NamedCheck>, SpecError> {
+    let Some(name) = config.view.as_deref().filter(|s| !s.is_empty()) else { return Ok(None) };
+    let graph = tool.graph.clone();
+    match defn_of(defns, &graph, name) {
+        None => Err(SpecError::Config {
+            ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
+            params: vec!["view function".to_string(), name.to_string()],
+        }),
+        Some(OpBinding::Replaced(d)) => {
+            if !graph.op_def(d).params.is_empty() {
+                return Err(SpecError::Config {
+                    ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG,
+                    params: vec!["view function".to_string(), name.to_string()],
+                });
+            }
+            let body = graph.op_def(d).body.expect("a user definition has a body");
+            Ok(Some(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) }))
+        }
+        Some(_) => Err(SpecError::Config {
+            ec: Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT,
+            params: vec!["view function".to_string(), name.to_string()],
+        }),
+    }
+}
+
 /// `this.defns.get(name)`, which interns the cfg identifier.
 fn defn_of(defns: &Defns, graph: &SemanticGraph, name: &str) -> Option<OpBinding> {
     defns.get(&graph.interner().intern(name)).cloned().flatten()
@@ -1245,7 +1617,7 @@ fn binding_string(tool: &Tool, binding: &OpBinding, out: &dyn Report) -> Result<
             crate::value::print::op_rcd_string(&mut ev, lines).map_err(uncaught)
         }
         OpBinding::Native(id) => Ok(format!("<Java Method: {}>", id.op().signature)),
-        OpBinding::Replaced(_) | OpBinding::Unimplemented => Err(unimplemented("the printed form of this cfg binding")),
+        OpBinding::Replaced(_) | OpBinding::Unimplemented { .. } => Err(unimplemented("the printed form of this cfg binding")),
     }
 }
 

@@ -33,6 +33,7 @@ public class JavaGolden {
         dates(dir.resolve("date_format.txt"));
         intHashSet(dir.resolve("int_hashset.txt"));
         hashMap(dir.resolve("hashmap.txt"));
+        concurrentHashMap(dir.resolve("concurrent_hashmap.txt"));
         pprint(dir.resolve("pprint.txt"));
     }
 
@@ -152,6 +153,28 @@ public class JavaGolden {
     // putAll of a new HashMap filled with those puts. Integer keys hash to themselves; some
     // collide (multiples of 16 and 64) so bins overflow and small tables grow in treeifyBin;
     // at most 8 distinct multiples of 64 keep tables of 64+ from treeifying (not modelled).
+    // "<puts, comma separated>\t<keySet() order, comma separated>" for a ConcurrentHashMap
+    // filled by one thread, which is how TLC uses IdThread.namedRegisters. Keys are Integers,
+    // so hashCode is the value itself.
+    static void concurrentHashMap(Path p) throws IOException {
+        Random r = new Random(31);
+        try (PrintWriter w = open(p)) {
+            for (int c = 0; c < 400; c++) {
+                java.util.concurrent.ConcurrentHashMap<Integer, Integer> m = new java.util.concurrent.ConcurrentHashMap<>();
+                StringBuilder ops = new StringBuilder();
+                int nops = r.nextInt(c < 200 ? 10 : 40);
+                for (int i = 0; i < nops; i++) {
+                    int k = key(r);
+                    m.put(k, i);
+                    ops.append(ops.length() == 0 ? "" : ",").append(k);
+                }
+                StringBuilder order = new StringBuilder();
+                for (int v : m.keySet()) order.append(order.length() == 0 ? "" : ",").append(v);
+                w.println(ops + "\t" + order);
+            }
+        }
+    }
+
     static void hashMap(Path p) throws IOException {
         Random r = new Random(29);
         try (PrintWriter w = open(p)) {

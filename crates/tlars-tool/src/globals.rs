@@ -16,6 +16,9 @@ pub struct TlcGlobals {
     pub check_deadlock: bool,
     pub continue_after_violation: bool,
     pub difftrace: bool,
+    /// `-view` (`TLCGlobals.useView`): a trace state prints its VIEW instead of its
+    /// variables.
+    pub use_view: bool,
     /// `-terse` clears it: lazy sets are not expanded when printed.
     pub expand: bool,
     /// `TLCGlobals.enumBound` (2000).
@@ -32,4 +35,9 @@ pub struct TlcGlobals {
     pub seed: i64,
     pub aril: i64,
     pub no_timestamps: bool,
+    /// The `-D` properties the CLI was given, in the order given (a later one wins). What
+    /// `TLCGet("-Dkey")` falls back to when nothing set that key at run time.
+    pub properties: Vec<(String, String)>,
+    /// `TLCGlobals.Version.installLocation()`, reported by `TLCGet("config").install`.
+    pub install_location: String,
 }

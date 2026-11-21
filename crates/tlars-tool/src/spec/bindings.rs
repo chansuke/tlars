@@ -16,8 +16,10 @@ pub(crate) enum OpBinding {
     Replaced(OpDefId),
     /// cfg `Op(args) = v` (`OpRcdValue`).
     Table(OpRcd),
-    /// A definition TLC overrides with a Java class tlars does not implement yet.
-    Unimplemented,
+    /// A definition TLC overrides with a Java class tlars does not implement yet. The level
+    /// is the override's `minLevel`, which is all `getLevelBound` reads off a `MethodValue`
+    /// or `EvaluatingValue` (`SymbolNodeValueLookupProvider.java:270-276`).
+    Unimplemented { min_level: u8 },
 }
 
 /// `OpRcdValue`: the cfg's `op(a, b) = v` lines for one name, in cfg order.

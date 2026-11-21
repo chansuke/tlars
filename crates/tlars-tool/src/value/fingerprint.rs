@@ -229,6 +229,7 @@ mod tests {
                 config,
                 globals: globals(poly),
                 extras: Default::default(),
+                stdin: Box::new(std::io::empty()),
                 out: &out,
             })
             .expect("the fixture module builds a tool");
@@ -260,6 +261,7 @@ mod tests {
             check_deadlock: true,
             continue_after_violation: false,
             difftrace: false,
+            use_view: false,
             expand: true,
             enum_bound: 2000,
             width: 80,
@@ -271,6 +273,8 @@ mod tests {
             seed: 4,
             aril: 0,
             no_timestamps: true,
+            properties: Vec::new(),
+            install_location: String::new(),
         }
     }
 

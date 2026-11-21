@@ -7,13 +7,23 @@
 //! Naturals ends up bound to `Integers.Plus`. Overrides replace bodies for *evaluation
 //! only*; SANY still level-checks the TLA+ text. User `.class` overrides are not supported
 //! in v1 (see DESIGN.md).
+//!
+//! Which definitions have an override at all is [`java_overrides::JAVA_OVERRIDES`], read out
+//! of the pinned Java by `xtask gen-fidelity`. [`REGISTRY`] is the part of it tlars
+//! implements; the rest stops evaluation as unimplemented. Everything else, including the
+//! other definitions of a module that does have a Java class, is an ordinary TLA+ definition.
 
 mod finite_sets;
+mod java_overrides;
 mod naturals;
+mod possible;
 mod sequences;
-mod tlc;
+pub(crate) mod tlc;
+mod tlc_get_set;
 
 pub(crate) use naturals::eval_exception;
+
+pub(crate) use java_overrides::{JAVA_OVERRIDES, JavaOverride};
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
@@ -51,14 +61,25 @@ pub(crate) struct NativeOp {
     pub(crate) imp: NativeImpl,
     /// `Method.toString()`, as TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE prints it.
     pub(crate) signature: &'static str,
+    /// `@Evaluation(minLevel = ...)` / `@TLAPlusOperator(minLevel = ...)`, which
+    /// `getLevelBound` takes as the level of an application. It is what keeps `TLCGet` out of
+    /// constant folding (`SymbolNodeValueLookupProvider.java:270-276`).
+    pub(crate) min_level: u8,
 }
 
 use JavaParam::{IntValue as I, Value as V};
 
 macro_rules! natives {
-    ($( $class:literal $name:literal ($($p:ident),*) $kind:ident $imp:expr, $sig:literal; )*) => {
+    ($( $class:literal $name:literal ($($p:ident),*) $kind:ident $imp:expr, $sig:literal $(, min_level $lvl:literal)?; )*) => {
         pub(crate) static REGISTRY: &[NativeOp] = &[
-            $( NativeOp { module: $class, tla_name: $name, params: &[$($p),*], imp: NativeImpl::$kind($imp), signature: $sig }, )*
+            $( NativeOp {
+                module: $class,
+                tla_name: $name,
+                params: &[$($p),*],
+                imp: NativeImpl::$kind($imp),
+                signature: $sig,
+                min_level: 0 $(+ $lvl)?,
+            }, )*
         ];
     };
 }
@@ -104,17 +125,20 @@ natives! {
     "TLC" "PrintT" (V) Strict tlc::print_t, "public static tlc2.value.impl.Value tlc2.module.TLC.PrintT(tlc2.value.impl.Value)";
     "TLC" "ToString" (V) Strict tlc::to_string, "public static tlc2.value.impl.Value tlc2.module.TLC.ToString(tlc2.value.impl.Value)";
     "TLC" "Assert" (V, V) Strict tlc::assert, "public static tlc2.value.impl.Value tlc2.module.TLC.Assert(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" "Permutations" (V) Strict tlc::permutations, "public static tlc2.value.impl.Value tlc2.module.TLC.Permutations(tlc2.value.impl.Value)";
     "TLC" ":>" (V, V) Strict tlc::make_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.MakeFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "@@" (V, V) Strict tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;
+    "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "_Possible" "_Counts" () Strict possible::counts, "public static tlc2.value.impl.Value tlc2.module._Possible.counts()", min_level 1;
 }
 
-/// The `tlc2.module` classes. A module with one of these names has its own definitions
-/// bound to unimplemented natives first and then to [`REGISTRY`]'s, so a definition TLC
-/// overrides in Java is never evaluated from its TLA+ body.
-pub(crate) const JAVA_MODULES: &[&str] = &[
-    "AnySet", "Bags", "FiniteSets", "Integers", "Json", "Naturals", "Randomization", "Sequences", "Strings", "TLC",
-    "TLCEval", "TLCExt", "TLCGetSet", "TransitiveClosure", "_JsonTrace", "_Possible", "_TLCTrace",
-];
+/// The Java override `processModuleOverrides` binds to `module!tla_name`, if any. A
+/// definition with no entry here is an ordinary TLA+ definition, evaluated from its body,
+/// whatever the module it lives in is named.
+pub(crate) fn java_override(module: &str, tla_name: &str) -> Option<&'static JavaOverride> {
+    JAVA_OVERRIDES.iter().find(|o| o.module == module && o.tla_name == tla_name)
+}
 
 impl NativeId {
     pub(crate) fn of_module(module: &str, tla_name: &str) -> Option<NativeId> {
@@ -134,6 +158,25 @@ pub(crate) fn imp(id: NativeId) -> NativeImpl {
 /// The Java method's parameter count.
 pub(crate) fn arity(id: NativeId) -> usize {
     id.op().params.len()
+}
+
+/// `EvaluatingValue.getMinLevel()` / `MethodValue.getMinLevel()`.
+pub(crate) fn min_level(id: NativeId) -> u8 {
+    id.op().min_level
+}
+
+/// `EvaluatingValue.eval`'s `catch (Throwable e)` (`EvaluatingValue.java:92-95`): where
+/// `MethodValue` lets an `EvalException` the method raised on purpose through, an
+/// `@Evaluation` override wraps *every* failure, so even `TLCGet(1) was undefined` reaches
+/// the spec inside `TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE`.
+pub(crate) fn wrap_evaluating(ev: &Ev<'_>, module: &str, tla_name: &str, e: EvalError) -> EvalError {
+    use crate::error::EvalErrorKind::{StackOverflow, Unimplemented};
+    if matches!(e.kind, Unimplemented | StackOverflow) {
+        return e;
+    }
+    let signature = NativeId::of_module(module, tla_name).expect("a registered native").op().signature;
+    let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[signature, &e.message]);
+    EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message)
 }
 
 /// `MethodValue.eval(args)`: the arguments are cast to the method's parameter types first.
@@ -163,4 +206,35 @@ fn wrap(ev: &Ev<'_>, op: &NativeOp, e: EvalError) -> EvalError {
     }
     let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[op.signature, &e.message]);
     EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{JAVA_OVERRIDES, REGISTRY, java_overrides::OverrideKind, java_override};
+
+    /// Every native stands for a Java override TLC really has, with the same `minLevel` and,
+    /// where TLC wraps the method in a `MethodValue`, the same parameter count. A native for
+    /// an operator TLC evaluates from its TLA+ body would be a parity bug that no corpus case
+    /// need cover.
+    #[test]
+    fn every_native_mirrors_a_java_override() {
+        for op in REGISTRY {
+            let o = java_override(op.module, op.tla_name)
+                .unwrap_or_else(|| panic!("{}!{} is a native but TLC has no override for it", op.module, op.tla_name));
+            assert_eq!(op.min_level, o.min_level, "{}!{} minLevel", op.module, op.tla_name);
+            if o.kind == OverrideKind::Method {
+                assert_eq!(op.params.len(), usize::from(o.params), "{}!{} arity of {}", op.module, op.tla_name, o.java);
+            }
+        }
+    }
+
+    /// The generated table is keyed by `(module, tla_name)`, so a repeated key would make
+    /// `java_override` pick by position.
+    #[test]
+    fn java_overrides_are_unique() {
+        for (i, o) in JAVA_OVERRIDES.iter().enumerate() {
+            let first = JAVA_OVERRIDES.iter().position(|p| (p.module, p.tla_name) == (o.module, o.tla_name));
+            assert_eq!(first, Some(i), "{}!{} appears twice", o.module, o.tla_name);
+        }
+    }
 }

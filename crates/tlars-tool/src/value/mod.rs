@@ -19,7 +19,7 @@
 pub(crate) mod enumerate;
 mod fingerprint;
 mod function;
-mod order;
+pub(crate) mod order;
 pub(crate) mod print;
 mod sets;
 
@@ -819,15 +819,99 @@ impl Value {
         }
     }
 
-    /// `permute(MVPerm)`.
-    pub(crate) fn permute(&self, ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm) -> EvalResult<Value> {
+    /// `permute(MVPerm)`. `None` is TLC's "returns `this` if nothing is permuted": the
+    /// identity the caller tests with `!=` to decide whether the state changed. A lazy set
+    /// answers `Some` even when no model value moved, because it permutes its *converted*
+    /// set, which is never the same object as itself.
+    pub(crate) fn permute(&self, ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm) -> EvalResult<Option<Value>> {
         let r = self.permute_inner(ev, perm);
         self.fp(r)
     }
 
-    fn permute_inner(&self, ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm) -> EvalResult<Value> {
-        todo!()
+    fn permute_inner(&self, ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm) -> EvalResult<Option<Value>> {
+        match self {
+            // The classes a permutation cannot touch return `this`.
+            Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Interval(_) => Ok(None),
+            Value::Model(mv) => Ok(perm.get(*mv).map(Value::Model)),
+            Value::SetEnum(set) => {
+                let elems = set.snapshot().to_vec();
+                let (vals, changed) = permute_all(ev, perm, &elems)?;
+                Ok(changed.then(|| Value::SetEnum(set_enum_arc(vals, false))))
+            }
+            Value::Record(r) => {
+                let (names, values) = order::record_normalized(ev, r)?;
+                let (names, values) = (names.to_vec(), values.to_vec());
+                let (vals, changed) = permute_all(ev, perm, &values)?;
+                Ok(changed.then(|| Value::Record(Value::record_arc(names, vals, true))))
+            }
+            Value::Tuple(t) => {
+                let elems = t.elems.to_vec();
+                let (vals, changed) = permute_all(ev, perm, &elems)?;
+                Ok(changed.then(|| Value::tuple(vals)))
+            }
+            Value::FcnRcd(fcn) => {
+                let (domain, values) = fcn.normalize(ev)?;
+                let (domain, values) = (domain.map(<[Value]>::to_vec), values.to_vec());
+                let interval = fcn.interval();
+                let (vals, vchanged) = permute_all(ev, perm, &values)?;
+                match (domain, interval) {
+                    (Some(domain), _) => {
+                        let (dom, dchanged) = permute_all(ev, perm, &domain)?;
+                        if dchanged {
+                            Ok(Some(Value::FcnRcd(Value::fcn_rcd_arc(dom, vals, false))))
+                        } else if vchanged {
+                            Ok(Some(Value::FcnRcd(Value::fcn_rcd_arc(domain, vals, true))))
+                        } else {
+                            Ok(None)
+                        }
+                    }
+                    (None, Some(iv)) => Ok(vchanged.then(|| Value::FcnRcd(Value::fcn_rcd_interval_arc(iv, vals)))),
+                    (None, None) => unreachable!("a function record has an explicit or an interval domain"),
+                }
+            }
+            // `toFcnRcd().permute(perm)`, whose result is a different object either way.
+            Value::FcnLambda(l) => {
+                let fcn = Value::FcnRcd(l.to_fcn_rcd(ev)?);
+                Ok(Some(fcn.permute(ev, perm)?.unwrap_or(fcn)))
+            }
+            Value::Subset(_)
+            | Value::KSubset(_)
+            | Value::SetOfFcns(_)
+            | Value::SetOfRcds(_)
+            | Value::SetOfTuples(_)
+            | Value::Union(_)
+            | Value::SetCup(_)
+            | Value::SetCap(_)
+            | Value::SetDiff(_)
+            | Value::SetPred(_) => {
+                let set = Value::SetEnum(self.convert_and_cache(ev)?);
+                Ok(Some(set.permute(ev, perm)?.unwrap_or(set)))
+            }
+            // `Value.permute` (`Value.java:283-294`): the classes that do not override it
+            // are the ones a variable may not hold.
+            Value::User(_) | Value::Undef => {
+                let shown = self.ppr(ev)?;
+                Err(EvalError::detailed(format!("TLC has found a state in which the value of a variable contains {shown}"), None))
+            }
+        }
     }
+}
+
+/// One `for` loop of `permute`: the permuted elements and whether any of them is a new
+/// object, which is TLC's `changed`.
+fn permute_all(ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm, values: &[Value]) -> EvalResult<(Vec<Value>, bool)> {
+    let mut out = Vec::with_capacity(values.len());
+    let mut changed = false;
+    for v in values {
+        match v.permute(ev, perm)? {
+            Some(p) => {
+                changed = true;
+                out.push(p);
+            }
+            None => out.push(v.clone()),
+        }
+    }
+    Ok((out, changed))
 }
 
 /// `new SetEnumValue(vals, isNorm)` as an `Arc`.

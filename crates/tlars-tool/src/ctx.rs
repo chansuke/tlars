@@ -131,7 +131,8 @@ impl Thunk {
         }
         let value = ev.eval(self.expr, &self.ctx, s0, s1, control)?;
         if self.cachable {
-            let entry = ThunkCache { value: value.clone(), s0: s0.snapshot(), s1: s1.snapshot(), control };
+            let (s0_copy, s1_copy) = { (s0.snapshot(ev.tool().vars()), s1.snapshot(ev.tool().vars())) };
+            let entry = ThunkCache { value: value.clone(), s0: s0_copy, s1: s1_copy, control };
             *self.cache.lock().expect("thunk cache") = Some(Arc::new(entry));
         }
         Ok(value)
