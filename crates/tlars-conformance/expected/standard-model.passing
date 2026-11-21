@@ -3,6 +3,7 @@ tlc/standard/internal/missing_deps_tlapluscounterexample
 tlc/standard/internal/missing_deps_tlcactiontrace
 tlc/standard/internal/missing_deps_tlctespec
 tlc/standard/internal/missing_deps_tlctraceplain
+tlc/standard/internal/possible_counts_empty
 tlc/standard/real_time/extends_declares_now
 tlc/standard/real_time/now_must_be_assigned
 tlc/standard/real_time/now_next_real_enumeration
