@@ -398,10 +398,19 @@ impl<'t> Ev<'t> {
     /// `TLCGetOrDefault("s:_possible", <<>>)` decoded: the names `_Track` has seen and their
     /// counts, in the order `@@` appended them. An unset register is the empty tuple, whose
     /// DOMAIN is empty.
+    ///
+    /// A spec can write the register itself. A non-empty tuple there gives `_Track` an
+    /// integer interval as `DOMAIN old`, so `name \in DOMAIN old` fails; TLC's error carries
+    /// a fingerprint stack trace through the expressions of `_Possible` and of the module it
+    /// generated, which the shortcut has no nodes for. The run stops instead of guessing it.
     fn possible_counts(&mut self) -> EvalResult<Vec<(Atom, i32)>> {
         let stored = self.tool.registers.lock().expect("registers").get_named(self.possible_register());
         match stored {
-            None | Some(Value::Tuple(_)) => Ok(Vec::new()),
+            None => Ok(Vec::new()),
+            Some(Value::Tuple(t)) if t.elems.is_empty() => Ok(Vec::new()),
+            Some(Value::Tuple(_)) => Err(crate::error::EvalError::unimplemented(
+                "a _POSSIBLE register a spec overwrote with a non-empty tuple, whose DOMAIN is an integer interval (M3 unit 5)".into(),
+            )),
             Some(Value::FcnRcd(fcn)) => {
                 let (domain, values) = fcn.snapshot();
                 let Some(domain) = domain else {
