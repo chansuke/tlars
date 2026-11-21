@@ -461,6 +461,16 @@ pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
     if let Value::Int(i) = a[0]
         && i >= 0
     {
+        // `IdThread.setLocalValue` on a worker and `mainChecker.setAllValues` elsewhere; with
+        // no checker the `else` dereferences the null `TLCGlobals.simulator`
+        // (`TLCGetSet.java:495-503`). `processConstantDefns` swallows that
+        // `NullPointerException`, and anywhere else it reaches the spec as a JVM failure
+        // whose text tlars cannot reproduce, so nothing is written either way.
+        if ev.tool().main_checker().is_none() {
+            return Err(EvalError::unimplemented(
+                "TLCSet on a numbered register before the checker exists (TLC raises a NullPointerException)".into(),
+            ));
+        }
         ev.tool().registers.lock().expect("registers").set(i as usize, a[1].clone());
         return Ok(Value::Bool(true));
     }
@@ -500,8 +510,12 @@ pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
                 }
                 return Ok(Value::Bool(true));
             }
+            // `setAllNamedValues` through the checker or the simulator, and with neither the
+            // write is dropped while the operator still answers TRUE (`:536-546`).
             _ if key.starts_with(NAMED_REGISTER_PREFIX) => {
-                ev.tool().registers.lock().expect("registers").set_named(name, a[1].clone());
+                if ev.tool().main_checker().is_some() {
+                    ev.tool().registers.lock().expect("registers").set_named(name, a[1].clone());
+                }
                 return Ok(Value::Bool(true));
             }
             // `System.setProperty(key.substring(2), val.toString())`, so a string value
