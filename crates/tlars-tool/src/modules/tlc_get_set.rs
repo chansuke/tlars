@@ -59,6 +59,13 @@ const STATS_FIELDS: &[&str] = &["queue", "distinct", "initial", "generated", "di
 /// `createConfig()`' fields, in the order `AbstractChecker` fills them (`:713-736`).
 const CONFIG_FIELDS: &[&str] = &["mode", "deadlock", "worker", "seed", "fingerprint", "install"];
 
+/// Calling a method of `tlc2.module.TLCGetSet` initialises the class, which interns its
+/// `UniqueString` statics. Nothing before this point touches them, so a spec that reaches
+/// `TLCGet`/`TLCSet` before the checker exists (`processConstantDefns`) is where they land.
+fn ensure_class(ev: &Ev<'_>) {
+    ev.tool().graph().interner().ensure(JavaClass::TlcRuntime);
+}
+
 /// `TLCGetSet.TLCGetEval` (`TLCGetSet.java:160-185`).
 pub(crate) fn tlc_get(
     ev: &mut Ev<'_>,
@@ -68,6 +75,7 @@ pub(crate) fn tlc_get(
     s1: StateRef<'_>,
     control: EvalControl,
 ) -> EvalResult<Value> {
+    ensure_class(ev);
     let result = tlc_get_eval(ev, args, c, s0, s1, control);
     result.map_err(|e| wrap_evaluating(ev, "TLC", "TLCGet", e))
 }
@@ -458,6 +466,7 @@ fn config(ev: &mut Ev<'_>) -> Value {
 
 /// `TLCGetSet.TLCSet` (`TLCGetSet.java:463-535`).
 pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
+    ensure_class(ev);
     if let Value::Int(i) = a[0]
         && i >= 0
     {

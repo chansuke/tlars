@@ -169,6 +169,11 @@ impl<'a> ModelChecker<'a> {
             old_generated: AtomicU64::new(0),
             old_distinct: AtomicU64::new(0),
         };
+        // `AbstractChecker`'s constructor ends in `createConfig()` (`:150`), which reads
+        // `TLCGetSet.MODE` and builds a `RecordValue`: both classes initialise here, ahead of
+        // the assumptions, and their statics take the tokens that order every record field.
+        tool.graph().interner().ensure(tlars_sany::JavaClass::TlcRuntime);
+        tool.graph().interner().ensure(tlars_sany::JavaClass::RecordValue);
         // `TLCGlobals.mainChecker = this`, which is what makes `TLCGet("generated")` and
         // friends answer instead of raising `TLC_MODULE_TLCGET_UNDEFINED`.
         tool.attach_main_checker(std::sync::Arc::new(Published {

@@ -265,13 +265,13 @@ impl CfgBind<'_> {
     /// Methods tlars does not implement yet stay unimplemented natives.
     fn module_overrides(&mut self) {
         let graph = self.graph;
-        // `TLCBuiltInOverrides.get()`: the annotated classes are loaded here whatever the
-        // spec extends, so their static `UniqueString`s are interned now, after parsing. The
-        // tokens are what orders the fields of a `TLCGet("stats")`-style record.
-        // `tlc2.tool.Action` loads just ahead of them (measured against TLC, see
+        // `TLCBuiltInOverrides.get()` hands over class *literals*, and reading a method's
+        // annotations does not initialise its class, so `TLCGetSet`'s own `UniqueString`s are
+        // not interned here: they wait for the first read of one of its statics, which is the
+        // checker's `createConfig()` or an evaluated `TLCGet`/`TLCSet`.
+        // `tlc2.tool.Action` does load here (measured against TLC, see
         // `fidelity::class_statics`), and tlars has no earlier step that builds an action.
         graph.interner().ensure(tlars_sany::JavaClass::Action);
-        graph.interner().ensure(tlars_sany::JavaClass::TlcRuntime);
         for (mid, m) in graph.modules() {
             let module = graph.interner().text(m.name);
             if !crate::modules::JAVA_MODULES.contains(&&*module) {
