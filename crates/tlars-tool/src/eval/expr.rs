@@ -131,10 +131,10 @@ impl<'t> Ev<'t> {
                 if let Some(b) = tool.bindings.op_def(d) {
                     return resolved(b, d);
                 }
-                if tool.graph.op_def(d).kind == OpDefKind::User {
-                    if let Some(b) = tool.graph.op_def(d).body.and_then(|e| tool.bindings.body_chain(&tool.graph, e)) {
-                        return resolved(&b, d);
-                    }
+                if tool.graph.op_def(d).kind == OpDefKind::User
+                    && let Some(b) = tool.graph.op_def(d).body.and_then(|e| tool.bindings.body_chain(&tool.graph, e))
+                {
+                    return resolved(&b, d);
                 }
                 Resolved::UserOp(d)
             }

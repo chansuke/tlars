@@ -497,10 +497,10 @@ pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
             // `if (mainChecker != null) mainChecker.stop()`: with no checker it is a no-op
             // that still answers TRUE.
             "exit" => {
-                if asked {
-                    if let Some(checker) = ev.tool().main_checker() {
-                        checker.stop();
-                    }
+                if asked
+                    && let Some(checker) = ev.tool().main_checker()
+                {
+                    checker.stop();
                 }
                 return Ok(Value::Bool(true));
             }
