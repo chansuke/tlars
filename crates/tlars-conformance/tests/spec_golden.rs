@@ -57,16 +57,23 @@ fn specs_dir() -> PathBuf {
 }
 
 /// The fixture's files copied into a scratch directory, so the run writes nothing into the
-/// repository, and the extra arguments its `args` file asks for.
-fn materialize(case: &str, dir: &Path) -> Vec<String> {
+/// repository, and the extra arguments its `args` file asks for. A `-D<prop>=<value>` there
+/// is a JVM argument to TLC, so it becomes a system property rather than an argument.
+fn materialize(case: &str, dir: &Path) -> (Vec<String>, Vec<(String, String)>) {
     let source = specs_dir().join(case);
     let mut extra = Vec::new();
+    let mut properties = Vec::new();
     for entry in std::fs::read_dir(&source).expect("fixture directory") {
         let path = entry.expect("entry").path();
         let name = path.file_name().expect("file name").to_string_lossy().into_owned();
         let text = std::fs::read_to_string(&path).expect("fixture file");
         if name == "args" {
-            extra.extend(text.lines().filter(|l| !l.is_empty()).map(str::to_string));
+            for line in text.lines().filter(|l| !l.is_empty()) {
+                match line.strip_prefix("-D").and_then(|p| p.split_once('=')) {
+                    Some((key, value)) => properties.push((key.to_string(), value.to_string())),
+                    None => extra.push(line.to_string()),
+                }
+            }
         } else if name != "blocked" {
             std::fs::write(dir.join(&name), text).expect("write fixture");
         }
@@ -79,7 +86,8 @@ fn materialize(case: &str, dir: &Path) -> Vec<String> {
     args.push("-config".into());
     args.push(format!("{case}.cfg"));
     args.push(format!("{case}.tla"));
-    args
+    properties.push(("tlc2.output.MP.noTimestamps".into(), "true".into()));
+    (args, properties)
 }
 
 /// tlars on one fixture, in-process on a thread with a stack as large as TLC's `-Xss`.
@@ -91,7 +99,7 @@ fn run_tlars(case: &str) -> (i32, String, bool) {
         std::fs::remove_dir_all(&dir).expect("clear scratch");
     }
     std::fs::create_dir_all(&dir).expect("scratch");
-    let args = materialize(case, &dir);
+    let (args, properties) = materialize(case, &dir);
     let out = Captured::default();
     let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let (captured, scratch, announced) = (out.clone(), dir.clone(), flag.clone());
@@ -100,7 +108,7 @@ fn run_tlars(case: &str) -> (i32, String, bool) {
         .spawn(move || {
             tlars_check::run(tlars_check::Invocation {
                 args,
-                system_properties: vec![("tlc2.output.MP.noTimestamps".into(), "true".into())],
+                system_properties: properties,
                 cwd: scratch,
                 stdout: Box::new(captured),
                 stderr: Box::new(std::io::sink()),
