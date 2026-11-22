@@ -21,6 +21,7 @@ mod fingerprint;
 mod function;
 pub(crate) mod order;
 pub(crate) mod print;
+pub(crate) mod random;
 mod sets;
 
 pub(crate) use function::{Except, warn};

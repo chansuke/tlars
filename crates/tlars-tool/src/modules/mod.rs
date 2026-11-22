@@ -17,6 +17,7 @@ mod finite_sets;
 mod java_overrides;
 mod naturals;
 mod possible;
+mod randomization;
 mod sequences;
 pub(crate) mod tlc;
 mod tlc_get_set;
@@ -111,6 +112,9 @@ natives! {
     "Integers" "\\div" (I, I) Strict naturals::divide_integers, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Divide(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
     "Integers" "%" (I, I) Strict naturals::modulo, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Mod(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
     "Integers" "^" (I, I) Strict naturals::expt, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Expt(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Randomization" "RandomSubset" (V, V) Strict randomization::random_subset, "public static tlc2.value.impl.Value tlc2.module.Randomization.RandomSubset(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Randomization" "RandomSetOfSubsets" (V, V, V) Strict randomization::random_set_of_subsets, "public static tlc2.value.impl.Value tlc2.module.Randomization.RandomSetOfSubsets(tlc2.value.impl.Value,tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Randomization" "RandomSubsetSet" (V, V, V) Strict randomization::random_subset_set, "public static tlc2.value.impl.Value tlc2.module.Randomization.RandomSubsetSet(tlc2.value.impl.Value,tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "Sequences" "Seq" (V) Strict sequences::seq, "public static tlc2.value.impl.Value tlc2.module.Sequences.Seq(tlc2.value.impl.Value)";
     "Sequences" "Len" (V) Strict sequences::len, "public static tlc2.value.impl.IntValue tlc2.module.Sequences.Len(tlc2.value.impl.Value)";
     "Sequences" "Head" (V) Strict sequences::head, "public static tlc2.value.impl.Value tlc2.module.Sequences.Head(tlc2.value.impl.Value)";

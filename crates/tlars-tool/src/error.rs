@@ -74,6 +74,13 @@ impl EvalError {
         EvalError { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ArrayIndexOutOfBoundsException" }, params: Vec::new() }
     }
 
+    /// `new T[n]` with a negative `n`, whose message is just the size. The randomized
+    /// enumerators allocate their result before they draw, so a negative count fails here.
+    pub(crate) fn negative_array_size(size: i32) -> EvalError {
+        let kind = EvalErrorKind::Jvm { class: "java.lang.NegativeArraySizeException" };
+        EvalError { ec: Ec::GENERAL, message: size.to_string(), loc: None, kind, params: Vec::new() }
+    }
+
     pub(crate) fn unimplemented(what: String) -> EvalError {
         EvalError { ec: Ec::GENERAL, message: format!("tlars does not implement {what} yet"), loc: None, kind: EvalErrorKind::Unimplemented, params: Vec::new() }
     }
