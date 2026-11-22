@@ -19,10 +19,13 @@
 pub(crate) mod enumerate;
 mod fingerprint;
 mod function;
+#[cfg(test)]
+mod golden;
 pub(crate) mod order;
 pub(crate) mod print;
 pub(crate) mod random;
 mod sets;
+pub(crate) mod stream;
 
 pub(crate) use function::{Except, warn};
 pub(crate) use sets::{lazy_cap, lazy_cup, lazy_diff, set_of_fcns, set_of_rcds, set_of_tuples, subset};

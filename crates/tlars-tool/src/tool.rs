@@ -243,6 +243,24 @@ impl Tool {
         added.push(mv);
         Some(mv)
     }
+    /// `ModelValue.mvs[index]`: the model value with that creation index, counting the ones
+    /// `ModelValue.add` made during the run.
+    pub(crate) fn model_value_at(&self, index: i16) -> Option<ModelValue> {
+        let index = usize::try_from(index).ok()?;
+        match self.model_values.get(index) {
+            Some(mv) => Some(*mv),
+            None => {
+                let added = self.added_model_values.lock().expect("model values");
+                added.get(index - self.model_values.len()).copied()
+            }
+        }
+    }
+
+    /// `ModelValue.mvs.length`, which an out-of-bounds read reports.
+    pub(crate) fn model_value_count(&self) -> usize {
+        self.model_values.len() + self.added_model_values.lock().expect("model values").len()
+    }
+
     /// `System.setProperty(name, value)`.
     pub(crate) fn set_property(&self, name: &str, value: String) {
         let mut set = self.set_properties.lock().expect("system properties");

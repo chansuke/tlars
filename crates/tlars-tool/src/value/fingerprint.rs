@@ -148,6 +148,7 @@ fn string_fp(ev: &Ev<'_>, fp: Fp, a: Atom) -> Fp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::value::golden::Fixture;
     use crate::value::{IntervalValue, ModelValue};
     use std::sync::Arc;
 
@@ -176,10 +177,10 @@ mod tests {
             let p: usize = p.parse().expect("poly index");
             if p != poly {
                 poly = p;
-                fixture = Some(Fixture::new(p, &toks));
+                fixture = Some(Fixture::new(p, &toks, &[]));
                 index = 0;
             }
-            let (shown, fp) = fixture.as_ref().expect("a poly line precedes its values").at(index);
+            let (shown, fp) = at(fixture.as_ref().expect("a poly line precedes its values"), index);
             assert_eq!(shown, label, "value {index} of poly {p}");
             assert_eq!(format!("{:x}", fp.raw()), want, "value {index} of poly {p} ({label})");
             index += 1;
@@ -188,118 +189,18 @@ mod tests {
         assert!(checked > 0, "the golden file has values");
     }
 
-    /// A `Tool` over the smallest module SANY accepts, which is all the value methods need.
-    struct Fixture {
-        tool: crate::tool::Tool,
-        model_values: Vec<ModelValue>,
-    }
-
-    impl Fixture {
-        fn new(poly: usize, toks: &[(i32, String)]) -> Fixture {
-            let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
-            let interner = Arc::new(tlars_sany::Interner::new());
-            // A model value fingerprints as its intern token, so each name is interned at the
-            // position TLC gave it, with fillers in between.
-            let mut names = Vec::new();
-            for (tok, name) in toks {
-                while interner.len() as i32 + 1 < *tok {
-                    interner.intern(&format!("\u{0}filler{}", interner.len()));
-                }
-                names.push(interner.intern(name));
-                assert_eq!(names.last().expect("just interned").tok(), *tok, "{name}");
-            }
-            let graph = tlars_sany::load(
-                tlars_sany::LoadRequest {
-                    root_file: "FpGolden.tla",
-                    user_dir: Some(std::path::Path::new(dir)),
-                    working_dir: std::path::Path::new(dir),
-                    library_paths: &[],
-                    interner: interner.clone(),
-                    extra_root_extends: &[],
-                    suppressed_codes: &[],
-                    messages_as_errors: &[],
-                },
-                &mut Silent,
-            )
-            .expect("the fixture module loads");
-            let out = report();
-            let config = tlars_sany::cfg::parse(b"", &interner).expect("an empty config parses");
-            let tool = crate::spec::build_tool(crate::spec::ToolInput {
-                graph,
-                config,
-                globals: globals(poly),
-                extras: Default::default(),
-                stdin: Box::new(std::io::empty()),
-                out: &out,
-            })
-            .expect("the fixture module builds a tool");
-            let model_values =
-                names.iter().enumerate().map(|(i, &a)| ModelValue::new(a, i as u16, &interner.text(a))).collect();
-            Fixture { tool, model_values }
-        }
-
-        /// The printed form and fingerprint of value `index`. The list is rebuilt per call so
-        /// each value is fingerprinted from its constructed state, as the Java golden does
-        /// with a fresh object.
-        fn at(&self, index: usize) -> (String, Fp) {
-            let out = report();
-            let mut locals = crate::eval::WorkerLocals::new(0, 4);
-            let mut ev = self.tool.ev(&mut locals, &out);
-            let values = golden_values(&mut ev, &self.model_values);
+    /// The printed form and fingerprint of value `index`. The list is rebuilt per call so each
+    /// value is fingerprinted from its constructed state, as the Java golden does with a fresh
+    /// object.
+    fn at(fixture: &Fixture, index: usize) -> (String, Fp) {
+        fixture.with_ev(|ev| {
+            let values = golden_values(ev, &fixture.model_values);
             let v = values[index].clone();
-            let shown = v.to_tlc_string(&mut ev).expect("printable");
+            let shown = v.to_tlc_string(ev).expect("printable");
             let start = ev.tool().fp64.new_fp();
-            let fp = v.fingerprint(&mut ev, start).expect("fingerprintable");
+            let fp = v.fingerprint(ev, start).expect("fingerprintable");
             (shown, fp)
-        }
-    }
-
-    fn globals(poly: usize) -> crate::globals::TlcGlobals {
-        crate::globals::TlcGlobals {
-            tool_mode: false,
-            workers: 1,
-            check_deadlock: true,
-            continue_after_violation: false,
-            difftrace: false,
-            use_view: false,
-            expand: true,
-            enum_bound: 2000,
-            width: 80,
-            warn: true,
-            max_set_size: 1_000_000,
-            lncheck: crate::globals::LnCheck::Final,
-            aggressive_constant_caching: false,
-            fp_index: poly,
-            seed: 4,
-            aril: 0,
-            no_timestamps: true,
-            properties: Vec::new(),
-            install_location: String::new(),
-            cwd: std::path::PathBuf::new(),
-        }
-    }
-
-    fn report() -> tlars_msg::Reporter<'static> {
-        tlars_msg::Reporter::new(
-            Box::new(std::io::sink()),
-            tlars_msg::ReporterConfig {
-                tool_mode: false,
-                warnings_enabled: false,
-                suppressed: Vec::new(),
-                as_errors: Vec::new(),
-                debug: false,
-                now: Box::new(|| "NOW".into()),
-                unimplemented: None,
-            },
-        )
-    }
-
-    struct Silent;
-
-    impl tlars_sany::SanyOut for Silent {
-        fn log_line(&mut self, _text: &str) {}
-        fn line(&mut self, _text: &str) {}
-        fn err_line(&mut self, _text: &str) {}
+        })
     }
 
     /// The same list as `FingerprintGolden.values`, in the same order.

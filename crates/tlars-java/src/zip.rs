@@ -241,8 +241,8 @@ impl Huffman {
             return Ok(Huffman { counts, symbols: Vec::new() });
         }
         let mut left = 1i32;
-        for len in 1..16 {
-            left = (left << 1) - i32::from(counts[len]);
+        for count in counts.iter().skip(1) {
+            left = (left << 1) - i32::from(*count);
             if left < 0 {
                 return Err(GzipError::zip(what));
             }
