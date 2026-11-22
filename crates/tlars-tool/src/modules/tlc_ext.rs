@@ -3,14 +3,69 @@
 //! The classic `@TLAPlusOperator` methods are here as strict natives; the `@Evaluation`
 //! methods, which see their arguments unevaluated, are lazy ones.
 
-use super::eval_exception;
-use crate::error::{EvalError, EvalResult};
-use crate::eval::Ev;
+use super::{eval_exception, wrap_evaluating};
+use crate::ctx::Ctx;
+use crate::error::{EvalError, EvalErrorKind, EvalResult};
+use crate::eval::{EvalControl, Ev};
+use crate::state::StateRef;
 use crate::value::Value;
 use tlars_msg::Ec;
+use tlars_sany::graph::{ExprNode, ExprOrOpArg};
 
 /// `TLCGetSet.NAMED_REGISTER_PREFIX`.
 const NAMED_REGISTER_PREFIX: &str = "s:";
+
+/// `TLCExt.assertError(err, exp)` (`TLCExt.java:76-94`): TRUE when evaluating `exp` failed
+/// with exactly the message `err`. The failure's message is what `getMessage()` returns, so
+/// under `-tool` it carries the message framing and an exact text no longer matches.
+pub(crate) fn assert_error(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    let result = assert_error_impl(ev, args, c, s0, s1, control);
+    result.map(Some).map_err(|e| wrap_evaluating(ev, "TLCExt", "AssertError", e))
+}
+
+fn assert_error_impl(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Value> {
+    // `Assert.check(args[0] instanceof StringNode, ..)`: a check on the *node*, so a
+    // definition or an expression that evaluates to a string fails it too. The reason names
+    // the node as `SemanticNode.toString()` prints it.
+    let err_node = args[0].expect_expr();
+    if !matches!(ev.tool().graph().expr(err_node), ExprNode::String { .. }) {
+        let shown = ev.tool().graph().expr_tlc_text(err_node);
+        let reason =
+            format!("In computing AssertError, a non-string expression ({shown}) was used as the err of an AssertError(err, exp).");
+        return Err(EvalError::detailed(reason, None));
+    }
+    match ev.eval(args[1].expect_expr(), c, s0, s1, control) {
+        Ok(_) => Ok(Value::Bool(false)),
+        // `catch (EvalException | TLCRuntimeException e)`: a fingerprint failure, a stack
+        // overflow and an unchecked JVM exception all travel on.
+        Err(e) if matches!(e.kind, EvalErrorKind::Eval | EvalErrorKind::Runtime) => {
+            // `tool.eval(args[0], c, s0)`: the three-argument overload, so no successor state
+            // and `EvalControl.Clear`.
+            let err = ev.eval(err_node, c, s0, StateRef::Empty, EvalControl::CLEAR)?;
+            // `(StringValue) ..`, which the `instanceof StringNode` check above guarantees.
+            let Value::Str(text) = err else {
+                return Err(EvalError::class_cast(err.java_class(), "StringValue"));
+            };
+            let text = ev.tool().graph().interner().text(text).to_string();
+            Ok(Value::Bool(text == e.message))
+        }
+        Err(e) => Err(e),
+    }
+}
 
 /// `TLCExt.tlcNoOp(val)` (`TLCExt.java:303-306`): the value itself. It exists so a Java
 /// breakpoint can be set inside TLC's evaluator.

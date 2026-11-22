@@ -74,10 +74,11 @@ pub(crate) fn tlc_get(
     s0: StateRef<'_>,
     s1: StateRef<'_>,
     control: EvalControl,
-) -> EvalResult<Value> {
+) -> EvalResult<Option<Value>> {
     ensure_class(ev);
     let result = tlc_get_eval(ev, args, c, s0, s1, control);
-    result.map_err(|e| wrap_evaluating(ev, "TLC", "TLCGet", e))
+    // `TLCGetEval` never returns null, so it never falls back to the TLA+ definition.
+    result.map(Some).map_err(|e| wrap_evaluating(ev, "TLC", "TLCGet", e))
 }
 
 fn tlc_get_eval(

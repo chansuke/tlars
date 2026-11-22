@@ -158,9 +158,22 @@ pub(crate) fn sub_seq(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
     }
 }
 
+/// `SelectSeq`, whose Java method never returns null and so never falls back to the TLA+
+/// definition.
+pub(crate) fn select_seq(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    select_seq_impl(ev, args, c, s0, s1, control).map(Some)
+}
+
 /// `SelectSeq(s, Test)`: the test is an operator, so the argument arrives unevaluated and is
 /// resolved the way `OpArgNode` evaluation resolves it (`Tool.java:1884-1892`).
-pub(crate) fn select_seq(
+fn select_seq_impl(
     ev: &mut Ev<'_>,
     args: &[ExprOrOpArg],
     c: &Ctx,
