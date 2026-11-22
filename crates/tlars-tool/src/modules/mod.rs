@@ -135,6 +135,7 @@ natives! {
     "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLCExt" "AssertError" (V, V) Lazy tlc_ext::assert_error, "public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.assertError(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "TLCExt" "TLCEvalDefinition" (V) Lazy tlc_ext::tlc_def_by_name, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcDefByName(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
     "TLCExt" "TLCNoOp" (V) Strict tlc_ext::tlc_no_op, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcNoOp(tlc2.value.impl.Value)";
     "TLCExt" "TLCFP" (V) Strict tlc_ext::tlc_fingerprint, "public static synchronized tlc2.value.impl.IntValue tlc2.module.TLCExt.tlcFingerprint(tlc2.value.impl.Value)";
     "TLCExt" "TLCModelValue" (V) Strict tlc_ext::tlc_model_value, "public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.tlcModelValue(tlc2.value.impl.Value)";

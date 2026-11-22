@@ -169,6 +169,12 @@ pub struct FormalParamNode {
     pub name: Atom,
     pub arity: i32,
     pub loc: Loc,
+    /// `((SyntaxTreeNode) getTreeNode()).getHumanReadableImage()`: the declaration as
+    /// written with whitespace and comments dropped, so `a` and `Op(_,_)`.
+    /// `OpDefNode.getSignature()` is the only reader, and it skips a parameter with no tree
+    /// node, which is why this is optional. The image is kept per parameter because a
+    /// parameter list is short, unlike an expression tree.
+    pub image: Option<Arc<str>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -371,6 +377,35 @@ impl SemanticGraph {
     }
     pub fn op_def(&self, id: OpDefId) -> &OpDefNode {
         &self.op_defs[id.index()]
+    }
+    /// `ModuleNode.getOpDef(name)` (`ModuleNode.java:435-437`): the first definition of the
+    /// module's context under that name, which is the earliest declared. The context holds
+    /// the definitions the module inherits through EXTENDS and INSTANCE too, but an
+    /// instantiated one is named `I!Op`, so a plain name never finds it.
+    pub fn module_op_def(&self, module: ModuleId, name: Atom) -> Option<OpDefId> {
+        self.module(module).op_defs.iter().copied().find(|&d| self.op_def(d).name == name)
+    }
+    /// `OpDefNode.getSignature()` (`OpDefNode.java:1373-1395`): the name, and for an operator
+    /// with parameters the parameter declarations as written, separated by `", "`. A
+    /// parameter with no syntax tree is left out, trailing separator and all.
+    pub fn signature(&self, id: OpDefId) -> String {
+        let def = self.op_def(id);
+        let name = self.interner.text(def.name).to_string();
+        if def.params.is_empty() || def.kind == OpDefKind::BuiltIn {
+            return name;
+        }
+        let mut out = format!("{name}(");
+        let last = def.params.len() - 1;
+        for (i, &p) in def.params.iter().enumerate() {
+            if let Some(image) = &self.param(p).image {
+                out.push_str(image);
+                if i != last {
+                    out.push_str(", ");
+                }
+            }
+        }
+        out.push(')');
+        out
     }
     pub fn decl(&self, id: DeclId) -> &OpDeclNode {
         &self.decls[id.index()]

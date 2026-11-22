@@ -67,6 +67,54 @@ fn assert_error_impl(
     }
 }
 
+/// `TLCExt.tlcDefByName(definitionName)` (`TLCExt.java:390-423`): the body of the root
+/// module's definition of that name, evaluated in the scope the application stands in. It
+/// evaluates the *body*, so a definition that has a Java override is evaluated from its TLA+
+/// text instead — which is why `TLCEvalDefinition("Nat")` is the `{}` that `Naturals.tla`
+/// writes rather than the set of naturals.
+pub(crate) fn tlc_def_by_name(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    let result = tlc_def_by_name_impl(ev, args, c, s0, s1, control);
+    result.map(Some).map_err(|e| wrap_evaluating(ev, "TLCExt", "TLCEvalDefinition", e))
+}
+
+fn tlc_def_by_name_impl(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Value> {
+    let v = ev.eval(args[0].expect_expr(), c, s0, s1, control)?;
+    let argument_error = |ev: &mut Ev<'_>, wanted: &str, shown: &str| {
+        eval_exception(ev, Ec::TLC_MODULE_ONE_ARGUMENT_ERROR, &["TLCEvalDefinition", wanted, shown])
+    };
+    let Value::Str(name) = v else {
+        let shown = v.ppr(ev)?;
+        return Err(argument_error(ev, "string", &shown));
+    };
+    let graph = ev.tool().graph().clone();
+    let Some(def) = graph.module_op_def(graph.root(), name) else {
+        let shown = v.ppr(ev)?;
+        // The template adds no article, so TLC's own `"name of a definition .."` reads as
+        // written and `"a zero-arity definition"` below comes out as `a a zero-arity`.
+        return Err(argument_error(ev, "name of a definition reachable from the root module", &shown));
+    };
+    if !graph.op_def(def).params.is_empty() {
+        let signature = graph.signature(def);
+        return Err(argument_error(ev, "a zero-arity definition", &signature));
+    }
+    let body = graph.op_def(def).body.expect("a definition of the module context has a body");
+    ev.eval(body, c, s0, s1, control)
+}
+
 /// `TLCExt.tlcNoOp(val)` (`TLCExt.java:303-306`): the value itself. It exists so a Java
 /// breakpoint can be set inside TLC's evaluator.
 pub(crate) fn tlc_no_op(_ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {

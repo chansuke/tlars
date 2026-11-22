@@ -154,10 +154,13 @@ impl Freezer {
         }
         let id = graph::ParamId::new(self.parts.params.len() as u32);
         self.params.insert(key(p), id);
+        let tree = p.getTreeNode__SemanticNode()?;
+        let image = if tree.is_null() { None } else { Some(Arc::from(tree.getHumanReadableImage()?.java_string().as_str())) };
         self.parts.params.push(graph::FormalParamNode {
             name: atom(p.getName_0_via_SymbolNode()?),
             arity: p.getArity_0_via_SymbolNode()?,
             loc: loc(&p.getLocation_0_via_SemanticNode()?),
+            image,
         });
         Ok(id)
     }
