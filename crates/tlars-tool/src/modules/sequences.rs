@@ -168,8 +168,21 @@ pub(crate) fn select_seq(
     s1: StateRef<'_>,
     control: EvalControl,
 ) -> EvalResult<Value> {
+    // `MethodValue.eval` receives its arguments already evaluated, so a failure in
+    // evaluating them is outside its catch; everything from the method body on is inside it.
     let sval = ev.eval(args[0].expect_expr(), c, s0, s1, control)?;
     let test = ev.op_arg_value(args[1], c, control)?;
+    let kept = select_seq_body(ev, args, c, &sval, test.as_ref());
+    kept.map_err(|e| super::wrap_method(ev, "Sequences", "SelectSeq", e))
+}
+
+fn select_seq_body(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    sval: &Value,
+    test: Option<&crate::eval::expr::OpArgValue>,
+) -> EvalResult<Value> {
     let Some(seq) = sval.to_tuple(ev)? else {
         let shown = sval.ppr(ev)?;
         return Err(eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["first", "SelectSeq", "sequence", &shown]));
@@ -190,11 +203,11 @@ pub(crate) fn select_seq(
     for elem in seq.elems.iter() {
         // `ftest.eval(args, EvalControl.Clear)`: the test runs with a cleared control
         // whatever the caller's was.
-        match ev.apply_operator(&test, std::slice::from_ref(elem), EvalControl::CLEAR)? {
+        match ev.apply_operator(test, std::slice::from_ref(elem), EvalControl::CLEAR)? {
             Value::Bool(true) => kept.push(elem.clone()),
             Value::Bool(false) => {}
             _ => {
-                let shown = ev.op_arg_text(args[1], Some(&test))?;
+                let shown = ev.op_arg_text(args[1], Some(test))?;
                 return Err(eval_exception(
                     ev,
                     Ec::TLC_MODULE_ARGUMENT_ERROR,

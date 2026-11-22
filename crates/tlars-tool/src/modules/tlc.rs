@@ -157,8 +157,21 @@ pub(crate) fn sort_seq(
     s1: StateRef<'_>,
     control: EvalControl,
 ) -> EvalResult<Value> {
+    // `MethodValue.eval` receives its arguments already evaluated, so a failure in
+    // evaluating them is outside its catch; everything from the method body on is inside it.
     let sval = ev.eval(args[0].expect_expr(), c, s0, s1, control)?;
     let cmp = ev.op_arg_value(args[1], c, control)?;
+    let sorted = sort_seq_body(ev, args, c, &sval, cmp.as_ref());
+    sorted.map_err(|e| super::wrap_method(ev, "TLC", "SortSeq", e))
+}
+
+fn sort_seq_body(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    sval: &Value,
+    cmp: Option<&crate::eval::expr::OpArgValue>,
+) -> EvalResult<Value> {
     let Some(seq) = sval.to_tuple(ev)? else {
         let shown = sval.ppr(ev)?;
         return Err(super::eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["first", "SortSeq", "natural number", &shown]));
@@ -182,7 +195,7 @@ pub(crate) fn sort_seq(
     for elem in elems.iter().skip(1) {
         let mut j = sorted.len();
         sorted.push(elem.clone());
-        while compare(ev, &cmp, elem, &sorted[j - 1])? {
+        while compare(ev, cmp, elem, &sorted[j - 1])? {
             sorted[j] = sorted[j - 1].clone();
             j -= 1;
             if j == 0 {
