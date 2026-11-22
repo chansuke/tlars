@@ -152,6 +152,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         model_values,
         globals,
         registers: std::sync::Mutex::new(crate::effects::Registers::default()),
+        tlc_eval_values: std::sync::Mutex::new(std::collections::HashMap::new()),
         set_properties: std::sync::Mutex::new(Vec::new()),
         stdin: std::sync::Mutex::new(stdin),
         main_checker: std::sync::OnceLock::new(),

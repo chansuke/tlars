@@ -72,6 +72,17 @@ impl Ctx {
     pub(crate) fn branch(&self) -> Ctx {
         Ctx(Some(Arc::new(Cell { name: CellName::Branch, binding: Binding::Value(Value::Undef), next: self.clone() })))
     }
+    /// `Context.isDeepEmpty()` (`Context.java:216-221`): the empty context, or the single
+    /// `BaseBranch` cell. Java tests identity against `BaseBranch`, which is the one instance
+    /// `Context.branch(Empty)` ever returns, so a branch cell directly over the empty context
+    /// is exactly that instance. A branch over anything else is a fresh cell and not deeply
+    /// empty, as is any cons.
+    pub(crate) fn is_deep_empty(&self) -> bool {
+        match &self.0 {
+            None => true,
+            Some(cell) => matches!(cell.name, CellName::Branch) && cell.next.0.is_none(),
+        }
+    }
     /// `Context.lookup(var)`: first cell whose name is `name`.
     pub(crate) fn lookup(&self, name: SymbolRef) -> Option<&Binding> {
         self.lookup_cutoff(name, false)

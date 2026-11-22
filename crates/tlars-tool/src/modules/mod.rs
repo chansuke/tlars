@@ -20,6 +20,7 @@ mod naturals;
 mod possible;
 mod sequences;
 pub(crate) mod tlc;
+mod tlc_eval;
 mod tlc_get_set;
 
 pub(crate) use naturals::eval_exception;
@@ -134,6 +135,7 @@ natives! {
     "_Possible" "_Counts" () Strict possible::counts, "public static tlc2.value.impl.Value tlc2.module._Possible.counts()", min_level 1;
     "AnySet" "ANY" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.AnySet.ANY()";
     "TLC" "Any" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.TLC.Any()";
+    "TLC" "TLCEval" (V) Lazy tlc_eval::tlc_eval, "public static tlc2.value.impl.Value tlc2.module.TLCEval.tlcEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
 }
 
 /// The Java override `processModuleOverrides` binds to `module!tla_name`, if any. A
