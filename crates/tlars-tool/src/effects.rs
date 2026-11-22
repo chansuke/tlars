@@ -72,6 +72,11 @@ pub trait MainChecker: Send + Sync {
     /// `ModelChecker.stop()`: `theStateQueue.finishAll()`, so the workers stop dequeuing and
     /// the run ends where it stands. What `TLCSet("exit", TRUE)` does.
     fn stop(&self);
+    /// `((ModelChecker) TLCGlobals.mainChecker).theFPSet.contains(fp)`, which
+    /// `TLCExt!PickSuccessor` asks before it prompts.
+    fn fpset_contains(&self, fp: Fp) -> bool;
+    /// `theFPSet.put(fp)`: what `PickSuccessor`'s `explored` answer does.
+    fn fpset_put(&self, fp: Fp);
     /// `ConcurrentTLCTrace.getTrace(state)`'s record chain (`ConcurrentTLCTrace.java:87-110`):
     /// the fingerprints of the behaviour that ends at the trace record `uid`, initial state
     /// first and that record's own fingerprint last.

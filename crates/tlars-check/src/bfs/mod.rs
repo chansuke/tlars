@@ -129,6 +129,12 @@ impl tlars_tool::MainChecker for Published {
     fn stop(&self) {
         self.queue.finish_all();
     }
+    fn fpset_contains(&self, fp: tlars_tool::Fp) -> bool {
+        self.fpset.contains(fp)
+    }
+    fn fpset_put(&self, fp: tlars_tool::Fp) {
+        let _ = self.fpset.put(fp);
+    }
     fn trace_fingerprints(&self, uid: tlars_tool::TraceUid) -> Vec<tlars_tool::Fp> {
         self.traces.fingerprints_to_uid(uid)
     }

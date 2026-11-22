@@ -359,6 +359,175 @@ fn tlc_def_by_name_impl(
     ev.eval(body, c, s0, s1, control)
 }
 
+/// `TLCExt.pickSuccessor(exp)` (`TLCExt.java:100-184`): with a FALSE guard, ask on standard
+/// input whether to extend the behaviour with this step, and answer FALSE to drop it.
+///
+/// A step whose successor the search has already seen is allowed before the guard is even
+/// looked at, so the user is not asked about the same state twice. Fingerprinting the
+/// successor comes first, and a state that is not fully assigned — which every constant- and
+/// state-level scope has — has no fingerprint, so TLC raises a `NullPointerException` there
+/// instead of answering TRUE as `TLCExt.tla` promises.
+pub(crate) fn pick_successor(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    let result = pick_successor_impl(ev, args, c, s0, s1, control);
+    result.map(Some).map_err(|e| wrap_evaluating(ev, "TLCExt", "PickSuccessor", e))
+}
+
+fn pick_successor_impl(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Value> {
+    // `theFPSet.contains(s1.fingerPrint())`: a seen state is in the model by definition.
+    if ev.tool().main_checker().is_some() {
+        let fp = successor_fingerprint(ev, s1)?;
+        if ev.tool().main_checker().expect("checked above").fpset_contains(fp) {
+            return Ok(Value::Bool(true));
+        }
+    }
+    let guard = ev.eval(args[0].expect_expr(), c, s0, s1, control)?;
+    let Value::Bool(guard) = guard else {
+        let text = ev.tool().graph().expr_tlc_text(args[0].expect_expr());
+        let reason = format!(
+            "In evaluating TLCExt!PickSuccessor, a non-boolean expression ({}) was used as the condition of an IF.\n{text}",
+            guard.kind_string()
+        );
+        return Err(EvalError::detailed(reason, None));
+    };
+    if guard {
+        return Ok(Value::Bool(true));
+    }
+    // `s1 == TLCState.Empty || !s1.allAssigned()`: a constant- or state-level formula, and a
+    // successor the next-state relation has not finished. Unreachable after the fingerprint
+    // above, which already fails on both.
+    let StateRef::Full(successor) = s1 else {
+        return Ok(Value::Bool(true));
+    };
+    let StateRef::Full(state) = s0 else {
+        return Err(EvalError::unimplemented(
+            "TLCExt!PickSuccessor over a successor whose predecessor is not a complete state (M3 unit 6)".into(),
+        ));
+    };
+    let Some(action) = ev.action_of_step(state, successor)? else {
+        // `action.getName()` on the null no action matched, which TLC dereferences.
+        return Err(EvalError {
+            ec: Ec::GENERAL,
+            message: tlars_java::null_method_call("tlc2.tool.Action.getName()", "action"),
+            loc: None,
+            kind: EvalErrorKind::Jvm { class: "java.lang.NullPointerException" },
+            params: Vec::new(),
+        });
+    };
+    prompt_for_successor(ev, state, successor, action)
+}
+
+/// `s1.fingerPrint()` as `pickSuccessor` calls it: a state with an unassigned variable has
+/// a null among the values `fingerPrint` walks, which is the `NullPointerException` TLC
+/// reports instead of the TRUE `TLCExt.tla` documents. The helpful message names the slot
+/// as the bytecode does: the pinned jar is compiled without local-variable names, so the
+/// `minVals[i]` of the source reads `<local2>[<local5>]`.
+fn successor_fingerprint(ev: &mut Ev<'_>, s1: StateRef<'_>) -> EvalResult<crate::fp64::Fp> {
+    let null = || {
+        Err(EvalError {
+            ec: Ec::GENERAL,
+            message: tlars_java::null_method_call("tlc2.value.IValue.fingerPrint(long)", "<local2>[<local5>]"),
+            loc: None,
+            kind: EvalErrorKind::Jvm { class: "java.lang.NullPointerException" },
+            params: Vec::new(),
+        })
+    };
+    match s1 {
+        StateRef::Full(s) => ev.fingerprint(s),
+        StateRef::Partial(p) => match p.freeze() {
+            Some(s) => ev.fingerprint(&s),
+            None => null(),
+        },
+        // `TLCState.Empty` is a state of nulls, so only a spec with no variable at all has
+        // a fingerprint to compute here.
+        StateRef::Empty | StateRef::Null | StateRef::Fun(_) => {
+            if ev.tool().var_count() == 0 { ev.fingerprint(&crate::state::State::of_values(Vec::new())) } else { null() }
+        }
+    }
+}
+
+/// The `while (true)` prompt loop (`TLCExt.java:148-184`). Every answer but `n` ends with
+/// the step allowed; an unrecognised one asks again.
+fn prompt_for_successor(ev: &mut Ev<'_>, s0: &crate::state::State, s1: &crate::state::State, action: crate::actions::ActionId) -> EvalResult<Value> {
+    // `String.format(.., s0.getLevel(), action.getName(), action)`: the third conversion is
+    // `Action.toString()`, which prints the generic `<Action ..>` rather than the name.
+    let label = ev.action_to_string(action);
+    let name = ev.action_name(action);
+    loop {
+        let prompt =
+            format!("Extend behavior of length {} with a \"{name}\" step [{label}]? (Yes/no/explored/states/diff):", s0.level());
+        ev.out().message(Ec::TLC_MODULE_OVERRIDE_STDOUT, &[&prompt]);
+        let line = read_line(ev)?;
+        let trimmed = line.trim();
+        if trimmed.is_empty() || line.to_lowercase().starts_with('y') {
+            return Ok(Value::Bool(true));
+        }
+        match line.as_bytes()[0] {
+            b's' => {
+                let (before, after) = (ev.print_state(s0, None)?, ev.print_state(s1, None)?);
+                let text = format!("{}\n~>\n{}", before.trim(), after.trim());
+                ev.out().message(Ec::TLC_MODULE_OVERRIDE_STDOUT, &[&text]);
+            }
+            b'd' => {
+                let text = ev.print_state(s1, Some(s0))?;
+                ev.out().message(Ec::TLC_MODULE_OVERRIDE_STDOUT, &[&text]);
+            }
+            // `theFPSet.put(s1.fingerPrint())`, after which the state counts as seen.
+            b'e' => {
+                let fp = ev.fingerprint(s1)?;
+                ev.tool().main_checker().expect("a prompt only happens with a checker").fpset_put(fp);
+                return Ok(Value::Bool(true));
+            }
+            b'n' => return Ok(Value::Bool(false)),
+            _ => {}
+        }
+    }
+}
+
+/// `scanner.nextLine()` over `System.in`: the bytes up to the next newline, or the
+/// `NoSuchElementException` the scanner raises at end of input.
+fn read_line(ev: &mut Ev<'_>) -> EvalResult<String> {
+    let mut stdin = ev.tool().stdin.lock().expect("stdin");
+    let mut bytes = Vec::new();
+    let mut byte = [0u8; 1];
+    loop {
+        match std::io::Read::read(&mut *stdin, &mut byte) {
+            Ok(0) => break,
+            Ok(_) if byte[0] == b'\n' => return Ok(String::from_utf8_lossy(&bytes).into_owned()),
+            Ok(_) => bytes.push(byte[0]),
+            Err(e) => {
+                let message = e.to_string();
+                drop(stdin);
+                return Err(eval_exception(ev, Ec::GENERAL, &[&message]));
+            }
+        }
+    }
+    if bytes.is_empty() {
+        return Err(EvalError {
+            ec: Ec::GENERAL,
+            message: "No line found".to_string(),
+            loc: None,
+            kind: EvalErrorKind::Jvm { class: "java.util.NoSuchElementException" },
+            params: Vec::new(),
+        });
+    }
+    // A last line with no newline is still a line.
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 /// `TLCExt.tlcDefer(expression)` (`TLCExt.java:292-301`): the arguments are wrapped in a
 /// `Callable` and handed to both states, and only the simulator's `TLCStateMutExt` keeps one
 /// (`TLCState.setCallable` is a no-op, `TLCState.java:194-196`). So in breadth-first search

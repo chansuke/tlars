@@ -63,6 +63,28 @@ impl<'t> Ev<'t> {
         Ok(None)
     }
 
+    /// `TLCExt!PickSuccessor`'s action search (`TLCExt.java:131-143`): the first action whose
+    /// successors of `s0` contain `s1`. It regenerates every successor of every action, as
+    /// TLC's own comment admits, so a `Print` in the next-state relation runs again. The
+    /// expansion identity is *not* reset, so the regeneration continues the RNG stream of the
+    /// expansion it interrupts.
+    pub fn action_of_step(&mut self, s0: &State, s1: &State) -> EvalResult<Option<ActionId>> {
+        let target = PartialState::from_state(s1);
+        let count = self.tool.actions.len();
+        for i in 0..count {
+            let id = self.tool.actions[i].id();
+            let mut sink = Contains { want: &target, found: false };
+            match self.next_states_of(s0, id, &mut sink) {
+                Ok(()) | Err(Halt::Stop) => {}
+                Err(Halt::Eval(e)) => return Err(e),
+            }
+            if sink.found {
+                return Ok(Some(id));
+            }
+        }
+        Ok(None)
+    }
+
     /// `RandomEnumerableValues.reset()`: rewind the init-generation stream before replay.
     pub fn reset_init_random(&mut self) {
         let _ = self.locals.effects.reset_random(self.tool.globals.seed);
@@ -103,6 +125,21 @@ impl<'t> Ev<'t> {
             pred_fp = fp;
         }
         Ok(Some(steps))
+    }
+}
+
+/// `StateVec.contains(s1)`: every successor of one action is generated, then compared.
+struct Contains<'a> {
+    want: &'a PartialState,
+    found: bool,
+}
+
+impl NextSink for Contains<'_> {
+    fn add_next(&mut self, ev: &mut Ev<'_>, _s0: &State, _action: ActionId, s1: &PartialState) -> Flow {
+        if !self.found && ev.states_match(s1, self.want) {
+            self.found = true;
+        }
+        Ok(())
     }
 }
 

@@ -687,6 +687,12 @@ impl<'t> Ev<'t> {
             None => "UnnamedAction".to_string(),
         }
     }
+    /// `Action.toString()` (`Action.java:95-98`): `<Action ...>` with the generic word, not
+    /// the action's name and not its bound parameters.
+    pub fn action_to_string(&self, a: ActionId) -> String {
+        let pred = self.tool.actions[a.index()].pred;
+        format!("<Action {}>", self.tool.graph.loc(pred).tlc_text(self.tool.graph.interner()))
+    }
     /// `Action.getLocation()`: `<Name(p) line L, col C to line L2, col C2 of module M>`.
     pub fn action_label(&mut self, a: ActionId) -> String {
         let action = &self.tool.actions[a.index()];
