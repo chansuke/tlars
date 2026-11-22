@@ -239,3 +239,36 @@ fn pretty_print_matches_tlc() {
     }
     assert_eq!(cases, 1243);
 }
+
+/// The streams `GZIPInputStream` reads and the ones it refuses, with its own messages. The
+/// payload tlars writes is stored blocks rather than Java's Huffman codes, so only the parts
+/// of a gzip member that are TLC's format are compared byte for byte: the ten header bytes
+/// and the eight trailer bytes.
+#[test]
+fn gzip_matches_java() {
+    let mut cases = 0;
+    for line in golden("gzip.txt").lines() {
+        let mut f = line.splitn(3, '\t');
+        let (kind, bytes, expected) = (f.next().unwrap(), unhex(f.next().unwrap()), f.next().unwrap());
+        match kind {
+            "ok" => {
+                let java = unhex(expected);
+                assert_eq!(tlars_java::gunzip(&java), Ok(bytes.clone()), "{} bytes", bytes.len());
+                let ours = tlars_java::gzip(&bytes);
+                assert_eq!(ours[..10], java[..10], "header of {} bytes", bytes.len());
+                assert_eq!(ours[ours.len() - 8..], java[java.len() - 8..], "trailer of {} bytes", bytes.len());
+            }
+            "err" => {
+                let error = tlars_java::gunzip(&bytes).expect_err(expected);
+                assert_eq!(error.to_string(), expected);
+            }
+            other => panic!("unknown case kind {other}"),
+        }
+        cases += 1;
+    }
+    assert_eq!(cases, 17);
+}
+
+fn unhex(text: &str) -> Vec<u8> {
+    (0..text.len() / 2).map(|i| u8::from_str_radix(&text[i * 2..i * 2 + 2], 16).unwrap()).collect()
+}

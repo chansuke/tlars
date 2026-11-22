@@ -35,6 +35,98 @@ public class JavaGolden {
         hashMap(dir.resolve("hashmap.txt"));
         concurrentHashMap(dir.resolve("concurrent_hashmap.txt"));
         pprint(dir.resolve("pprint.txt"));
+        gzip(dir.resolve("gzip.txt"));
+    }
+
+    // "ok\t<payload hex>\t<GZIPOutputStream bytes hex>" for payloads that exercise every
+    // DEFLATE block type the JDK's Deflater emits (stored, fixed and dynamic Huffman, long
+    // matches, more than one block), then "err\t<bytes hex>\t<class>: <message>" for the
+    // streams GZIPInputStream refuses. The reader in crates/tlars-java/src/zip.rs must
+    // inflate the first and fail with the same message on the second.
+    static void gzip(Path p) throws IOException {
+        List<byte[]> payloads = new ArrayList<>();
+        payloads.add(new byte[0]);
+        payloads.add(new byte[] {(byte) 'a'});
+        payloads.add("hello hello hello hello".getBytes("ISO-8859-1"));
+        payloads.add(new byte[1000]);
+        byte[] counted = new byte[600];
+        for (int i = 0; i < counted.length; i++) {
+            counted[i] = (byte) i;
+        }
+        payloads.add(counted);
+        Random r = new Random(42);
+        byte[] noise = new byte[5000];
+        r.nextBytes(noise);
+        payloads.add(noise);
+        byte[] big = new byte[70000];
+        for (int i = 0; i < big.length; i++) {
+            big[i] = (byte) (i % 7 == 0 ? r.nextInt(256) : 0);
+        }
+        payloads.add(big);
+        // Every byte value once, so the Huffman tree spans the whole literal alphabet.
+        byte[] alphabet = new byte[256];
+        for (int i = 0; i < 256; i++) {
+            alphabet[i] = (byte) i;
+        }
+        payloads.add(alphabet);
+        try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(p))) {
+            for (byte[] payload : payloads) {
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                try (java.util.zip.GZIPOutputStream gz = new java.util.zip.GZIPOutputStream(out)) {
+                    gz.write(payload);
+                }
+                w.println("ok\t" + hex(payload) + "\t" + hex(out.toByteArray()));
+            }
+            byte[] good;
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            try (java.util.zip.GZIPOutputStream gz = new java.util.zip.GZIPOutputStream(out)) {
+                gz.write("hello hello hello hello".getBytes("ISO-8859-1"));
+            }
+            good = out.toByteArray();
+            w.println("err\t\t" + read(new byte[0]));
+            w.println("err\t1f\t" + read(new byte[] {0x1f}));
+            byte[] magic = good.clone();
+            magic[1] = 0x7b;
+            w.println("err\t" + hex(magic) + "\t" + read(magic));
+            byte[] method = good.clone();
+            method[2] = 9;
+            w.println("err\t" + hex(method) + "\t" + read(method));
+            byte[] truncated = java.util.Arrays.copyOf(good, good.length - 9);
+            w.println("err\t" + hex(truncated) + "\t" + read(truncated));
+            byte[] crc = good.clone();
+            crc[crc.length - 5] ^= 0x40;
+            w.println("err\t" + hex(crc) + "\t" + read(crc));
+            byte[] size = good.clone();
+            size[size.length - 1] ^= 0x40;
+            w.println("err\t" + hex(size) + "\t" + read(size));
+            // The three bits after the header are the block type; 3 is reserved.
+            byte[] blockType = good.clone();
+            blockType[10] |= 0x06;
+            w.println("err\t" + hex(blockType) + "\t" + read(blockType));
+            byte[] codes = good.clone();
+            codes[12] ^= 0x55;
+            codes[13] ^= 0x55;
+            w.println("err\t" + hex(codes) + "\t" + read(codes));
+        }
+    }
+
+    // What GZIPInputStream.readAllBytes() throws for these bytes, or "ok" when it reads them.
+    static String read(byte[] bytes) {
+        try (java.util.zip.GZIPInputStream in =
+                new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(bytes))) {
+            in.readAllBytes();
+            return "ok";
+        } catch (Exception e) {
+            return e.getClass().getName() + ": " + e.getMessage();
+        }
+    }
+
+    static String hex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
     // "<width>\t<flat value>\t<PrettyPrint.mypp(value, width)>", with backslash, tab, newline
