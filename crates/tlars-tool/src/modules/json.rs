@@ -304,8 +304,19 @@ const EISDIR: i32 = 21;
 /// `JsonDeserialize(path)` (`Json.java:146-150`).
 pub(crate) fn deserialize(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
     let text = read_file(ev, &a[0])?;
-    let node = parse::parse_reader(&text).map_err(io_exception)?;
+    let node = parse::parse_reader(&text).map_err(parse_failure)?;
     get_value(ev, &node)
+}
+
+/// A parse that answered no value: gson's own exception, or the one document this port
+/// cannot represent.
+fn parse_failure(failure: parse::Failure) -> EvalError {
+    match failure {
+        parse::Failure::Thrown(message) => io_exception(message),
+        parse::Failure::UnpairedSurrogate => {
+            EvalError::unimplemented("a JSON string escaping one half of a surrogate pair".into())
+        }
+    }
 }
 
 /// `ndJsonDeserialize(path)` (`Json.java:121-138`): one value per line, blank lines ignored
@@ -320,7 +331,7 @@ pub(crate) fn nd_deserialize(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> 
         if line.is_empty() {
             continue;
         }
-        let node = parse::parse_reader(line).map_err(io_exception)?;
+        let node = parse::parse_reader(line).map_err(parse_failure)?;
         values.push(get_value(ev, &node)?);
     }
     Ok(Value::tuple(values))
