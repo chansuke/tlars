@@ -275,6 +275,7 @@ mod tests {
             no_timestamps: true,
             properties: Vec::new(),
             install_location: String::new(),
+            cwd: std::path::PathBuf::new(),
         }
     }
 
