@@ -27,6 +27,13 @@ pub fn substring(s: &str, begin: i64, end: i64) -> Result<String, String> {
     Ok(String::from_utf16_lossy(&units[begin as usize..end as usize]))
 }
 
+/// A helpful `NullPointerException`'s message (JEP 358, on by default since JDK 15):
+/// `Cannot invoke "<Class.method(sig)>" because "<expr>" is null`, where `expr` is the
+/// source expression the bytecode attributes the null to.
+pub fn null_method_call(method: &str, expr: &str) -> String {
+    format!("Cannot invoke \"{method}\" because \"{expr}\" is null")
+}
+
 /// `ClassCastException`'s message for two classes that share a class loader, which is where
 /// every `tlc2.value.impl` class lives when TLC runs from its jar.
 pub fn class_cast(from: &str, to: &str) -> String {

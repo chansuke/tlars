@@ -74,10 +74,11 @@ pub(crate) fn tlc_get(
     s0: StateRef<'_>,
     s1: StateRef<'_>,
     control: EvalControl,
-) -> EvalResult<Value> {
+) -> EvalResult<Option<Value>> {
     ensure_class(ev);
     let result = tlc_get_eval(ev, args, c, s0, s1, control);
-    result.map_err(|e| wrap_evaluating(ev, "TLC", "TLCGet", e))
+    // `TLCGetEval` never returns null, so it never falls back to the TLA+ definition.
+    result.map(Some).map_err(|e| wrap_evaluating(ev, "TLC", "TLCGet", e))
 }
 
 fn tlc_get_eval(
@@ -255,7 +256,7 @@ fn bound_parameters(ev: &Ev<'_>, op_def: Option<OpDefId>, ctx: &Ctx) -> Vec<(Ato
 
 /// `init2Value` / `action2Value` (`TLCGetSet.java:552-576`) without `-coverage`: the action's
 /// own record, whose location is the predicate's.
-fn action_value(ev: &mut Ev<'_>, a: &Action) -> EvalResult<Value> {
+pub(crate) fn action_value(ev: &mut Ev<'_>, a: &Action) -> EvalResult<Value> {
     let loc = ev.tool().graph().loc(a.pred);
     let (name, op_def, ctx) = (a.name, a.op_def, a.ctx.clone());
     action_record(ev, name, loc, op_def, &ctx)
@@ -302,7 +303,7 @@ fn variable_value(ev: &mut Ev<'_>, decl: tlars_sany::graph::DeclId) -> EvalResul
 
 /// `Action.UNKNOWN` (`Action.java:37`): the predicate is `SemanticNode.nullSN`, whose syntax
 /// node is `SyntaxTreeNode.nullSTN` — four zero coordinates in `--TLA+ BUILTINS--`.
-fn unknown_action_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
+pub(crate) fn unknown_action_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
     let module = ev.tool().graph().interner().intern(BUILTINS_MODULE);
     let loc = Loc { module: Some(module), begin_line: 0, begin_col: 0, end_line: 0, end_col: 0 };
     action_record(ev, None, loc, None, &Ctx::EMPTY)
@@ -403,7 +404,7 @@ fn revision_value(ev: &mut Ev<'_>) -> Value {
 
 /// `Value.hashCode()` (`Value.java:296-307`): the two halves of the value's fingerprint under
 /// the run's polynomial, xored. It is what orders a `java.util.HashMap` keyed by values.
-fn value_hash(ev: &mut Ev<'_>, v: &Value) -> EvalResult<i32> {
+pub(crate) fn value_hash(ev: &mut Ev<'_>, v: &Value) -> EvalResult<i32> {
     let fp = v.fingerprint(ev, ev.tool().fp64.new_fp())?.raw();
     Ok(((fp >> 32) as i32) ^ (fp as i32))
 }

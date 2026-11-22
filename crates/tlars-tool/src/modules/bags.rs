@@ -313,7 +313,20 @@ pub(crate) fn sq_subseteq(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
 /// The first argument is an operator, which in tlars is a binding rather than a value, so
 /// the override receives its argument expressions; TLC has evaluated both arguments by the
 /// time the method runs, and the method checks the operator before it converts the bag.
+/// The `LazyFn` shape: an `@Evaluation`-style override that always answers, so never falls
+/// back to the TLA+ definition.
 pub(crate) fn bag_of_all(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    bag_of_all_value(ev, args, c, s0, s1, control).map(Some)
+}
+
+fn bag_of_all_value(
     ev: &mut Ev<'_>,
     args: &[ExprOrOpArg],
     c: &Ctx,

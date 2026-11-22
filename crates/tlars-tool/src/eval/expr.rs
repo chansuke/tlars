@@ -177,6 +177,30 @@ impl<'t> Ev<'t> {
         c1
     }
 
+    /// `Tool.evalPure(opDef, args, ..)` (`Tool.java:1781-1785`): the definition's own body in
+    /// the context its arguments bind, which is what an `@Evaluation` override that returned
+    /// null falls back to. The `EvaluatingValue` holds the `OpDefNode`
+    /// `processModuleOverrides` bound the method to, so a cfg `<-` override that points a
+    /// declaration at such a method has no definition to fall back to.
+    #[allow(clippy::too_many_arguments)]
+    fn eval_pure(
+        &mut self,
+        op: SymbolRef,
+        args: &[ExprOrOpArg],
+        c: &Ctx,
+        s0: StateRef<'_>,
+        s1: StateRef<'_>,
+        control: EvalControl,
+    ) -> EvalResult<Value> {
+        let SymbolRef::OpDef(d) = op else {
+            let name = self.symbol_name(op);
+            return Err(EvalError::unimplemented(format!("the TLA+ fallback of the Java method behind {name} (M3 unit 6)")));
+        };
+        let body = self.tool().graph.op_def(d).body.expect("an overridden definition has a body");
+        let c1 = self.op_context(d, args, c, true);
+        self.eval(body, &c1, s0, s1, control)
+    }
+
     /// `Tool.evalApplImpl` (`Tool.java:1903-2870`) for the operators implemented so far.
     #[allow(clippy::too_many_arguments)]
     fn eval_appl(
@@ -219,7 +243,14 @@ impl<'t> Ev<'t> {
                     // except where the Java method takes an operator and tlars has to see the
                     // argument node to resolve it.
                     return match crate::modules::imp(id) {
-                        crate::modules::NativeImpl::Lazy(f) => f(self, args, c, s0, s1, control),
+                        crate::modules::NativeImpl::Lazy(f) => match f(self, args, c, s0, s1, control)? {
+                            Some(v) => Ok(v),
+                            // `EvaluatingValue.eval`'s null branch: `tool.evalPure(opDef, ..)`,
+                            // the operator's own TLA+ body in the context its arguments bind.
+                            // `opDef` is the definition `processModuleOverrides` bound the
+                            // method to, which is the one this application names.
+                            None => self.eval_pure(op, args, c, s0, s1, control),
+                        },
                         crate::modules::NativeImpl::Strict(_) => {
                             let mut vals = Vec::with_capacity(args.len());
                             for &a in args {
@@ -952,7 +983,10 @@ impl<'t> Ev<'t> {
                     return Err(EvalError::unimplemented(format!("the Java method behind {name} applied to {} arguments", args.len())));
                 }
                 match crate::modules::imp(id) {
-                    crate::modules::NativeImpl::Lazy(f) => f(self, args, c, s0, s1, control),
+                    crate::modules::NativeImpl::Lazy(f) => match f(self, args, c, s0, s1, control)? {
+                        Some(v) => Ok(v),
+                        None => self.eval_pure(op, args, c, s0, s1, control),
+                    },
                     crate::modules::NativeImpl::Strict(_) => {
                         let mut vals = Vec::with_capacity(args.len());
                         for &a in args {

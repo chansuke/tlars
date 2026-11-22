@@ -18,7 +18,8 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{AtomicU32, AtomicU64};
 use tlars_msg::{Ec, Report};
 use tlars_tool::{
-    ActionId, CheckId, Ev, EvalError, Flow, Halt, ImpliedAction, Invariant, PartialState, State, StateRef, Tool, WorkerLocals,
+    ActionId, CheckId, Ev, EvalError, Flow, Halt, ImpliedAction, Invariant, PartialState, State, StateInfo, StateRef, Tool,
+    WorkerLocals,
 };
 
 /// `ModelChecker.modelCheck` (`ModelChecker.java:133-352`), with `TLC.process`'s `RunMode`
@@ -127,6 +128,15 @@ impl tlars_tool::MainChecker for Published {
     }
     fn stop(&self) {
         self.queue.finish_all();
+    }
+    fn fpset_contains(&self, fp: tlars_tool::Fp) -> bool {
+        self.fpset.contains(fp)
+    }
+    fn fpset_put(&self, fp: tlars_tool::Fp) {
+        let _ = self.fpset.put(fp);
+    }
+    fn trace_fingerprints(&self, uid: tlars_tool::TraceUid) -> Vec<tlars_tool::TraceStep> {
+        self.traces.fingerprints_to_uid(uid)
     }
 }
 
@@ -248,7 +258,18 @@ impl<'a> ModelChecker<'a> {
                     self.out.error(Ec::GENERAL, &[&e.message]);
                     return ec;
                 }
-                if let Err((ec, params)) = ev.check_postconditions() {
+                // `new CounterExample(errState)` (`:164`): the error state alone, with no
+                // ALIAS evaluated over it.
+                let counter_example = match self.err.error_state() {
+                    None => None,
+                    Some(state) => match init_counter_example(&mut ev, &state) {
+                        Ok(v) => Some(v),
+                        // Building the record normalises nothing, so this is unreachable
+                        // short of an unimplemented construct in the ALIAS-free path.
+                        Err(e) => return self.out.error(Ec::GENERAL, &[&e.message]),
+                    },
+                };
+                if let Err((ec, params)) = ev.check_postconditions(counter_example) {
                     let params: Vec<&str> = params.iter().map(String::as_str).collect();
                     self.out.error(ec, &params);
                 }
@@ -487,11 +508,14 @@ impl<'a> ModelChecker<'a> {
                     }
                     // `Worker.doNextSetErr`: only the message and the trace are gated on
                     // being the first error; the postconditions always run.
-                    if self.set_err(ErrState::Invariant { id, pred: cur.clone(), state: succ.clone() }) {
+                    // `isConsole = !this.tlc.done`, read before `doNextSetErr` sets it: so
+                    // it is TRUE exactly for the violation whose trace is printed.
+                    let first = self.set_err(ErrState::Invariant { id, pred: cur.clone(), state: succ.clone() });
+                    if first {
                         self.out.error(Ec::TLC_INVARIANT_VIOLATED_BEHAVIOR, &[&name]);
                         self.print_trace_and_stop(ev, cur, Some(succ));
                     }
-                    self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written);
+                    self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written, first);
                     return Err(Halt::Stop);
                 }
                 Err(e) if is_java_error(&e) => return Err(Halt::Eval(e)),
@@ -525,11 +549,12 @@ impl<'a> ModelChecker<'a> {
                         self.print_trace(ev, cur, Some(Succ::Complete(succ)))?;
                         continue;
                     }
-                    if self.set_err(ErrState::ImpliedAction { id, pred: cur.clone(), state: succ.clone() }) {
+                    let first = self.set_err(ErrState::ImpliedAction { id, pred: cur.clone(), state: succ.clone() });
+                    if first {
                         self.out.error(Ec::TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR, &[&name]);
                         self.print_trace_and_stop(ev, cur, Some(succ));
                     }
-                    self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written);
+                    self.post_condition_trace(ev, cur, Some(Succ::Complete(succ)), written, first);
                     return Err(Halt::Stop);
                 }
                 Err(e) if is_java_error(&e) => return Err(Halt::Eval(e)),
@@ -598,7 +623,7 @@ impl<'a> ModelChecker<'a> {
             }
             self.queue.finish_all();
         }
-        self.post_condition_trace(&mut ev, cur, Some(Succ::Partial(s1)), false);
+        self.post_condition_trace(&mut ev, cur, Some(Succ::Partial(s1)), false, first);
         Halt::Stop
     }
 
@@ -736,19 +761,38 @@ impl<'a> ModelChecker<'a> {
     /// `checkPostConditionWithCounterExample` is a no-op without one (`Tool.java:3671-3679`).
     /// The rebuild regenerates states, so anything the initial predicate or the next-state
     /// relation prints is printed again.
-    pub(crate) fn post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool) {
+    pub(crate) fn post_condition_trace(
+        &self,
+        ev: &mut Ev<'_>,
+        cur: &Queued,
+        succ: Option<Succ<'_>>,
+        written: bool,
+        is_console: bool,
+    ) {
         let Some(trace) = self.rebuild_post_condition_trace(ev, cur, succ, written) else { return };
         // The ALIAS over each action of the trace, before the trace is wrapped in a
         // `CounterExample` (`Worker.java:666-674`). It is the `Context.Empty` overload, so
         // `TLCExt!Trace` is not bound, and what it prints or writes to a register is what a
         // POSTCONDITION then sees. An error it does not catch itself leaves `doPostCondition`
         // without checking anything.
+        let mut steps = Vec::with_capacity(trace.len());
         for i in 0..trace.len() {
-            let successor = if i + 1 < trace.len() { &trace[i + 1] } else { &trace[i] };
-            if ev.eval_alias(&PartialState::from_state(&trace[i]), StateRef::Full(successor), None).is_err() {
+            let successor = if i + 1 < trace.len() { &trace[i + 1].state } else { &trace[i].state };
+            let aliased = ev.eval_alias(&PartialState::from_state(&trace[i].state), StateRef::Full(successor), None);
+            let Ok(aliased) = aliased else { return };
+            // `AliasTLCStateInfo` keeps the original step's number and action, so the
+            // counterexample's edges are the actions of the behaviour even where the ALIAS
+            // renamed the variables.
+            let Ok(record) = ev.aliased_record(&aliased) else { return };
+            steps.push(tlars_tool::CounterExampleStep { number: trace[i].state.level() as i32, record, action: trace[i].action });
+        }
+        let counter_example = match tlars_tool::counter_example_of(ev, &steps, is_console) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                self.out.error(Ec::GENERAL, &[&e.message]);
                 return;
             }
-        }
+        };
         // `tool.checkPostConditionWithCounterExample(new CounterExample(trace, isConsole))`.
         // The code it reports never becomes the run's: the counterexample's does. An
         // exception from one of its lookups leaves `Worker.doNext` for `Worker.run`'s
@@ -761,7 +805,7 @@ impl<'a> ModelChecker<'a> {
             self.out.error(Ec::GENERAL, &[&e.message]);
             return;
         }
-        if let Err((ec, params)) = ev.check_postconditions() {
+        if let Err((ec, params)) = ev.check_postconditions(counter_example) {
             let params: Vec<&str> = params.iter().map(String::as_str).collect();
             self.out.error(ec, &params);
         }
@@ -777,20 +821,19 @@ impl<'a> ModelChecker<'a> {
         cur: &Queued,
         succ: Option<Succ<'_>>,
         written: bool,
-    ) -> Option<Vec<State>> {
+    ) -> Option<Vec<StateInfo>> {
         let fps = self.traces.fingerprints_to(cur.ptr);
-        let prefix_of_cur = |ev: &mut Ev<'_>| -> Option<Vec<State>> {
+        let prefix_of_cur = |ev: &mut Ev<'_>| -> Option<Vec<StateInfo>> {
             // `tlc.getTraceInfo(curState)` followed by `tool.getState(curState, last)`.
-            let steps = crate::trace::reconstruct(ev, &fps[..fps.len() - 1]).ok()??;
-            let last = steps.last()?;
-            let (pred, pred_fp) = (last.state.clone(), fps[fps.len() - 2]);
-            let mut trace: Vec<State> = steps.iter().map(|s| s.state.clone()).collect();
-            trace.push(ev.successor_from_fp(&pred, pred_fp, cur.fp).ok()??.state);
+            let mut trace = crate::trace::reconstruct(ev, &fps[..fps.len() - 1]).ok()??;
+            let last = trace.last()?;
+            let (pred, pred_fp) = (last.state.clone(), fps[fps.len() - 2].0);
+            trace.push(ev.successor_from_fp(&pred, pred_fp, cur.fp).ok()??);
             Some(trace)
         };
         match succ {
             // `curState.isInitial() && succState == null`: the initial state alone.
-            None if fps.len() <= 1 => Some(vec![ev.state_from_fp(cur.fp).ok()??.state]),
+            None if fps.len() <= 1 => Some(vec![ev.state_from_fp(cur.fp).ok()??]),
             None => prefix_of_cur(ev),
             // An incomplete successor was never written to the trace, so `getTraceInfo`
             // indexes past its end and nothing is regenerated or checked.
@@ -799,14 +842,14 @@ impl<'a> ModelChecker<'a> {
                 let fp = ev.fingerprint(state).ok()?;
                 let mut trace = if written {
                     // `getTraceInfo(succState)` is the trace up to and including `cur`.
-                    crate::trace::reconstruct(ev, &fps).ok()??.iter().map(|s| s.state.clone()).collect()
+                    crate::trace::reconstruct(ev, &fps).ok()??
                 } else if fps.len() <= 1 {
                     // Fully assigned but never written, from an initial state.
-                    vec![ev.state_from_fp(cur.fp).ok()??.state]
+                    vec![ev.state_from_fp(cur.fp).ok()??]
                 } else {
                     prefix_of_cur(ev)?
                 };
-                trace.push(ev.successor_from_fp(&cur.state, cur.fp, fp).ok()??.state);
+                trace.push(ev.successor_from_fp(&cur.state, cur.fp, fp).ok()??);
                 Some(trace)
             }
         }
@@ -825,7 +868,9 @@ impl<'a> ModelChecker<'a> {
         if let Some(e) = ev.postcondition_unimplemented(false) {
             return self.out.error(Ec::GENERAL, &[&e.message]);
         }
-        match ev.check_postconditions() {
+        // `tool.checkPostCondition()`: the empty context, so `TLCExt!CounterExample` answers
+        // with the empty graph.
+        match ev.check_postconditions(None) {
             Ok(()) => Ec::NO_ERROR,
             Err((ec, params)) => {
                 let params: Vec<&str> = params.iter().map(String::as_str).collect();
@@ -970,7 +1015,7 @@ impl<'a> ModelChecker<'a> {
         // been printed, which is why a `Print` in the next-state relation shows up between
         // the two.
         let pred = prefix.last().expect("a prefix of at least one state").state.clone();
-        let pred_fp = fps[fps.len() - 2];
+        let pred_fp = fps[fps.len() - 2].0;
         number += 1;
         trace.push(PartialState::from_state(&cur.state));
         // `if (s2 == null) lastPrinted = null`: the final state of a trace is printed whole.
@@ -1145,7 +1190,11 @@ impl InitSink<'_, '_> {
             if !seen {
                 let ptr = mc.traces.append(0, None, fp);
                 mc.traces.record_level(0, 1);
-                mc.queue.enqueue(Queued { state: state.clone(), fp, ptr, level: 1 });
+                // `writeState(initialState, fp)` sets `initialState.uid`, which is what
+                // `TLCExt!Trace` reads off the state later.
+                let mut written = state.clone();
+                written.set_uid(ptr.to_uid());
+                mc.queue.enqueue(Queued { state: written, fp, ptr, level: 1 });
             }
         }
         if seen && !self.force_checks {
@@ -1184,6 +1233,15 @@ const STACK_OVERFLOW_MESSAGE: &str = "This was a Java StackOverflowError. It was
 
 /// A `java.lang.Error` rather than an `Exception`, which the `catch (Exception e)` around
 /// the invariant and implied-action checks does not catch (`ModelChecker.java:520, 571`).
+/// `new CounterExample(errState)` (`CounterExample.java:117-119`): one `TLCStateInfo` over
+/// the state, so the graph holds that state and no edge. No ALIAS runs on this path.
+fn init_counter_example(ev: &mut Ev<'_>, state: &State) -> tlars_tool::EvalResult<tlars_tool::Value> {
+    let aliased = tlars_tool::Aliased::of_state(state);
+    let record = ev.aliased_record(&aliased)?;
+    let step = tlars_tool::CounterExampleStep { number: state.level() as i32, record, action: None };
+    tlars_tool::counter_example_of(ev, &[step], true)
+}
+
 pub(crate) fn is_java_error(e: &EvalError) -> bool {
     matches!(e.kind, tlars_tool::EvalErrorKind::StackOverflow | tlars_tool::EvalErrorKind::Assertion)
 }

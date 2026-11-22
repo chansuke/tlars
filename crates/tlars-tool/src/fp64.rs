@@ -30,6 +30,11 @@ impl Fp {
     pub fn raw(self) -> u64 {
         self.0
     }
+    /// `FP64.Zero`, which `IValue.initialize()` fingerprints against: the result is thrown
+    /// away, the point being the `convertAndCache` a lazy value runs on the way.
+    pub(crate) fn zero() -> Fp {
+        Fp(0)
+    }
     /// `(int) fp & 0x7FFFFFFF`, the `SetOfStates` slot hash.
     pub fn slot_hash(self) -> u32 {
         (self.0 as u32) & 0x7FFF_FFFF

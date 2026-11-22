@@ -25,8 +25,15 @@ impl MvPerm {
 
     /// `MVPerm.get(k)`: the image of `k`, or `None` where the permutation fixes it (TLC's
     /// `null`, which `ModelValue.permute` turns back into the value itself).
-    pub(crate) fn get(&self, k: ModelValue) -> Option<ModelValue> {
-        self.elems[k.index as usize]
+    ///
+    /// `Err` is the `ArrayIndexOutOfBoundsException` of a model value created after the
+    /// permutations were sized, which is what `TLCExt!TLCModelValue` does outside constant
+    /// processing. `ModelValue.add`'s own comment calls that bogus behaviour.
+    pub(crate) fn get(&self, k: ModelValue) -> EvalResult<Option<ModelValue>> {
+        match self.elems.get(k.index as usize) {
+            Some(slot) => Ok(*slot),
+            None => Err(crate::error::EvalError::index_out_of_bounds(k.index as usize, self.elems.len())),
+        }
     }
 
     pub(crate) fn size(&self) -> usize {

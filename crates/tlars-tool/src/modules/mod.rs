@@ -23,7 +23,8 @@ mod randomization;
 mod sequences;
 pub(crate) mod tlc;
 mod tlc_eval;
-mod tlc_get_set;
+pub(crate) mod tlc_ext;
+pub(crate) mod tlc_get_set;
 
 pub(crate) use naturals::eval_exception;
 
@@ -40,8 +41,11 @@ use tlars_sany::graph::ExprOrOpArg;
 pub(crate) struct NativeId(u16);
 
 pub(crate) type StrictFn = fn(&mut Ev<'_>, &[Value]) -> EvalResult<Value>;
-/// `@Evaluation`-style: receives unevaluated arguments (TLCGet, Assert, ...).
-pub(crate) type LazyFn = fn(&mut Ev<'_>, &[ExprOrOpArg], &Ctx, StateRef<'_>, StateRef<'_>, EvalControl) -> EvalResult<Value>;
+/// `@Evaluation`-style: receives unevaluated arguments (TLCGet, Assert, ...). `Ok(None)` is
+/// the Java method returning `null`, which makes `EvaluatingValue.eval` fall back to the
+/// operator's own TLA+ definition (`EvaluatingValue.java:84-88`).
+pub(crate) type LazyFn =
+    fn(&mut Ev<'_>, &[ExprOrOpArg], &Ctx, StateRef<'_>, StateRef<'_>, EvalControl) -> EvalResult<Option<Value>>;
 
 #[derive(Clone, Copy)]
 pub(crate) enum NativeImpl {
@@ -139,6 +143,18 @@ natives! {
     "TLC" "@@" (V, V) Strict tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLCExt" "AssertError" (V, V) Lazy tlc_ext::assert_error, "public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.assertError(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "TLCExt" "PickSuccessor" (V) Lazy tlc_ext::pick_successor, "public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.pickSuccessor(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 2;
+    "TLCExt" "TLCCache" (V, V) Lazy tlc_ext::tlc_eval2, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcEval2(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "TLCExt" "TLCDefer" (V) Lazy tlc_ext::tlc_defer, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcDefer(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "TLCExt" "CounterExample" () Lazy tlc_ext::counter_example, "public static tlc2.value.impl.Value tlc2.module.TLCExt.error(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel) throws java.io.IOException", min_level 1;
+    "TLCExt" "Trace" () Lazy tlc_ext::get_trace, "public static tlc2.value.impl.TupleValue tlc2.module.TLCExt.getTrace(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel) throws java.io.IOException", min_level 1;
+    "TLCExt" "ToTrace" (V) Strict tlc_ext::to_trace, "public static tlc2.value.impl.Value tlc2.module.TLCExt.lassoOrdinal(tlc2.value.impl.Value)";
+    "TLCExt" "TLCEvalDefinition" (V) Lazy tlc_ext::tlc_def_by_name, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcDefByName(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "TLCExt" "TLCNoOp" (V) Strict tlc_ext::tlc_no_op, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcNoOp(tlc2.value.impl.Value)";
+    "TLCExt" "TLCFP" (V) Strict tlc_ext::tlc_fingerprint, "public static synchronized tlc2.value.impl.IntValue tlc2.module.TLCExt.tlcFingerprint(tlc2.value.impl.Value)";
+    "TLCExt" "TLCModelValue" (V) Strict tlc_ext::tlc_model_value, "public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.tlcModelValue(tlc2.value.impl.Value)";
+    "TLCExt" "TLCGetOrDefault" (V, V) Strict tlc_ext::tlc_get_or_default, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcGetOrDefault(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "_Possible" "_Counts" () Strict possible::counts, "public static tlc2.value.impl.Value tlc2.module._Possible.counts()", min_level 1;
     "AnySet" "ANY" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.AnySet.ANY()";
     "Bags" "EmptyBag" () Strict bags::empty_bag, "public static tlc2.value.impl.Value tlc2.module.Bags.EmptyBag()";

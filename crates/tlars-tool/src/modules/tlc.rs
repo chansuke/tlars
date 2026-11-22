@@ -149,7 +149,20 @@ pub(crate) fn permutations(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
 ///
 /// The first argument's error says "natural number" because the Java passes that string;
 /// the message is the operator's, not a description of what a sequence is.
+/// The `LazyFn` shape: an `@Evaluation`-style override that always answers, so never falls
+/// back to the TLA+ definition.
 pub(crate) fn sort_seq(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    sort_seq_value(ev, args, c, s0, s1, control).map(Some)
+}
+
+fn sort_seq_value(
     ev: &mut Ev<'_>,
     args: &[ExprOrOpArg],
     c: &Ctx,

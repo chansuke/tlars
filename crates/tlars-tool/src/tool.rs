@@ -9,7 +9,7 @@ use crate::globals::TlcGlobals;
 use crate::spec::Bindings;
 use crate::state::VarTable;
 use crate::symmetry::MvPerm;
-use crate::value::ModelValue;
+use crate::value::{ModelValue, Value};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tlars_msg::Report;
@@ -83,12 +83,18 @@ pub(crate) enum CounterExampleDef {
     /// `defns.get("CounterExample") == null`: not used anywhere in the spec, so the
     /// POSTCONDITIONs are checked with an empty context.
     Absent,
-    /// The `EvaluatingValue` of `TLCExt!CounterExample`, which binds the printed trace.
-    Evaluating,
+    /// The `EvaluatingValue` of `TLCExt!CounterExample`, whose `getOpDef()` is the name the
+    /// counterexample is bound to while the POSTCONDITIONs are checked.
+    Evaluating(OpDefId),
     /// Anything else under that name, a definition of the spec's own among them:
     /// `Assert.fail(EC.GENERAL)`, whatever the cfg asks for.
     NotEvaluating,
 }
+
+/// `TLCExt!TLCCache`'s `HashMap<Value, Value>` per expression node, which TLC keeps as a tool
+/// object on the node (`expr.setToolObject`). Each entry holds the key's `Value.hashCode()`
+/// so that a lookup compares only the keys a `HashMap` would.
+pub(crate) type TlcCaches = std::sync::Mutex<std::collections::BTreeMap<ExprId, Vec<(i32, Value, Value)>>>;
 
 /// Temporal part handed to the liveness checker (`Liveness.parseLiveness` input).
 pub struct Temporal {
@@ -132,8 +138,13 @@ pub struct Tool {
     pub(crate) temporal: Temporal,
     pub(crate) fp64: Fp64,
     pub(crate) globals: TlcGlobals,
+    pub(crate) tlc_caches: TlcCaches,
     /// `ModelValue.mvs`, in creation order (cfg first).
     pub(crate) model_values: Box<[ModelValue]>,
+    /// What `ModelValue.add` created past the cfg's own, which is `TLCExt!TLCModelValue`.
+    /// `mvTable` is one table in TLC, but the cfg's half is frozen before anything can
+    /// evaluate, and only that half sizes the SYMMETRY permutations.
+    pub(crate) added_model_values: std::sync::Mutex<Vec<ModelValue>>,
     /// `TLCSet`'s registers, which live in TLC's worker threads and so outlast any one
     /// `WorkerLocals` (`effects::Registers`).
     pub(crate) registers: std::sync::Mutex<crate::effects::Registers>,
@@ -188,6 +199,49 @@ impl Tool {
     /// `Boolean.getBoolean(name)`: true only for a property that reads `true`, in any case.
     pub(crate) fn property_is_true(&self, name: &str) -> bool {
         self.property(name).is_some_and(|v| v.eq_ignore_ascii_case("true"))
+    }
+    /// `(HashMap<Value, Value>) expr.getToolObject(tool.getId())` for `TLCExt!TLCCache`: the
+    /// entry whose stored hash and key match, if any (`HashMap.get`). The value's own hash
+    /// decides which entries `equals` is called on, which is why a key of another kind never
+    /// raises a comparison error.
+    pub(crate) fn tlc_cache_get(&self, expr: ExprId, hash: i32) -> Vec<(Value, Value)> {
+        let caches = self.tlc_caches.lock().expect("TLCCache tool objects");
+        match caches.get(&expr) {
+            None => Vec::new(),
+            Some(entries) => entries.iter().filter(|(h, _, _)| *h == hash).map(|(_, k, v)| (k.clone(), v.clone())).collect(),
+        }
+    }
+    /// `cache.put(key, value)`, allocating the map on the node the way `setToolObject` does.
+    pub(crate) fn tlc_cache_put(&self, expr: ExprId, key: Value, hash: i32, value: Value) {
+        let mut caches = self.tlc_caches.lock().expect("TLCCache tool objects");
+        caches.entry(expr).or_default().push((hash, key, value));
+    }
+    /// `Spec.getCounterExampleDef()`'s `OpDefNode`: the definition a counterexample is bound
+    /// to, if `TLCExt!CounterExample`'s Java override is the one under that name.
+    pub(crate) fn counter_example_def(&self) -> Option<OpDefId> {
+        match self.counter_example {
+            CounterExampleDef::Evaluating(d) => Some(d),
+            CounterExampleDef::Absent | CounterExampleDef::NotEvaluating => None,
+        }
+    }
+    /// `ModelValue.add(str)` (`ModelValue.java:109-124`): the model value of that name, which
+    /// is created with the next creation index when the table has none. `None` is the
+    /// `count > Short.MAX_VALUE` refusal of `ModelValue`'s constructor.
+    pub(crate) fn add_model_value(&self, name: Atom, text: &str) -> Option<ModelValue> {
+        if let Some(mv) = self.model_values.iter().find(|mv| mv.name == name) {
+            return Some(*mv);
+        }
+        let mut added = self.added_model_values.lock().expect("model values");
+        if let Some(mv) = added.iter().find(|mv| mv.name == name) {
+            return Some(*mv);
+        }
+        let count = self.model_values.len() + added.len();
+        if count > i16::MAX as usize {
+            return None;
+        }
+        let mv = ModelValue::new(name, count as u16, text);
+        added.push(mv);
+        Some(mv)
     }
     /// `System.setProperty(name, value)`.
     pub(crate) fn set_property(&self, name: &str, value: String) {

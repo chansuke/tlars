@@ -29,7 +29,20 @@ fn convert(ev: &mut Ev<'_>, eval: Value) -> EvalResult<Value> {
 }
 
 /// `TLCEval.tlcEval` (`TLCEval.java:62-91`).
+/// The `LazyFn` shape: an `@Evaluation`-style override that always answers, so never falls
+/// back to the TLA+ definition.
 pub(crate) fn tlc_eval(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    tlc_eval_value(ev, args, c, s0, s1, control).map(Some)
+}
+
+fn tlc_eval_value(
     ev: &mut Ev<'_>,
     args: &[ExprOrOpArg],
     c: &Ctx,

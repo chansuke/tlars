@@ -39,6 +39,10 @@ impl Aliased {
     fn plain(original: PartialState) -> Aliased {
         Aliased { original, record: None }
     }
+    /// `new TLCStateInfo(state)`: a trace step no ALIAS ran on.
+    pub fn of_state(state: &State) -> Aliased {
+        Aliased::plain(PartialState::from_state(state))
+    }
     /// `lookup(var)` of the state being printed: the derived state first, then the record's
     /// own fields, so a field that is not a variable is still found.
     fn lookup(&self, name: Atom, vars: &crate::state::VarTable) -> Option<Value> {
@@ -77,7 +81,7 @@ impl Ev<'_> {
         // fails at the first draw, so none is recorded for it.
         if let Some(state) = current.freeze() {
             let fp = self.fingerprint(&state)?;
-            self.begin_expansion(fp);
+            self.begin_expansion(&state, fp);
         }
         let message = match body {
             Err(message) => Some(message),
@@ -132,6 +136,50 @@ impl Ev<'_> {
                 Ok(Aliased { original: current.copy(), record: Some(record) })
             }
         }
+    }
+
+    /// `TLCStateInfo.toRecordValue()` (`TLCStateInfo.java:123-130`): for an aliased state the
+    /// alias record as written, and otherwise `new RecordValue(state)`.
+    pub fn aliased_record(&mut self, a: &Aliased) -> EvalResult<Value> {
+        match &a.record {
+            None => self.state_record(&a.original),
+            Some(rcd) => Ok(Value::Record(Value::record_arc(rcd.names.to_vec(), rcd.values.to_vec(), false))),
+        }
+    }
+
+    /// `s.allAssigned()`: `TLCState.Empty` is a state of nulls, so it is fully assigned only
+    /// when the spec declares no variable.
+    pub(crate) fn all_assigned(&self, s: StateRef<'_>) -> bool {
+        match s {
+            StateRef::Full(_) => true,
+            StateRef::Partial(p) => p.all_assigned(),
+            StateRef::Empty | StateRef::Null | StateRef::Fun(_) => self.tool.var_count() == 0,
+        }
+    }
+
+    /// `s.getUnassigned()`, named as `TLCExt!Trace` prints them.
+    pub(crate) fn unassigned_of(&self, s: StateRef<'_>) -> Vec<String> {
+        let interner = self.tool.graph.interner();
+        match s {
+            StateRef::Full(_) => Vec::new(),
+            StateRef::Partial(p) => p.unassigned(&self.tool.vars, interner),
+            StateRef::Empty | StateRef::Null | StateRef::Fun(_) => {
+                let mut names: Vec<String> = self.tool.vars.names.iter().map(|&n| interner.text(n).to_string()).collect();
+                names.sort();
+                names
+            }
+        }
+    }
+
+    /// `new RecordValue(state)` for one element of `TLCExt!Trace`.
+    pub(crate) fn trace_record(&mut self, s: StateRef<'_>) -> EvalResult<Value> {
+        let partial = match s {
+            StateRef::Full(state) => PartialState::from_state(state),
+            StateRef::Partial(p) => p.copy(),
+            // `TLCState.Empty` with no variable declared: the empty record.
+            StateRef::Empty | StateRef::Null | StateRef::Fun(_) => PartialState::empty(self.tool.var_count()),
+        };
+        self.state_record(&partial)
     }
 
     /// `new RecordValue(state)`: a record of every variable, in `vars[]` order.
