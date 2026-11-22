@@ -16,12 +16,14 @@
 //! | `SimpleDateFormat`            | timestamps, `TLC_FINISHED` durations, metadir      |
 //! | `tlc2.pprint.*`               | state values wrapped at `Values.width` (80)        |
 //! | JVM exception messages        | the casts and array reads TLC lets escape          |
+//! | `strerror` under the locale   | the message of every `FileNotFoundException`       |
 //!
 //! Golden files under `tests/golden` come from `tools/golden/JavaGolden.java` run on the
 //! pinned JDK 21, with `$TLA2TOOLS_JAR` on the class path for the one corpus that asks TLC
 //! itself rather than the JDK (`pprint.txt`).
 
 mod concurrent_hashmap;
+mod errno;
 mod exception;
 mod hashmap;
 mod hashset;
@@ -33,6 +35,7 @@ mod random;
 pub mod time;
 
 pub use concurrent_hashmap::JavaConcurrentHashMap;
+pub use errno::last_error_string;
 pub use exception::{class_cast, index_out_of_bounds, range_out_of_bounds, substring};
 pub use hashmap::{JavaHashMap, capacity_for_mappings, table_size_for};
 pub use hashset::JavaIntHashSet;

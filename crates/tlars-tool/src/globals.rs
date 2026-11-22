@@ -40,4 +40,9 @@ pub struct TlcGlobals {
     pub properties: Vec<(String, String)>,
     /// `TLCGlobals.Version.installLocation()`, reported by `TLCGet("config").install`.
     pub install_location: String,
+    /// The directory the process was started in, which is what `open(2)` resolves a
+    /// relative `new File(path)` against (`Json!JsonSerialize` and the other operators that
+    /// name a file). Not `user.dir`: the JDK only consults that property to *print* an
+    /// absolute path, never to open one.
+    pub cwd: std::path::PathBuf,
 }

@@ -15,6 +15,7 @@
 
 mod finite_sets;
 mod java_overrides;
+mod json;
 mod naturals;
 mod possible;
 mod sequences;
@@ -51,6 +52,19 @@ pub(crate) enum NativeImpl {
 pub(crate) enum JavaParam {
     Value,
     IntValue,
+    StringValue,
+}
+
+impl JavaParam {
+    /// The parameter's class when the argument cannot be cast to it. `Value` (and `IValue`,
+    /// which no value fails either) accepts everything.
+    fn mismatch(self, arg: &Value) -> Option<&'static str> {
+        match self {
+            JavaParam::Value => None,
+            JavaParam::IntValue => (!matches!(arg, Value::Int(_))).then_some("IntValue"),
+            JavaParam::StringValue => (!matches!(arg, Value::Str(_))).then_some("StringValue"),
+        }
+    }
 }
 
 pub(crate) struct NativeOp {
@@ -67,7 +81,7 @@ pub(crate) struct NativeOp {
     pub(crate) min_level: u8,
 }
 
-use JavaParam::{IntValue as I, Value as V};
+use JavaParam::{IntValue as I, StringValue as S, Value as V};
 
 macro_rules! natives {
     ($( $class:literal $name:literal ($($p:ident),*) $kind:ident $imp:expr, $sig:literal $(, min_level $lvl:literal)?; )*) => {
@@ -131,6 +145,13 @@ natives! {
     "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "_Possible" "_Counts" () Strict possible::counts, "public static tlc2.value.impl.Value tlc2.module._Possible.counts()", min_level 1;
+    "Json" "ToJson" (V) Strict json::to_json, "public static tlc2.value.impl.StringValue tlc2.module.Json.toJson(tlc2.value.IValue) throws java.io.IOException";
+    "Json" "ToJsonArray" (V) Strict json::to_json_array, "public static tlc2.value.impl.StringValue tlc2.module.Json.toJsonArray(tlc2.value.IValue) throws java.io.IOException";
+    "Json" "ToJsonObject" (V) Strict json::to_json_object, "public static tlc2.value.impl.StringValue tlc2.module.Json.toJsonObject(tlc2.value.IValue) throws java.io.IOException";
+    "Json" "JsonSerialize" (S, V) Strict json::serialize, "public static synchronized tlc2.value.impl.BoolValue tlc2.module.Json.serialize(tlc2.value.impl.StringValue,tlc2.value.impl.Value) throws java.io.IOException";
+    "Json" "JsonDeserialize" (S) Strict json::deserialize, "public static tlc2.value.IValue tlc2.module.Json.deserialize(tlc2.value.impl.StringValue) throws java.io.IOException";
+    "Json" "ndJsonSerialize" (S, V) Strict json::nd_serialize, "public static synchronized tlc2.value.impl.BoolValue tlc2.module.Json.ndSerialize(tlc2.value.impl.StringValue,tlc2.value.impl.Value) throws java.io.IOException";
+    "Json" "ndJsonDeserialize" (S) Strict json::nd_deserialize, "public static tlc2.value.IValue tlc2.module.Json.ndDeserialize(tlc2.value.impl.StringValue) throws java.io.IOException";
 }
 
 /// The Java override `processModuleOverrides` binds to `module!tla_name`, if any. A
@@ -183,8 +204,10 @@ pub(crate) fn wrap_evaluating(ev: &Ev<'_>, module: &str, tla_name: &str, e: Eval
 pub(crate) fn apply(ev: &mut Ev<'_>, id: NativeId, args: &[Value]) -> EvalResult<Value> {
     let op = id.op();
     for (arg, param) in args.iter().zip(op.params) {
-        if *param == JavaParam::IntValue && !matches!(arg, Value::Int(_)) {
-            let cause = format!("Cannot cast tlc2.value.impl.{} to tlc2.value.impl.IntValue", arg.java_class());
+        if let Some(to) = param.mismatch(arg) {
+            // `MethodHandle.invoke`'s own `asType` cast, whose message is shorter than the
+            // `ClassCastException` of a cast written in Java.
+            let cause = format!("Cannot cast tlc2.value.impl.{} to tlc2.value.impl.{to}", arg.java_class());
             let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[op.signature, &cause]);
             return Err(EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message));
         }
