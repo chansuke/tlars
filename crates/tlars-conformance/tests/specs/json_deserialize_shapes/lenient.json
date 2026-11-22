@@ -1,0 +1,2 @@
+// a comment gson's lenient reader skips
+{a:'v', 'b':[1;2], c:3}
