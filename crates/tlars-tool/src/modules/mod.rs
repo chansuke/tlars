@@ -13,6 +13,7 @@
 //! implements; the rest stops evaluation as unimplemented. Everything else, including the
 //! other definitions of a module that does have a Java class, is an ordinary TLA+ definition.
 
+mod any_set;
 mod finite_sets;
 mod java_overrides;
 mod naturals;
@@ -131,6 +132,8 @@ natives! {
     "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "_Possible" "_Counts" () Strict possible::counts, "public static tlc2.value.impl.Value tlc2.module._Possible.counts()", min_level 1;
+    "AnySet" "ANY" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.AnySet.ANY()";
+    "TLC" "Any" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.TLC.Any()";
 }
 
 /// The Java override `processModuleOverrides` binds to `module!tla_name`, if any. A

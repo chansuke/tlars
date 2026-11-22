@@ -108,6 +108,9 @@ impl Value {
                 UserValue::Int => "Int".to_string(),
                 UserValue::String => "STRING".to_string(),
                 UserValue::Seq(range) => format!("Seq({})", range.to_string_impl(ev, swallow)?),
+                // `AnySet.toString` (`AnySet.java:50-54`): the Java name, not the TLA+ one,
+                // so `TLC!Any` prints `ANY` too.
+                UserValue::AnySet => "ANY".to_string(),
                 _ => return Err(EvalError::unimplemented("toString of this special set (M2 unit 6)".into())),
             },
             // `S \cup T`, `S \cap T`, `S \ T`: each operand parenthesised, since every set
