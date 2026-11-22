@@ -105,9 +105,9 @@ pub(crate) fn bag_cardinality(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value>
         let shown = a[0].ppr(ev)?;
         return Err(eval_exception(ev, Ec::TLC_MODULE_APPLYING_TO_WRONG_VALUE, &["BagCardinality", "a function with a finite domain", &shown]));
     };
-    let (_, values) = domain_and_values(&fcn);
+    let (_, values) = fcn.snapshot();
     let mut num = 0;
-    for v in &values {
+    for v in values {
         match v {
             Value::Int(cnt) if *cnt > 0 => num = add_counts(ev, num, *cnt)?,
             _ => {
