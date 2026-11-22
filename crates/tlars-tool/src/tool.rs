@@ -91,6 +91,11 @@ pub(crate) enum CounterExampleDef {
     NotEvaluating,
 }
 
+/// `TLCExt!TLCCache`'s `HashMap<Value, Value>` per expression node, which TLC keeps as a tool
+/// object on the node (`expr.setToolObject`). Each entry holds the key's `Value.hashCode()`
+/// so that a lookup compares only the keys a `HashMap` would.
+pub(crate) type TlcCaches = std::sync::Mutex<std::collections::BTreeMap<ExprId, Vec<(i32, Value, Value)>>>;
+
 /// Temporal part handed to the liveness checker (`Liveness.parseLiveness` input).
 pub struct Temporal {
     pub fairness: Box<[(ExprId, Ctx)]>,
@@ -133,10 +138,7 @@ pub struct Tool {
     pub(crate) temporal: Temporal,
     pub(crate) fp64: Fp64,
     pub(crate) globals: TlcGlobals,
-    /// `TLCExt!TLCCache`'s `HashMap<Value, Value>` per expression node, which TLC keeps as a
-    /// tool object on the node (`expr.setToolObject`). Entries hold the key's
-    /// `Value.hashCode()` so that a lookup compares only the keys a `HashMap` would.
-    pub(crate) tlc_caches: std::sync::Mutex<std::collections::BTreeMap<ExprId, Vec<(i32, Value, Value)>>>,
+    pub(crate) tlc_caches: TlcCaches,
     /// `ModelValue.mvs`, in creation order (cfg first).
     pub(crate) model_values: Box<[ModelValue]>,
     /// What `ModelValue.add` created past the cfg's own, which is `TLCExt!TLCModelValue`.
