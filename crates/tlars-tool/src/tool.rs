@@ -145,7 +145,7 @@ pub struct Tool {
     /// is never held across an evaluation: Java's write lock is reentrant, so a nested
     /// `TLCEval` reacquires it, and a plain mutex gets the same per-expression value by
     /// releasing first.
-    pub(crate) tlc_eval_values: std::sync::Mutex<std::collections::HashMap<ExprId, crate::value::Value>>,
+    pub(crate) tlc_eval_values: std::sync::Mutex<std::collections::BTreeMap<ExprId, crate::value::Value>>,
     /// What `TLCSet("-Dkey", v)` wrote, newest last. TLC calls `System.setProperty`, a JVM
     /// global; tlars keeps it per run, so two runs in one process cannot see each other's.
     pub(crate) set_properties: std::sync::Mutex<Vec<(String, String)>>,
