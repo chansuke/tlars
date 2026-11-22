@@ -129,6 +129,9 @@ impl tlars_tool::MainChecker for Published {
     fn stop(&self) {
         self.queue.finish_all();
     }
+    fn trace_fingerprints(&self, uid: tlars_tool::TraceUid) -> Vec<tlars_tool::Fp> {
+        self.traces.fingerprints_to_uid(uid)
+    }
 }
 
 pub(crate) struct ModelChecker<'a> {
@@ -1181,7 +1184,11 @@ impl InitSink<'_, '_> {
             if !seen {
                 let ptr = mc.traces.append(0, None, fp);
                 mc.traces.record_level(0, 1);
-                mc.queue.enqueue(Queued { state: state.clone(), fp, ptr, level: 1 });
+                // `writeState(initialState, fp)` sets `initialState.uid`, which is what
+                // `TLCExt!Trace` reads off the state later.
+                let mut written = state.clone();
+                written.set_uid(ptr.to_uid());
+                mc.queue.enqueue(Queued { state: written, fp, ptr, level: 1 });
             }
         }
         if seen && !self.force_checks {

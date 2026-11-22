@@ -149,10 +149,10 @@ impl<O: SeenOracle> NextSink for WorkerSink<'_, O> {
         if let Some(slot) = self.stats {
             self.mc.stats[slot].generated.store(self.st.generated, Relaxed);
         }
-        let Some(succ) = ev.complete(s1) else {
+        let Some(mut succ) = ev.complete(s1) else {
             return Err(self.mc.incomplete(self.cur, action, s1));
         };
-        match self.examine(ev, s0, &succ) {
+        match self.examine(ev, s0, &mut succ) {
             Err(Halt::Eval(e)) => {
                 // `addElement`'s `catch (Exception e) { throw new WrappingRuntimeException(e,
                 // succState); }` (`Worker.java:483-490`) carries the successor up to
@@ -168,7 +168,7 @@ impl<O: SeenOracle> NextSink for WorkerSink<'_, O> {
 }
 
 impl<O: SeenOracle> WorkerSink<'_, O> {
-    fn examine(&mut self, ev: &mut Ev<'_>, s0: &State, succ: &State) -> Flow {
+    fn examine(&mut self, ev: &mut Ev<'_>, s0: &State, succ: &mut State) -> Flow {
         let mc = self.mc;
         let in_model = ev.is_in_model(succ)? && ev.is_in_actions(s0, succ)?;
         // `unseen` defaults to true: out-of-model successors are invariant-checked every time.
@@ -180,7 +180,11 @@ impl<O: SeenOracle> WorkerSink<'_, O> {
             unseen = self.seen.seen(fp) == Seen::New;
             if unseen {
                 // Written before invariants run, so a violation's trace can include it.
-                new_ptr = Some(mc.traces.append(self.worker, Some(self.cur.ptr), fp));
+                let ptr = mc.traces.append(self.worker, Some(self.cur.ptr), fp);
+                // `writeState` also sets `sucState.uid`, which is what makes `TLCExt!Trace`
+                // in an invariant find the behaviour ending at this successor.
+                succ.set_uid(ptr.to_uid());
+                new_ptr = Some(ptr);
                 new_fp = Some(fp);
                 mc.traces.record_level(self.worker, self.cur.level + 1);
                 self.st.unseen += 1;

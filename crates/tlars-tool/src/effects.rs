@@ -25,6 +25,7 @@ pub(crate) struct ExpansionId(pub(crate) u64);
 ///   `x' = RandomElement(0..2) /\ y' = RandomElement(0..2)` gives two draws.
 /// - Trace replay (`Tool.getState(fp, s)` calls `IdThread.setCurrentState(s)`): the same
 ///   rule, so replay regenerates the same choices without any snapshot/restore.
+#[derive(Clone)]
 pub(crate) struct StateRandom {
     run_seed: i64,
     rng: JavaRandom,
@@ -71,6 +72,10 @@ pub trait MainChecker: Send + Sync {
     /// `ModelChecker.stop()`: `theStateQueue.finishAll()`, so the workers stop dequeuing and
     /// the run ends where it stands. What `TLCSet("exit", TRUE)` does.
     fn stop(&self);
+    /// `ConcurrentTLCTrace.getTrace(state)`'s record chain (`ConcurrentTLCTrace.java:87-110`):
+    /// the fingerprints of the behaviour that ends at the trace record `uid`, initial state
+    /// first and that record's own fingerprint last.
+    fn trace_fingerprints(&self, uid: crate::state::TraceUid) -> Vec<Fp>;
 }
 
 /// `IdThread.localValues` and `IdThread.namedRegisters`: what `TLCSet` writes and `TLCGet`
@@ -134,23 +139,39 @@ impl Registers {
     }
 }
 
+/// `IdThread.setCurrentState(s)`: the state whose successors are being generated. The RNG
+/// re-seeds from its fingerprint, and `TLCExt!Trace` reads the state itself when the state it
+/// is asked about has no trace record of its own.
+#[derive(Clone)]
+pub(crate) struct CurrentState {
+    pub(crate) id: ExpansionId,
+    pub(crate) fp: Fp,
+    pub(crate) state: crate::state::State,
+}
+
 /// Per-worker effect state: what TLC keeps in `IdThread` locals and statics.
 pub(crate) struct Effects {
     pub(crate) random: StateRandom,
     /// The parent being expanded, set by `next_states` and by replay.
-    pub(crate) current: Option<(ExpansionId, Fp)>,
+    pub(crate) current: Option<CurrentState>,
 }
 
 impl Effects {
     pub(crate) fn new(run_seed: i64) -> Self {
         Effects { random: StateRandom::new(run_seed), current: None }
     }
-    /// `RandomEnumerableValues.reset()`: a fresh stream seeded with the run seed.
-    pub(crate) fn reset_random(&mut self, run_seed: i64) {
-        self.random = StateRandom::new(run_seed);
+    /// `RandomEnumerableValues.reset()`: a fresh stream seeded with the run seed. It returns
+    /// the stream it replaced, which `RandomEnumerableValues.set` puts back.
+    pub(crate) fn reset_random(&mut self, run_seed: i64) -> StateRandom {
+        std::mem::replace(&mut self.random, StateRandom::new(run_seed))
+    }
+    /// `RandomEnumerableValues.set(snapshot)`.
+    pub(crate) fn set_random(&mut self, random: StateRandom) {
+        self.random = random;
     }
     pub(crate) fn rng(&mut self) -> &mut JavaRandom {
-        self.random.for_draw(self.current)
+        let parent = self.current.as_ref().map(|c| (c.id, c.fp));
+        self.random.for_draw(parent)
     }
 }
 

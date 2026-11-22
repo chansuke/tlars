@@ -11,6 +11,17 @@ pub(crate) struct TracePtr {
     index: u32,
 }
 
+impl TracePtr {
+    /// `TLCState.uid`, which TLC sets to the record's file offset. tlars has one store per
+    /// worker, so the pair is packed instead.
+    pub(crate) fn to_uid(self) -> tlars_tool::TraceUid {
+        (u64::from(self.worker) << 32) | u64::from(self.index)
+    }
+    fn from_uid(uid: tlars_tool::TraceUid) -> TracePtr {
+        TracePtr { worker: (uid >> 32) as u16, index: uid as u32 }
+    }
+}
+
 /// `pred == None` marks an initial state (TLC's `ptr == 1` marker).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TraceRecord {
@@ -58,6 +69,10 @@ impl TraceStores {
         fps.reverse();
         fps
     }
+    /// `fingerprints_to` for a state's `TLCState.uid`.
+    pub(crate) fn fingerprints_to_uid(&self, uid: tlars_tool::TraceUid) -> Vec<Fp> {
+        self.fingerprints_to(TracePtr::from_uid(uid))
+    }
     fn record(&self, ptr: TracePtr) -> TraceRecord {
         self.per_worker[ptr.worker as usize].records.lock().expect("trace store")[ptr.index as usize]
     }
@@ -68,20 +83,7 @@ impl TraceStores {
 }
 
 /// `ConcurrentTLCTrace.getTrace(..)`: replay forward taking the first fingerprint match at
-/// every step. RandomElement repeats its choices because each replayed step re-seeds from
-/// its predecessor's fingerprint, as in the search. `Ok(None)` =
-/// `TLC_FAILED_TO_RECOVER_INIT` / "failed to recover state".
+/// every step. `Ok(None)` = `TLC_FAILED_TO_RECOVER_INIT` / "failed to recover state".
 pub(crate) fn reconstruct(ev: &mut Ev<'_>, fps: &[Fp]) -> EvalResult<Option<Vec<StateInfo>>> {
-    ev.reset_init_random();
-    let Some((&first, rest)) = fps.split_first() else { return Ok(Some(Vec::new())) };
-    let Some(init) = ev.state_from_fp(first)? else { return Ok(None) };
-    let mut steps = vec![init];
-    let mut pred_fp = first;
-    for &fp in rest {
-        let pred = &steps.last().expect("non-empty").state;
-        let Some(next) = ev.successor_from_fp(pred, pred_fp, fp)? else { return Ok(None) };
-        steps.push(next);
-        pred_fp = fp;
-    }
-    Ok(Some(steps))
+    ev.reconstruct_states(fps)
 }

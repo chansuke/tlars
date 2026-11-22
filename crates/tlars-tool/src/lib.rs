@@ -32,7 +32,7 @@ pub use fp64::{Fp, FpKey};
 pub use globals::{LnCheck, TlcGlobals};
 pub use live::{CheckBits, LiveSpec, Pem, Solution, Tableau};
 pub use spec::{CliSpecExtras, PostCondition, RuntimeInvariant, SpecError, ToolInput, TraceConstraint, build_tool};
-pub use state::{PartialState, State, StateRef, VarSlot};
+pub use state::{PartialState, State, StateRef, TraceUid, VarSlot};
 pub use tool::{CheckId, ImpliedAction, ImpliedInit, Invariant, Temporal, Tool};
 pub use value::Value;
 

@@ -100,6 +100,108 @@ pub(crate) fn counter_example(
     Ok(Some(empty_counter_example(ev)))
 }
 
+/// `TLCExt.getTrace(..)` (`TLCExt.java:207-290`), the override of `Trace`: the behaviour
+/// from an initial state up to and including `s0`, one record of the variables per state.
+/// The ALIAS binds the operator in the context instead (`Tool.evalAlias`), so this is the
+/// path every other scope takes.
+pub(crate) fn get_trace(
+    ev: &mut Ev<'_>,
+    _args: &[ExprOrOpArg],
+    _c: &Ctx,
+    s0: StateRef<'_>,
+    _s1: StateRef<'_>,
+    _control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    let result = get_trace_impl(ev, s0);
+    result.map(Some).map_err(|e| wrap_evaluating(ev, "TLCExt", "Trace", e))
+}
+
+fn get_trace_impl(ev: &mut Ev<'_>, s0: StateRef<'_>) -> EvalResult<Value> {
+    // `Assert.fail(EC.GENERAL, ..)` while a variable is still unassigned, which is the state
+    // a POSTCONDITION and an initial predicate before its last conjunct are evaluated in.
+    if !ev.all_assigned(s0) {
+        let unassigned = ev.unassigned_of(s0);
+        let plural = if unassigned.len() > 1 { "s" } else { "" };
+        let what = format!(
+            "In evaluating TLCExt!Trace, the state is not completely specified yet (variable{plural} {} undefined).",
+            unassigned.join(", ")
+        );
+        let message = ev.out().text(Ec::GENERAL, &[&what]);
+        return Err(EvalError::runtime(Ec::GENERAL, message));
+    }
+    // `TLCGlobals.simulator != null` hands back the behaviour the simulator is on; tlars has
+    // no simulator before M5, so that branch is never taken (`simulate::simulate`).
+    // `s0.isInitial()`: nothing precedes it.
+    if s0.level() == crate::state::INIT_LEVEL {
+        let record = ev.trace_record(s0)?;
+        return Ok(Value::tuple(vec![record]));
+    }
+    let StateRef::Full(state) = s0 else {
+        // A level above the first with a variable still unbound cannot happen: the check
+        // above rejected it.
+        return Err(EvalError::unimplemented("TLCExt!Trace over a state that is not a complete successor (M3 unit 6)".into()));
+    };
+    match state.uid() {
+        // `getTrace0(s0, getTraceInfo(s0))`: the behaviour that ends at `s0`'s predecessor,
+        // then `s0` itself.
+        Some(uid) => {
+            let mut records = prefix_records(ev, uid)?;
+            records.push(ev.trace_record(s0)?);
+            Ok(Value::tuple(records))
+        }
+        // `s0.uid == TLCState.INIT_UID`: `s0` has no trace record, so the behaviour is
+        // rebuilt up to the state the worker is expanding and `s0` appended. TLC restores
+        // `IdThread.setCurrentState` afterwards, because the rebuild moved it.
+        None => {
+            let saved = ev.saved_expansion();
+            let Some(current) = saved.as_ref().map(|c| c.state.clone()) else {
+                // `IdThread.getCurrentState()` is null outside a worker's expansion, which
+                // TLC dereferences.
+                return Err(EvalError::unimplemented(
+                    "TLCExt!Trace over a state with no trace record outside a worker's expansion (TLC raises a NullPointerException)"
+                        .into(),
+                ));
+            };
+            let mut records = if current.is_initial() {
+                vec![ev.trace_record(StateRef::Full(&current))?]
+            } else {
+                let Some(uid) = current.uid() else {
+                    return Err(EvalError::unimplemented(
+                        "TLCExt!Trace over a state the trace store has no record of (M3 unit 6)".into(),
+                    ));
+                };
+                let mut records = prefix_records(ev, uid)?;
+                records.push(ev.trace_record(StateRef::Full(&current))?);
+                ev.restore_expansion(saved);
+                records
+            };
+            records.push(ev.trace_record(s0)?);
+            Ok(Value::tuple(records))
+        }
+    }
+}
+
+/// `TLCGlobals.mainChecker.getTraceInfo(s)`: the states before the one the trace record
+/// `uid` names, each as `new RecordValue(state)`.
+fn prefix_records(ev: &mut Ev<'_>, uid: crate::state::TraceUid) -> EvalResult<Vec<Value>> {
+    let Some(checker) = ev.tool().main_checker() else {
+        return Err(EvalError::unimplemented("TLCExt!Trace with no checker running (TLC raises a NullPointerException)".into()));
+    };
+    let fps = checker.trace_fingerprints(uid);
+    // `records.size() - 1`: the record's own fingerprint is dropped, so the reconstruction
+    // stops at its predecessor.
+    let Some(prefix) = fps.split_last().map(|(_, rest)| rest.to_vec()) else { return Ok(Vec::new()) };
+    let Some(steps) = ev.reconstruct_states(&prefix)? else {
+        return Err(EvalError::unimplemented("TLCExt!Trace over a behaviour TLC cannot regenerate (M3 unit 6)".into()));
+    };
+    let mut records = Vec::with_capacity(steps.len());
+    for step in &steps {
+        let state = step.state.clone();
+        records.push(ev.trace_record(StateRef::Full(&state))?);
+    }
+    Ok(records)
+}
+
 /// `TLCExt.lassoOrdinal(val)` (`TLCExt.java:186-193`), the override of `ToTrace`: the
 /// counterexample's states as a sequence indexed by state number. A record of the same shape
 /// is refused, because the check is on the value's Java class.

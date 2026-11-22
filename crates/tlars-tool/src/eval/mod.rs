@@ -724,10 +724,27 @@ impl<'t> Ev<'t> {
     }
 
     /// `IdThread.setCurrentState(s0)`: the next RandomElement draw re-seeds with
-    /// `fp(s0) ^ seed`. Called by `next_states` and by trace replay, never by init.
-    pub(crate) fn begin_expansion(&mut self, s0_fp: Fp) {
+    /// `fp(s0) ^ seed`, and `TLCExt!Trace` reads `s0` back. Called by `next_states` and by
+    /// trace replay, never by init.
+    pub(crate) fn begin_expansion(&mut self, s0: &State, s0_fp: Fp) {
         self.expansions += 1;
-        self.locals.effects.current = Some((crate::effects::ExpansionId(self.expansions), s0_fp));
+        let id = crate::effects::ExpansionId(self.expansions);
+        self.locals.effects.current = Some(crate::effects::CurrentState { id, fp: s0_fp, state: s0.clone() });
+    }
+
+    /// `IdThread.getCurrentState()`, which is `null` outside a worker's expansion.
+    pub(crate) fn current_state(&self) -> Option<&State> {
+        self.locals.effects.current.as_ref().map(|c| &c.state)
+    }
+
+    /// The `IdThread.setCurrentState(currentState)` that `TLCExt!Trace` runs after a nested
+    /// reconstruction moved the slot (`TLCExt.java:274-277`).
+    pub(crate) fn restore_expansion(&mut self, saved: Option<crate::effects::CurrentState>) {
+        self.locals.effects.current = saved;
+    }
+
+    pub(crate) fn saved_expansion(&self) -> Option<crate::effects::CurrentState> {
+        self.locals.effects.current.clone()
     }
 
     /// `Tool.checkAssumptions` (`Tool.java:3645-3663`): the root module's assumptions in

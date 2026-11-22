@@ -26,7 +26,7 @@ impl<'t> Ev<'t> {
     /// needs no RNG snapshot. Only the init step uses the unseeded run stream, which
     /// `RandomEnumerableValues.reset()` rewinds (`reset_init_random`).
     pub fn successor_from_fp(&mut self, pred: &State, pred_fp: Fp, fp: Fp) -> EvalResult<Option<StateInfo>> {
-        self.begin_expansion(pred_fp);
+        self.begin_expansion(pred, pred_fp);
         let count = self.tool.actions.len();
         for i in 0..count {
             let id = self.tool.actions[i].id();
@@ -47,7 +47,7 @@ impl<'t> Ev<'t> {
     /// counterexample this way rather than by fingerprint, so two successors that share a
     /// fingerprint cannot be confused, and a candidate whose comparison throws is skipped.
     pub fn successor_matching(&mut self, pred: &State, pred_fp: Fp, target: &PartialState) -> EvalResult<Option<(PartialState, ActionId)>> {
-        self.begin_expansion(pred_fp);
+        self.begin_expansion(pred, pred_fp);
         let count = self.tool.actions.len();
         for i in 0..count {
             let id = self.tool.actions[i].id();
@@ -65,7 +65,44 @@ impl<'t> Ev<'t> {
 
     /// `RandomEnumerableValues.reset()`: rewind the init-generation stream before replay.
     pub fn reset_init_random(&mut self) {
-        self.locals.effects.reset_random(self.tool.globals.seed);
+        let _ = self.locals.effects.reset_random(self.tool.globals.seed);
+    }
+
+    /// `RandomEnumerableValues.reset()`'s return value, which `set` puts back.
+    fn random_snapshot(&mut self) -> crate::effects::StateRandom {
+        self.locals.effects.random.clone()
+    }
+
+    fn restore_random(&mut self, snapshot: crate::effects::StateRandom) {
+        self.locals.effects.set_random(snapshot);
+    }
+
+    /// `ConcurrentTLCTrace.getTrace(sinfo, records)` (`ConcurrentTLCTrace.java:138-194`):
+    /// replay forward taking the first fingerprint match at every step. RandomElement repeats
+    /// its choices because each replayed step re-seeds from its predecessor's fingerprint, as
+    /// in the search. The RNG is rewound before the replay and put back afterwards, so a
+    /// reconstruction that runs inside the search (`TLCExt!Trace`) leaves the draws of the
+    /// surrounding expansion where they were. `Ok(None)` = `TLC_FAILED_TO_RECOVER_INIT`.
+    pub fn reconstruct_states(&mut self, fps: &[Fp]) -> EvalResult<Option<Vec<StateInfo>>> {
+        let saved = self.random_snapshot();
+        let result = self.reconstruct_states_impl(fps);
+        self.restore_random(saved);
+        result
+    }
+
+    fn reconstruct_states_impl(&mut self, fps: &[Fp]) -> EvalResult<Option<Vec<StateInfo>>> {
+        self.reset_init_random();
+        let Some((&first, rest)) = fps.split_first() else { return Ok(Some(Vec::new())) };
+        let Some(init) = self.state_from_fp(first)? else { return Ok(None) };
+        let mut steps = vec![init];
+        let mut pred_fp = first;
+        for &fp in rest {
+            let pred = steps.last().expect("non-empty").state.clone();
+            let Some(next) = self.successor_from_fp(&pred, pred_fp, fp)? else { return Ok(None) };
+            steps.push(next);
+            pred_fp = fp;
+        }
+        Ok(Some(steps))
     }
 }
 
