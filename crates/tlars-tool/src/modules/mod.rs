@@ -127,6 +127,7 @@ natives! {
     "TLC" "Assert" (V, V) Strict tlc::assert, "public static tlc2.value.impl.Value tlc2.module.TLC.Assert(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "Permutations" (V) Strict tlc::permutations, "public static tlc2.value.impl.Value tlc2.module.TLC.Permutations(tlc2.value.impl.Value)";
     "TLC" "SortSeq" (V, V) Lazy tlc::sort_seq, "public static tlc2.value.impl.Value tlc2.module.TLC.SortSeq(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" "RandomElement" (V) Strict tlc::random_element, "public static tlc2.value.impl.Value tlc2.module.TLC.RandomElement(tlc2.value.impl.Value)";
     "TLC" ":>" (V, V) Strict tlc::make_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.MakeFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "@@" (V, V) Strict tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;

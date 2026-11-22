@@ -207,6 +207,87 @@ fn compare(ev: &mut Ev<'_>, cmp: &crate::eval::expr::OpArgValue, x: &Value, y: &
     }
 }
 
+/// `RandomElement(val)` (`TLC.java:381-438`): one element drawn with
+/// `floor(nextDouble() * size)`. The function-, record- and tuple-set kinds are *not*
+/// enumerated; they recurse into the component sets, so `[1..5 -> 1..100]` costs five draws
+/// and never builds 100^5 functions.
+///
+/// An empty set reaches the draw with size 0, so `index` is 0 and the read past the end is
+/// the JVM exception `MethodValue.eval` rewraps, not a checked error.
+pub(crate) fn random_element(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
+    random_element_of(ev, &a[0])
+}
+
+fn not_a_finite_set(ev: &mut Ev<'_>, val: &Value) -> EvalResult<crate::error::EvalError> {
+    let shown = val.ppr(ev)?;
+    Ok(super::eval_exception(ev, Ec::TLC_MODULE_APPLYING_TO_WRONG_VALUE, &["RandomElement", "a finite set", &shown]))
+}
+
+fn random_element_of(ev: &mut Ev<'_>, val: &Value) -> EvalResult<Value> {
+    match val {
+        Value::SetOfFcns(sfv) => {
+            val.normalize(ev)?;
+            let domain = sfv.domain.clone();
+            let range = sfv.range.clone();
+            let Some(dom_set) = domain.to_set_enum(ev)? else {
+                // The error names the whole `[S -> T]`, not the domain alone.
+                return Err(not_a_finite_set(ev, val)?);
+            };
+            let domain = crate::value::order::normalized(ev, &dom_set)?.to_vec();
+            let mut values = Vec::with_capacity(domain.len());
+            for _ in 0..domain.len() {
+                values.push(random_element_of(ev, &range)?);
+            }
+            Ok(Value::FcnRcd(Value::fcn_rcd_arc(domain, values, true)))
+        }
+        Value::SetOfRcds(srv) => {
+            val.normalize(ev)?;
+            let (names, sets) = (srv.names.to_vec(), srv.sets.to_vec());
+            let mut values = Vec::with_capacity(sets.len());
+            for set in &sets {
+                values.push(random_element_of(ev, set)?);
+            }
+            Ok(Value::Record(Value::record_arc(names, values, true)))
+        }
+        Value::SetOfTuples(stv) => {
+            val.normalize(ev)?;
+            let sets = stv.sets.to_vec();
+            let mut values = Vec::with_capacity(sets.len());
+            for set in &sets {
+                values.push(random_element_of(ev, set)?);
+            }
+            Ok(Value::tuple(values))
+        }
+        // `IntervalValue.randomElement()` indexes arithmetically, so the out-of-range read
+        // of an empty interval is `IntervalValue.elementAt`'s own `Assert.fail`.
+        Value::Interval(iv) => {
+            let sz = iv.size(ev)?;
+            let index = (ev.rng().next_double() * f64::from(sz)).floor() as i64;
+            if index < 0 || index >= i64::from(sz) {
+                let shown = val.ppr(ev)?;
+                return Err(crate::error::EvalError::detailed(
+                    format!("Attempted to retrieve out-of-bounds element from the interval value {shown}."),
+                    None,
+                ));
+            }
+            Ok(Value::Int(iv.lo + index as i32))
+        }
+        _ => {
+            let Some(set) = val.to_set_enum(ev)? else {
+                return Err(not_a_finite_set(ev, val)?);
+            };
+            // `normalize()` runs before the draw, so the index is into the sorted elements.
+            let len = crate::value::order::normalized(ev, &set)?.len();
+            let index = (ev.rng().next_double() * len as f64).floor() as i64;
+            let elems = crate::value::order::normalized(ev, &set)?;
+            match usize::try_from(index).ok().and_then(|i| elems.get(i)) {
+                Some(v) => Ok(v.clone()),
+                None => Err(crate::error::EvalError::index_out_of_bounds(index as usize, len)),
+            }
+        }
+    }
+}
+
 pub(crate) fn assert(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
     if matches!(a[0], Value::Bool(true)) {
         return Ok(a[0].clone());

@@ -211,6 +211,11 @@ impl<'t> Ev<'t> {
     pub(crate) fn worker_id(&self) -> u16 {
         self.locals.worker_id
     }
+    /// `RandomEnumerableValues.get()`: the worker's RNG, re-seeded from the parent state's
+    /// fingerprint on the first draw of each expansion (`effects::StateRandom`).
+    pub(crate) fn rng(&mut self) -> &mut tlars_java::JavaRandom {
+        self.locals.effects.rng()
+    }
 
     // ---- checks the engine runs around each successor (ITool) ----
 
