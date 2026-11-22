@@ -241,9 +241,8 @@ pub(crate) fn nd_serialize(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
         let shown = a[1].ppr(ev)?;
         return Err(eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["second", "ndJsonSerialize", "sequence", &shown]));
     };
-    let elems = tuple.elems.to_vec();
     let mut writer = open_for_writing(ev, &a[0])?;
-    for e in &elems {
+    for e in tuple.elems.iter() {
         let line = format!("{}\n", get_node(ev, e)?.to_json());
         writer.write(&line)?;
     }
@@ -261,24 +260,22 @@ pub(crate) fn serialize(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
     }
     let mut writer = open_for_writing(ev, &a[0])?;
     let text = get_node(ev, &a[1])?.to_json();
-    writer.write(&text)
+    writer.write(&text)?;
+    Ok(Value::Bool(true))
 }
 
 /// A file both serializers have opened. TLC opens it in the `try` header and converts the
-/// value inside the body, so a value the conversion refuses still leaves an empty file
-/// behind, and `JsonSerialize` answers TRUE only after the write.
+/// value inside the body, so a value the conversion refuses still leaves the file truncated
+/// behind it.
 struct Writer {
     file: std::fs::File,
     path: String,
 }
 
 impl Writer {
-    fn write(&mut self, text: &str) -> EvalResult<Value> {
+    fn write(&mut self, text: &str) -> EvalResult<()> {
         use std::io::Write as _;
-        match self.file.write_all(text.as_bytes()) {
-            Ok(()) => Ok(Value::Bool(true)),
-            Err(e) => Err(io_exception(io_message(&self.path, &e))),
-        }
+        self.file.write_all(text.as_bytes()).map_err(|e| io_exception(io_message(&self.path, &e)))
     }
 }
 
@@ -441,7 +438,21 @@ fn get_value(ev: &mut Ev<'_>, node: &Node) -> EvalResult<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::file_parent;
+    use super::{file_parent, read_lines};
+
+    /// `BufferedReader.readLine()`, which `ndJsonDeserialize` loops over. The corpus has a
+    /// case for each of these and reaches none of them, for want of its fixture files.
+    #[test]
+    fn read_lines_matches_buffered_reader() {
+        assert_eq!(read_lines(""), Vec::<&str>::new());
+        assert_eq!(read_lines("a"), ["a"]);
+        assert_eq!(read_lines("a\n"), ["a"]);
+        assert_eq!(read_lines("a\r"), ["a"]);
+        assert_eq!(read_lines("a\r\n"), ["a"]);
+        assert_eq!(read_lines("a\r\nb"), ["a", "b"]);
+        assert_eq!(read_lines("\n\n"), ["", ""]);
+        assert_eq!(read_lines("a\n\r\n b"), ["a", "", " b"]);
+    }
 
     /// `new File(path).getParent()`, which decides whether `mkdirs()` runs.
     #[test]
