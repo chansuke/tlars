@@ -9,7 +9,7 @@ use crate::globals::TlcGlobals;
 use crate::spec::Bindings;
 use crate::state::VarTable;
 use crate::symmetry::MvPerm;
-use crate::value::ModelValue;
+use crate::value::{ModelValue, Value};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tlars_msg::Report;
@@ -133,6 +133,10 @@ pub struct Tool {
     pub(crate) temporal: Temporal,
     pub(crate) fp64: Fp64,
     pub(crate) globals: TlcGlobals,
+    /// `TLCExt!TLCCache`'s `HashMap<Value, Value>` per expression node, which TLC keeps as a
+    /// tool object on the node (`expr.setToolObject`). Entries hold the key's
+    /// `Value.hashCode()` so that a lookup compares only the keys a `HashMap` would.
+    pub(crate) tlc_caches: std::sync::Mutex<std::collections::BTreeMap<ExprId, Vec<(i32, Value, Value)>>>,
     /// `ModelValue.mvs`, in creation order (cfg first).
     pub(crate) model_values: Box<[ModelValue]>,
     /// What `ModelValue.add` created past the cfg's own, which is `TLCExt!TLCModelValue`.
@@ -184,6 +188,22 @@ impl Tool {
     /// `Boolean.getBoolean(name)`: true only for a property that reads `true`, in any case.
     pub(crate) fn property_is_true(&self, name: &str) -> bool {
         self.property(name).is_some_and(|v| v.eq_ignore_ascii_case("true"))
+    }
+    /// `(HashMap<Value, Value>) expr.getToolObject(tool.getId())` for `TLCExt!TLCCache`: the
+    /// entry whose stored hash and key match, if any (`HashMap.get`). The value's own hash
+    /// decides which entries `equals` is called on, which is why a key of another kind never
+    /// raises a comparison error.
+    pub(crate) fn tlc_cache_get(&self, expr: ExprId, hash: i32) -> Vec<(Value, Value)> {
+        let caches = self.tlc_caches.lock().expect("TLCCache tool objects");
+        match caches.get(&expr) {
+            None => Vec::new(),
+            Some(entries) => entries.iter().filter(|(h, _, _)| *h == hash).map(|(_, k, v)| (k.clone(), v.clone())).collect(),
+        }
+    }
+    /// `cache.put(key, value)`, allocating the map on the node the way `setToolObject` does.
+    pub(crate) fn tlc_cache_put(&self, expr: ExprId, key: Value, hash: i32, value: Value) {
+        let mut caches = self.tlc_caches.lock().expect("TLCCache tool objects");
+        caches.entry(expr).or_default().push((hash, key, value));
     }
     /// `Spec.getCounterExampleDef()`'s `OpDefNode`: the definition a counterexample is bound
     /// to, if `TLCExt!CounterExample`'s Java override is the one under that name.

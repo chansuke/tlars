@@ -149,6 +149,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         symmetry: Box::new([]),
         temporal: crate::tool::Temporal { fairness: Box::new([]), properties: Box::new([]) },
         fp64: crate::fp64::Fp64::new(globals.fp_index),
+        tlc_caches: std::sync::Mutex::new(Default::default()),
         model_values,
         added_model_values: std::sync::Mutex::new(Vec::new()),
         globals,

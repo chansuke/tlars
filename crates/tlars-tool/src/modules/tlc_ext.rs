@@ -359,6 +359,97 @@ fn tlc_def_by_name_impl(
     ev.eval(body, c, s0, s1, control)
 }
 
+/// `TLCExt.tlcDefer(expression)` (`TLCExt.java:292-301`): the arguments are wrapped in a
+/// `Callable` and handed to both states, and only the simulator's `TLCStateMutExt` keeps one
+/// (`TLCState.setCallable` is a no-op, `TLCState.java:194-196`). So in breadth-first search
+/// nothing is evaluated and the operator is simply TRUE.
+pub(crate) fn tlc_defer(
+    _ev: &mut Ev<'_>,
+    _args: &[ExprOrOpArg],
+    _c: &Ctx,
+    _s0: StateRef<'_>,
+    _s1: StateRef<'_>,
+    _control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    Ok(Some(Value::Bool(true)))
+}
+
+/// `TLCExt.tlcEval2(expression, closure)` (`TLCExt.java:321-380`), the override of
+/// `TLCCache`.
+///
+/// A constant-level expression is cached per expression node under the closure's value, so
+/// the same closure answers with the first value even when the expression reads a bound
+/// variable the closure does not mention. A state-level one goes through
+/// `TLCState.getCached`/`setCached`, which only the simulator's `TLCStateMutExt` implements:
+/// on a plain state `setCached` answers null, so the expression is evaluated here *and*
+/// again by the TLA+ fallback. An action- or temporal-level one is only evaluated by the
+/// fallback.
+pub(crate) fn tlc_eval2(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    let result = tlc_eval2_impl(ev, args, c, s0, s1, control);
+    result.map_err(|e| wrap_evaluating(ev, "TLCExt", "TLCCache", e))
+}
+
+fn tlc_eval2_impl(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    let (expr, closure) = (args[0].expect_expr(), args[1].expect_expr());
+    match ev.tool().graph().level(expr) {
+        tlars_sany::graph::Level::Constant => {
+            let key = ev.eval(closure, c, s0, s1, control)?;
+            // `HashMap.get(key)`: the key's own hash decides which entries are compared at
+            // all, so a stored key of another kind is never handed to `equals`.
+            let hash = value_hash(ev, &key)?;
+            for (stored, value) in ev.tool().tlc_cache_get(expr, hash) {
+                // `key.equals(entry.key)`: the lookup's key is the receiver, so its class
+                // decides the text of a comparison that fails.
+                if key.tlc_equals(ev, &stored)? {
+                    return Ok(Some(value));
+                }
+            }
+            let value = ev.eval(expr, c, s0, s1, control)?;
+            // `value.initialize()`: deep-normalise and fingerprint, so the cached value is
+            // usable from any worker.
+            value.deep_normalize(ev)?;
+            value.fingerprint(ev, crate::fp64::Fp::zero())?;
+            ev.tool().tlc_cache_put(expr, key, hash, value.clone());
+            Ok(Some(value))
+        }
+        tlars_sany::graph::Level::State => {
+            // `s0.getCached(key)` is null and `s0.setCached(key, ..)` answers null on every
+            // state but the simulator's, so the only lasting effects are the closure's
+            // evaluation, the `hashCode()` it takes (which fingerprints the value), and the
+            // expression's own evaluation. The three node hash codes that make up the key
+            // are pure.
+            let key = ev.eval(closure, c, s0, StateRef::Empty, EvalControl::CLEAR)?;
+            value_hash(ev, &key)?;
+            ev.eval(expr, c, s0, s1, control)?;
+            Ok(None)
+        }
+        // "For action or temporal formulas, all we do is to evaluate the TLA+
+        // expression--nothing is cached!"
+        tlars_sany::graph::Level::Action | tlars_sany::graph::Level::Temporal => Ok(None),
+    }
+}
+
+/// `Value.hashCode()` (`Value.java:296-307`): the two halves of the value's fingerprint
+/// under a fresh polynomial, xored.
+fn value_hash(ev: &mut Ev<'_>, v: &Value) -> EvalResult<i32> {
+    let fp = v.fingerprint(ev, ev.tool().fp64.new_fp())?.raw();
+    Ok(((fp >> 32) as i32) ^ (fp as i32))
+}
+
 /// `TLCExt.tlcNoOp(val)` (`TLCExt.java:303-306`): the value itself. It exists so a Java
 /// breakpoint can be set inside TLC's evaluator.
 pub(crate) fn tlc_no_op(_ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
