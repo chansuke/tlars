@@ -256,7 +256,7 @@ fn bound_parameters(ev: &Ev<'_>, op_def: Option<OpDefId>, ctx: &Ctx) -> Vec<(Ato
 
 /// `init2Value` / `action2Value` (`TLCGetSet.java:552-576`) without `-coverage`: the action's
 /// own record, whose location is the predicate's.
-fn action_value(ev: &mut Ev<'_>, a: &Action) -> EvalResult<Value> {
+pub(crate) fn action_value(ev: &mut Ev<'_>, a: &Action) -> EvalResult<Value> {
     let loc = ev.tool().graph().loc(a.pred);
     let (name, op_def, ctx) = (a.name, a.op_def, a.ctx.clone());
     action_record(ev, name, loc, op_def, &ctx)
@@ -303,7 +303,7 @@ fn variable_value(ev: &mut Ev<'_>, decl: tlars_sany::graph::DeclId) -> EvalResul
 
 /// `Action.UNKNOWN` (`Action.java:37`): the predicate is `SemanticNode.nullSN`, whose syntax
 /// node is `SyntaxTreeNode.nullSTN` — four zero coordinates in `--TLA+ BUILTINS--`.
-fn unknown_action_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
+pub(crate) fn unknown_action_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
     let module = ev.tool().graph().interner().intern(BUILTINS_MODULE);
     let loc = Loc { module: Some(module), begin_line: 0, begin_col: 0, end_line: 0, end_col: 0 };
     action_record(ev, None, loc, None, &Ctx::EMPTY)

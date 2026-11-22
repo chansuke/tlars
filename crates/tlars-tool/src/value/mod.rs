@@ -212,6 +212,10 @@ pub struct RecordValue {
     pub(crate) values: Box<[Value]>,
     pub(crate) norm: OnceLock<(Box<[Atom]>, Box<[Value]>)>,
     pub(crate) source: Source,
+    /// `tlc2.value.impl.CounterExample`, a subclass of `RecordValue` that behaves like one
+    /// everywhere but in `TLCExt!ToTrace`, which refuses a record of the same shape, and in
+    /// the class name a cast error prints.
+    pub(crate) counter_example: bool,
 }
 
 pub enum FcnDomain {
@@ -490,6 +494,7 @@ impl Value {
             Value::Str(_) => "StringValue",
             Value::Model(_) => "ModelValue",
             Value::Tuple(_) => "TupleValue",
+            Value::Record(r) if r.counter_example => "CounterExample",
             Value::Record(_) => "RecordValue",
             Value::FcnRcd(_) => "FcnRcdValue",
             Value::SetEnum(_) => "SetEnumValue",
@@ -516,12 +521,21 @@ impl Value {
 
     /// `new RecordValue(names, values, isNorm)`.
     pub(crate) fn record_arc(names: Vec<Atom>, values: Vec<Value>, is_norm: bool) -> Arc<RecordValue> {
+        Self::record_of(names, values, is_norm, false)
+    }
+
+    /// `new CounterExample(..)`, the `RecordValue` subclass.
+    pub(crate) fn counter_example_arc(names: Vec<Atom>, values: Vec<Value>) -> Arc<RecordValue> {
+        Self::record_of(names, values, false, true)
+    }
+
+    fn record_of(names: Vec<Atom>, values: Vec<Value>, is_norm: bool, counter_example: bool) -> Arc<RecordValue> {
         let (names, values) = (names.into_boxed_slice(), values.into_boxed_slice());
         let norm = OnceLock::new();
         if is_norm {
             let _ = norm.set((names.clone(), values.clone()));
         }
-        Arc::new(RecordValue { names, values, norm, source: Source::none() })
+        Arc::new(RecordValue { names, values, norm, source: Source::none(), counter_example })
     }
 
     /// `new FcnRcdValue(domain, values, isNorm)`.

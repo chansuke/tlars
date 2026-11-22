@@ -83,8 +83,9 @@ pub(crate) enum CounterExampleDef {
     /// `defns.get("CounterExample") == null`: not used anywhere in the spec, so the
     /// POSTCONDITIONs are checked with an empty context.
     Absent,
-    /// The `EvaluatingValue` of `TLCExt!CounterExample`, which binds the printed trace.
-    Evaluating,
+    /// The `EvaluatingValue` of `TLCExt!CounterExample`, whose `getOpDef()` is the name the
+    /// counterexample is bound to while the POSTCONDITIONs are checked.
+    Evaluating(OpDefId),
     /// Anything else under that name, a definition of the spec's own among them:
     /// `Assert.fail(EC.GENERAL)`, whatever the cfg asks for.
     NotEvaluating,
@@ -183,6 +184,14 @@ impl Tool {
     /// `Boolean.getBoolean(name)`: true only for a property that reads `true`, in any case.
     pub(crate) fn property_is_true(&self, name: &str) -> bool {
         self.property(name).is_some_and(|v| v.eq_ignore_ascii_case("true"))
+    }
+    /// `Spec.getCounterExampleDef()`'s `OpDefNode`: the definition a counterexample is bound
+    /// to, if `TLCExt!CounterExample`'s Java override is the one under that name.
+    pub(crate) fn counter_example_def(&self) -> Option<OpDefId> {
+        match self.counter_example {
+            CounterExampleDef::Evaluating(d) => Some(d),
+            CounterExampleDef::Absent | CounterExampleDef::NotEvaluating => None,
+        }
     }
     /// `ModelValue.add(str)` (`ModelValue.java:109-124`): the model value of that name, which
     /// is created with the next creation index when the table has none. `None` is the

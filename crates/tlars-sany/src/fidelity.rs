@@ -91,5 +91,11 @@ pub(crate) fn class_statics(class: JavaClass) -> &'static [&'static str] {
             "parameters",
             "_action",
         ],
+        // `tlc2.value.impl.CounterExample`'s `UniqueString` statics, in declaration order
+        // (`CounterExample.java:48-50`). The class initialises when the first counterexample
+        // is built, which is the first `TLCExt!CounterExample` that is evaluated or the
+        // postcondition check of a violated run; `instanceof` in `ToTrace` does not
+        // initialise it.
+        JavaClass::CounterExample => &["state", "action", "console"],
     }
 }

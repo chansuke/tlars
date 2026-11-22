@@ -39,6 +39,10 @@ impl Aliased {
     fn plain(original: PartialState) -> Aliased {
         Aliased { original, record: None }
     }
+    /// `new TLCStateInfo(state)`: a trace step no ALIAS ran on.
+    pub fn of_state(state: &State) -> Aliased {
+        Aliased::plain(PartialState::from_state(state))
+    }
     /// `lookup(var)` of the state being printed: the derived state first, then the record's
     /// own fields, so a field that is not a variable is still found.
     fn lookup(&self, name: Atom, vars: &crate::state::VarTable) -> Option<Value> {
@@ -131,6 +135,15 @@ impl Ev<'_> {
                 let record = self.alias_record(&rcd)?.expect("a record converts to a state");
                 Ok(Aliased { original: current.copy(), record: Some(record) })
             }
+        }
+    }
+
+    /// `TLCStateInfo.toRecordValue()` (`TLCStateInfo.java:123-130`): for an aliased state the
+    /// alias record as written, and otherwise `new RecordValue(state)`.
+    pub fn aliased_record(&mut self, a: &Aliased) -> EvalResult<Value> {
+        match &a.record {
+            None => self.state_record(&a.original),
+            Some(rcd) => Ok(Value::Record(Value::record_arc(rcd.names.to_vec(), rcd.values.to_vec(), false))),
         }
     }
 

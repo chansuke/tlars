@@ -89,7 +89,7 @@ impl<'a> Worker<'a> {
                     mc.out.error(tlars_msg::Ec::TLC_DEADLOCK_REACHED, &[]);
                     mc.print_trace_and_stop(&mut ev, &cur, None);
                 }
-                mc.post_condition_trace(&mut ev, &cur, None, false);
+                mc.post_condition_trace(&mut ev, &cur, None, false, first);
             }
             if let (Some(live), Some(succs)) = (mc.live.as_ref(), self.sink.live_successors.take()) {
                 let mut ev = mc.tool.ev(&mut self.locals, mc.out);

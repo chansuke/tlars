@@ -15,6 +15,148 @@ use tlars_sany::graph::{ExprNode, ExprOrOpArg};
 /// `TLCGetSet.NAMED_REGISTER_PREFIX`.
 const NAMED_REGISTER_PREFIX: &str = "s:";
 
+/// `CounterExample`'s field names (`CounterExample.java:48-50`), in the order its
+/// constructor writes them: the edges, the states, and `console`, which is only there when
+/// the counterexample was not the one printed to the console.
+const ACTIONS: &str = "action";
+const STATES: &str = "state";
+const CONSOLE: &str = "console";
+
+/// `new CounterExample()` (`CounterExample.java:52-54`): the empty graph, which is what
+/// `TLCExt!CounterExample` answers wherever no counterexample is bound.
+pub(crate) fn empty_counter_example(ev: &Ev<'_>) -> Value {
+    counter_example_record(ev, Value::set_enum_of(Vec::new(), false), Value::set_enum_of(Vec::new(), false), true)
+}
+
+/// One state of a counterexample as `CounterExample`'s constructor reads it: the state
+/// number `TLCStateInfo` took from the state's level, the record `toRecordValue()` builds,
+/// and the action that produced it (`None` = `Action.UNKNOWN`, which is what an initial
+/// state reports).
+pub struct CounterExampleStep {
+    pub number: i32,
+    pub record: Value,
+    pub action: Option<crate::actions::ActionId>,
+}
+
+/// `new CounterExample(trace, isConsole)` (`CounterExample.java:77-115`) for a safety
+/// violation, which has no loop ordinal: the states as `<<number, record>>` pairs and one
+/// edge `<<source, action, target>>` per step after the first, both as unnormalised sets in
+/// trace order.
+pub fn counter_example_of(ev: &mut Ev<'_>, trace: &[CounterExampleStep], is_console: bool) -> EvalResult<Value> {
+    let mut states: Vec<Value> = Vec::with_capacity(trace.len());
+    let mut actions: Vec<Value> = Vec::new();
+    for step in trace {
+        let pair = Value::tuple(vec![Value::Int(step.number), step.record.clone()]);
+        if let Some(last) = states.last() {
+            // `new RecordValue(info.getAction())`, which in breadth-first search is the
+            // action whose replay produced this state.
+            let action = match step.action {
+                Some(id) => {
+                    let a = ev.tool().action(id);
+                    super::tlc_get_set::action_value(ev, a)?
+                }
+                None => super::tlc_get_set::unknown_action_value(ev)?,
+            };
+            actions.push(Value::tuple(vec![last.clone(), action, pair.clone()]));
+        }
+        states.push(pair);
+    }
+    let actions = Value::set_enum_of(actions, false);
+    let states = Value::set_enum_of(states, false);
+    Ok(counter_example_record(ev, actions, states, is_console))
+}
+
+/// `CounterExample`'s `super(..)` call: the fields in constructor order, unnormalised.
+pub(crate) fn counter_example_record(ev: &Ev<'_>, actions: Value, states: Value, is_console: bool) -> Value {
+    let interner = ev.tool().graph().interner();
+    interner.ensure(tlars_sany::JavaClass::CounterExample);
+    let mut names = vec![interner.intern(ACTIONS), interner.intern(STATES)];
+    let mut values = vec![actions, states];
+    if !is_console {
+        names.push(interner.intern(CONSOLE));
+        values.push(Value::Bool(false));
+    }
+    Value::Record(Value::counter_example_arc(names, values))
+}
+
+/// `TLCExt.error(..)` (`TLCExt.java:197-205`), the `@Evaluation` override of
+/// `CounterExample`: the counterexample the postcondition check bound in the context, or the
+/// empty graph. The binding is on the `OpDefNode` of `TLCExt!CounterExample` itself, so an
+/// application that names that definition is answered by the context before this method is
+/// reached; this is the path an application through an INSTANCE takes.
+pub(crate) fn counter_example(
+    ev: &mut Ev<'_>,
+    _args: &[ExprOrOpArg],
+    c: &Ctx,
+    _s0: StateRef<'_>,
+    _s1: StateRef<'_>,
+    _control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    if let Some(def) = ev.tool().counter_example_def()
+        && let Some(crate::ctx::Binding::Value(v)) = c.lookup(tlars_sany::graph::SymbolRef::OpDef(def))
+    {
+        return Ok(Some(v.clone()));
+    }
+    Ok(Some(empty_counter_example(ev)))
+}
+
+/// `TLCExt.lassoOrdinal(val)` (`TLCExt.java:186-193`), the override of `ToTrace`: the
+/// counterexample's states as a sequence indexed by state number. A record of the same shape
+/// is refused, because the check is on the value's Java class.
+pub(crate) fn to_trace(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
+    let Value::Record(rcd) = &a[0] else {
+        return Err(not_a_counter_example(ev, &a[0]));
+    };
+    if !rcd.counter_example {
+        return Err(not_a_counter_example(ev, &a[0]));
+    }
+    // `(SetEnumValue) this.select(new StringValue(STATES))`, a linear field scan that
+    // normalises nothing, so the states come out in the order the counterexample built them.
+    let name = Value::Str(ev.tool().graph().interner().intern(STATES));
+    let states = a[0].select(ev, &name)?.expect("a counterexample has a state field");
+    let Value::SetEnum(set) = &states else {
+        return Err(EvalError::class_cast(states.java_class(), "SetEnumValue"));
+    };
+    let elems = set.snapshot().to_vec();
+    let mut trace = vec![None; elems.len()];
+    for elem in &elems {
+        let Value::Tuple(pair) = elem else {
+            return Err(EvalError::class_cast(elem.java_class(), "TupleValue"));
+        };
+        let Some(Value::Int(number)) = pair.elems.first() else {
+            let class = pair.elems.first().map_or("UndefValue", Value::java_class);
+            return Err(EvalError::class_cast(class, "IntValue"));
+        };
+        // `v[number - 1] = ..`: a number outside the array is an index error, and a gap in
+        // the numbering leaves a Java null in the tuple.
+        let Some(slot) = usize::try_from(*number - 1).ok().and_then(|i| trace.get_mut(i)) else {
+            return Err(EvalError::index_out_of_bounds((*number - 1) as usize, elems.len()));
+        };
+        *slot = pair.elems.get(1).cloned();
+    }
+    let mut out = Vec::with_capacity(trace.len());
+    for slot in trace {
+        match slot {
+            Some(v) => out.push(v),
+            // A tuple element holding a Java null, which every later read treats as its own
+            // kind of value.
+            None => {
+                return Err(EvalError::unimplemented(
+                    "ToTrace over a counterexample whose state numbers leave a gap (M4)".into(),
+                ));
+            }
+        }
+    }
+    Ok(Value::tuple(out))
+}
+
+fn not_a_counter_example(ev: &mut Ev<'_>, v: &Value) -> EvalError {
+    match v.ppr(ev) {
+        Ok(shown) => eval_exception(ev, Ec::TLC_MODULE_ONE_ARGUMENT_ERROR, &["ToTrace", "CounterExample", &shown]),
+        Err(e) => e,
+    }
+}
+
 /// `TLCExt.assertError(err, exp)` (`TLCExt.java:76-94`): TRUE when evaluating `exp` failed
 /// with exactly the message `err`. The failure's message is what `getMessage()` returns, so
 /// under `-tool` it carries the message framing and an exact text no longer matches.
@@ -100,7 +242,7 @@ fn tlc_def_by_name_impl(
         let shown = v.ppr(ev)?;
         return Err(argument_error(ev, "string", &shown));
     };
-    let graph = ev.tool().graph().clone();
+    let graph = ev.tool().graph();
     let Some(def) = graph.module_op_def(graph.root(), name) else {
         let shown = v.ppr(ev)?;
         // The template adds no article, so TLC's own `"name of a definition .."` reads as

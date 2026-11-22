@@ -491,14 +491,24 @@ impl<'t> Ev<'t> {
     /// constant-level predicate, and the first one that is false or fails stops the loop.
     /// `Err` is what `MP.printError` is given; the caller decides whether that code becomes
     /// the run's.
-    pub fn check_postconditions(&mut self) -> Result<(), (tlars_msg::Ec, Vec<String>)> {
+    pub fn check_postconditions(&mut self, counter_example: Option<Value>) -> Result<(), (tlars_msg::Ec, Vec<String>)> {
         debug_assert!(self.postcondition_exception(false).is_none(), "the caller catches the lookup's exception first");
         self.check_possible()?;
+        // `Context.Empty.cons(getCounterExampleDef(), value)`
+        // (`Tool.checkPostConditionWithCounterExample`), which every POSTCONDITION is
+        // evaluated under. With no counterexample, or with no `TLCExt!CounterExample` in the
+        // spec, it is `checkPostCondition()`'s empty context.
+        let bound = match (counter_example, self.tool.counter_example_def()) {
+            (Some(v), Some(d)) => Ctx::EMPTY.cons(tlars_sany::graph::SymbolRef::OpDef(d), crate::ctx::Binding::Value(v)),
+            _ => Ctx::EMPTY,
+        };
         let graph = self.tool.graph.clone();
         for i in 0..self.tool.postconditions.len() {
+            // `isValid(pc.pred, ctxt)` evaluates in `ctxt`, not in the Action's own context,
+            // which `getPostConditionSpecs` leaves empty anyway.
             let (expr, ctx, name) = {
                 let pc = &self.tool.postconditions[i];
-                (pc.expr, pc.ctx.clone(), graph.interner().text(pc.name).to_string())
+                (pc.expr, bound.clone(), graph.interner().text(pc.name).to_string())
             };
             let shown = graph.expr_tlc_text(expr);
             match self.is_valid_const(expr, &ctx) {
@@ -532,12 +542,7 @@ impl<'t> Ev<'t> {
     /// A name both lookups resolve for TLC, bound to a Java method tlars has not written.
     /// TLC runs it, so there is no exception to catch and nothing may swallow this: a run
     /// that agreed with TLC by staying quiet would be agreeing by accident.
-    pub fn postcondition_unimplemented(&self, counter_example: bool) -> Option<EvalError> {
-        // With no POSTCONDITION the counterexample binding is never read, so the check runs
-        // as it stands.
-        if counter_example && self.tool.counter_example == CounterExampleDef::Evaluating && !self.tool.postconditions.is_empty() {
-            return Some(EvalError::unimplemented("TLCExt!CounterExample (M3 unit 6)".into()));
-        }
+    pub fn postcondition_unimplemented(&self, _counter_example: bool) -> Option<EvalError> {
         self.tool.postcondition_error.clone().filter(|e| matches!(e.kind, crate::error::EvalErrorKind::Unimplemented))
     }
 

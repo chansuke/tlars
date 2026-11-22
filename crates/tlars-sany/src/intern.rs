@@ -45,10 +45,12 @@ pub enum JavaClass {
     TlcRuntime,
     /// `RecordValue`'s field-name statics, built by `TLCGet("spec")` and friends.
     RecordValue,
+    /// `CounterExample`'s field-name statics, built by the first counterexample.
+    CounterExample,
 }
 
 impl JavaClass {
-    pub const COUNT: usize = 9;
+    pub const COUNT: usize = 10;
 }
 
 /// Session intern table. `Sync`: workers intern runtime strings (`\o`, `ToString`, JSON).
