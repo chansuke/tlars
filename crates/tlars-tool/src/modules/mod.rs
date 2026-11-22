@@ -14,6 +14,7 @@
 //! other definitions of a module that does have a Java class, is an ordinary TLA+ definition.
 
 mod any_set;
+mod bags;
 mod finite_sets;
 mod java_overrides;
 mod naturals;
@@ -140,6 +141,18 @@ natives! {
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "_Possible" "_Counts" () Strict possible::counts, "public static tlc2.value.impl.Value tlc2.module._Possible.counts()", min_level 1;
     "AnySet" "ANY" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.AnySet.ANY()";
+    "Bags" "EmptyBag" () Strict bags::empty_bag, "public static tlc2.value.impl.Value tlc2.module.Bags.EmptyBag()";
+    "Bags" "IsABag" (V) Strict bags::is_a_bag, "public static tlc2.value.IBoolValue tlc2.module.Bags.IsABag(tlc2.value.impl.Value)";
+    "Bags" "BagCardinality" (V) Strict bags::bag_cardinality, "public static tlc2.value.impl.IntValue tlc2.module.Bags.BagCardinality(tlc2.value.impl.Value)";
+    "Bags" "BagIn" (V, V) Strict bags::bag_in, "public static tlc2.value.IBoolValue tlc2.module.Bags.BagIn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "CopiesIn" (V, V) Strict bags::copies_in, "public static tlc2.value.impl.IntValue tlc2.module.Bags.CopiesIn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "\\oplus" (V, V) Strict bags::bag_cup, "public static tlc2.value.impl.Value tlc2.module.Bags.BagCup(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "\\ominus" (V, V) Strict bags::bag_diff, "public static tlc2.value.impl.Value tlc2.module.Bags.BagDiff(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "BagUnion" (V) Strict bags::bag_union, "public static tlc2.value.impl.Value tlc2.module.Bags.BagUnion(tlc2.value.impl.Value)";
+    "Bags" "\\sqsubseteq" (V, V) Strict bags::sq_subseteq, "public static tlc2.value.IBoolValue tlc2.module.Bags.SqSubseteq(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "BagOfAll" (V, V) Lazy bags::bag_of_all, "public static tlc2.value.impl.Value tlc2.module.Bags.BagOfAll(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "BagToSet" (V) Strict bags::bag_to_set, "public static tlc2.value.impl.Value tlc2.module.Bags.BagToSet(tlc2.value.impl.Value)";
+    "Bags" "SetToBag" (V) Strict bags::set_to_bag, "public static tlc2.value.impl.Value tlc2.module.Bags.SetToBag(tlc2.value.impl.Value)";
     "TLC" "Any" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.TLC.Any()";
     "TLC" "TLCEval" (V) Lazy tlc_eval::tlc_eval, "public static tlc2.value.impl.Value tlc2.module.TLCEval.tlcEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
 }
@@ -188,6 +201,14 @@ pub(crate) fn wrap_evaluating(ev: &Ev<'_>, module: &str, tla_name: &str, e: Eval
     let signature = NativeId::of_module(module, tla_name).expect("a registered native").op().signature;
     let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[signature, &e.message]);
     EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message)
+}
+
+/// [`wrap`] for an override tlars registers as `Lazy` because the Java method takes an
+/// operator: the dispatcher hands it the argument expressions instead of calling [`apply`],
+/// so the method body runs `MethodValue.eval`'s catch itself.
+pub(crate) fn wrap_method(ev: &Ev<'_>, module: &str, tla_name: &str, e: EvalError) -> EvalError {
+    let op = NativeId::of_module(module, tla_name).expect("a registered native").op();
+    wrap(ev, op, e)
 }
 
 /// `MethodValue.eval(args)`: the arguments are cast to the method's parameter types first.
