@@ -150,6 +150,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         temporal: crate::tool::Temporal { fairness: Box::new([]), properties: Box::new([]) },
         fp64: crate::fp64::Fp64::new(globals.fp_index),
         model_values,
+        added_model_values: std::sync::Mutex::new(Vec::new()),
         globals,
         registers: std::sync::Mutex::new(crate::effects::Registers::default()),
         set_properties: std::sync::Mutex::new(Vec::new()),

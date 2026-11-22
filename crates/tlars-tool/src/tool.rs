@@ -134,6 +134,10 @@ pub struct Tool {
     pub(crate) globals: TlcGlobals,
     /// `ModelValue.mvs`, in creation order (cfg first).
     pub(crate) model_values: Box<[ModelValue]>,
+    /// What `ModelValue.add` created past the cfg's own, which is `TLCExt!TLCModelValue`.
+    /// `mvTable` is one table in TLC, but the cfg's half is frozen before anything can
+    /// evaluate, and only that half sizes the SYMMETRY permutations.
+    pub(crate) added_model_values: std::sync::Mutex<Vec<ModelValue>>,
     /// `TLCSet`'s registers, which live in TLC's worker threads and so outlast any one
     /// `WorkerLocals` (`effects::Registers`).
     pub(crate) registers: std::sync::Mutex<crate::effects::Registers>,
@@ -179,6 +183,25 @@ impl Tool {
     /// `Boolean.getBoolean(name)`: true only for a property that reads `true`, in any case.
     pub(crate) fn property_is_true(&self, name: &str) -> bool {
         self.property(name).is_some_and(|v| v.eq_ignore_ascii_case("true"))
+    }
+    /// `ModelValue.add(str)` (`ModelValue.java:109-124`): the model value of that name, which
+    /// is created with the next creation index when the table has none. `None` is the
+    /// `count > Short.MAX_VALUE` refusal of `ModelValue`'s constructor.
+    pub(crate) fn add_model_value(&self, name: Atom, text: &str) -> Option<ModelValue> {
+        if let Some(mv) = self.model_values.iter().find(|mv| mv.name == name) {
+            return Some(*mv);
+        }
+        let mut added = self.added_model_values.lock().expect("model values");
+        if let Some(mv) = added.iter().find(|mv| mv.name == name) {
+            return Some(*mv);
+        }
+        let count = self.model_values.len() + added.len();
+        if count > i16::MAX as usize {
+            return None;
+        }
+        let mv = ModelValue::new(name, count as u16, text);
+        added.push(mv);
+        Some(mv)
     }
     /// `System.setProperty(name, value)`.
     pub(crate) fn set_property(&self, name: &str, value: String) {

@@ -19,6 +19,7 @@ mod naturals;
 mod possible;
 mod sequences;
 pub(crate) mod tlc;
+mod tlc_ext;
 mod tlc_get_set;
 
 pub(crate) use naturals::eval_exception;
@@ -130,6 +131,10 @@ natives! {
     "TLC" "@@" (V, V) Strict tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLCExt" "TLCNoOp" (V) Strict tlc_ext::tlc_no_op, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcNoOp(tlc2.value.impl.Value)";
+    "TLCExt" "TLCFP" (V) Strict tlc_ext::tlc_fingerprint, "public static synchronized tlc2.value.impl.IntValue tlc2.module.TLCExt.tlcFingerprint(tlc2.value.impl.Value)";
+    "TLCExt" "TLCModelValue" (V) Strict tlc_ext::tlc_model_value, "public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.tlcModelValue(tlc2.value.impl.Value)";
+    "TLCExt" "TLCGetOrDefault" (V, V) Strict tlc_ext::tlc_get_or_default, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcGetOrDefault(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "_Possible" "_Counts" () Strict possible::counts, "public static tlc2.value.impl.Value tlc2.module._Possible.counts()", min_level 1;
 }
 

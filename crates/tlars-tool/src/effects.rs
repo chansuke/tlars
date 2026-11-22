@@ -101,6 +101,12 @@ impl Registers {
     pub(crate) fn get(&self, index: usize) -> Option<Value> {
         self.indexed.get(&index).cloned()
     }
+    /// `localValues.get(idx)` for an index that may be negative: nothing is ever stored
+    /// under one, because `TLCSet` refuses it, so it reads as an absent key rather than an
+    /// error (`TLCExt.tlcGetOrDefault`).
+    pub(crate) fn get_i32(&self, index: i32) -> Option<Value> {
+        usize::try_from(index).ok().and_then(|i| self.get(i))
+    }
     /// `IdThread.setNamedRegister(name, val)`.
     pub(crate) fn set_named(&mut self, name: tlars_sany::Atom, v: Value) {
         match self.named.iter_mut().find(|(n, _)| *n == name) {
