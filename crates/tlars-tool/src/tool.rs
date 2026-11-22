@@ -137,6 +137,15 @@ pub struct Tool {
     /// `TLCSet`'s registers, which live in TLC's worker threads and so outlast any one
     /// `WorkerLocals` (`effects::Registers`).
     pub(crate) registers: std::sync::Mutex<crate::effects::Registers>,
+    /// `TLCEval`'s tool objects: `arg.setToolObject(tool.getId(), eval)` for a constant
+    /// argument evaluated with an empty context (`TLCEval.tlcEvalConst`). The tool objects
+    /// `SpecProcessor` writes are in [`Bindings`], which is frozen with the `Tool`; this is
+    /// the one slot a *run* writes, so it needs interior mutability. TLC guards its tool
+    /// objects here with a single static `ReadWriteLock`, which this one mutex is. The lock
+    /// is never held across an evaluation: Java's write lock is reentrant, so a nested
+    /// `TLCEval` reacquires it, and a plain mutex gets the same per-expression value by
+    /// releasing first.
+    pub(crate) tlc_eval_values: std::sync::Mutex<std::collections::HashMap<ExprId, crate::value::Value>>,
     /// What `TLCSet("-Dkey", v)` wrote, newest last. TLC calls `System.setProperty`, a JVM
     /// global; tlars keeps it per run, so two runs in one process cannot see each other's.
     pub(crate) set_properties: std::sync::Mutex<Vec<(String, String)>>,
