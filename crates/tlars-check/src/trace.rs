@@ -2,7 +2,7 @@
 //! appends only to its own store (per-actor state); readers merge at reconstruction time.
 
 use std::sync::Mutex;
-use tlars_tool::{Ev, EvalResult, Fp, StateInfo};
+use tlars_tool::{Ev, EvalResult, Fp, StateInfo, TraceStep};
 
 /// TLC's `(workerId, uid)` pair.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,20 +57,23 @@ impl TraceStores {
         let max = &self.per_worker[worker as usize].max_level;
         max.fetch_max(level, std::sync::atomic::Ordering::Relaxed);
     }
-    /// Follow `pred` links back to the initial record; returns fingerprints init-first.
-    pub(crate) fn fingerprints_to(&self, end: TracePtr) -> Vec<Fp> {
-        let mut fps = Vec::new();
+    /// `ConcurrentTLCTrace.getTrace`'s record chain: follow `pred` links back to the initial
+    /// record, init-first. Each entry is a state's fingerprint and the trace record it was
+    /// written at, which the reconstruction puts back on the regenerated state as
+    /// `TLCState.uid` (`ConcurrentTLCTrace.java:168-191`).
+    pub(crate) fn fingerprints_to(&self, end: TracePtr) -> Vec<TraceStep> {
+        let mut steps = Vec::new();
         let mut cur = Some(end);
         while let Some(ptr) = cur {
             let record = self.record(ptr);
-            fps.push(record.fp);
+            steps.push((record.fp, ptr.to_uid()));
             cur = record.pred;
         }
-        fps.reverse();
-        fps
+        steps.reverse();
+        steps
     }
     /// `fingerprints_to` for a state's `TLCState.uid`.
-    pub(crate) fn fingerprints_to_uid(&self, uid: tlars_tool::TraceUid) -> Vec<Fp> {
+    pub(crate) fn fingerprints_to_uid(&self, uid: tlars_tool::TraceUid) -> Vec<TraceStep> {
         self.fingerprints_to(TracePtr::from_uid(uid))
     }
     fn record(&self, ptr: TracePtr) -> TraceRecord {
@@ -84,6 +87,6 @@ impl TraceStores {
 
 /// `ConcurrentTLCTrace.getTrace(..)`: replay forward taking the first fingerprint match at
 /// every step. `Ok(None)` = `TLC_FAILED_TO_RECOVER_INIT` / "failed to recover state".
-pub(crate) fn reconstruct(ev: &mut Ev<'_>, fps: &[Fp]) -> EvalResult<Option<Vec<StateInfo>>> {
-    ev.reconstruct_states(fps)
+pub(crate) fn reconstruct(ev: &mut Ev<'_>, steps: &[TraceStep]) -> EvalResult<Option<Vec<StateInfo>>> {
+    ev.reconstruct_states(steps)
 }

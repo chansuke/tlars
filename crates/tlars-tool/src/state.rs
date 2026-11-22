@@ -59,6 +59,10 @@ pub struct State {
 /// [`crate::effects::MainChecker::trace_fingerprints`].
 pub type TraceUid = u64;
 
+/// One record of the chain `ConcurrentTLCTrace.getTrace` walks: a state's fingerprint and
+/// the trace record it was written at.
+pub type TraceStep = (crate::fp64::Fp, TraceUid);
+
 impl State {
     /// `TLCState.isInitial()`: `level == INIT_LEVEL`.
     pub fn is_initial(&self) -> bool {

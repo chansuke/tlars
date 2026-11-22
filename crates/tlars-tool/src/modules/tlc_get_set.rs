@@ -404,7 +404,7 @@ fn revision_value(ev: &mut Ev<'_>) -> Value {
 
 /// `Value.hashCode()` (`Value.java:296-307`): the two halves of the value's fingerprint under
 /// the run's polynomial, xored. It is what orders a `java.util.HashMap` keyed by values.
-fn value_hash(ev: &mut Ev<'_>, v: &Value) -> EvalResult<i32> {
+pub(crate) fn value_hash(ev: &mut Ev<'_>, v: &Value) -> EvalResult<i32> {
     let fp = v.fingerprint(ev, ev.tool().fp64.new_fp())?.raw();
     Ok(((fp >> 32) as i32) ^ (fp as i32))
 }

@@ -105,22 +105,26 @@ impl<'t> Ev<'t> {
     /// in the search. The RNG is rewound before the replay and put back afterwards, so a
     /// reconstruction that runs inside the search (`TLCExt!Trace`) leaves the draws of the
     /// surrounding expansion where they were. `Ok(None)` = `TLC_FAILED_TO_RECOVER_INIT`.
-    pub fn reconstruct_states(&mut self, fps: &[Fp]) -> EvalResult<Option<Vec<StateInfo>>> {
+    pub fn reconstruct_states(&mut self, records: &[crate::state::TraceStep]) -> EvalResult<Option<Vec<StateInfo>>> {
         let saved = self.random_snapshot();
-        let result = self.reconstruct_states_impl(fps);
+        let result = self.reconstruct_states_impl(records);
         self.restore_random(saved);
         result
     }
 
-    fn reconstruct_states_impl(&mut self, fps: &[Fp]) -> EvalResult<Option<Vec<StateInfo>>> {
+    fn reconstruct_states_impl(&mut self, records: &[crate::state::TraceStep]) -> EvalResult<Option<Vec<StateInfo>>> {
         self.reset_init_random();
-        let Some((&first, rest)) = fps.split_first() else { return Ok(Some(Vec::new())) };
-        let Some(init) = self.state_from_fp(first)? else { return Ok(None) };
+        let Some((&(first, first_uid), rest)) = records.split_first() else { return Ok(Some(Vec::new())) };
+        let Some(mut init) = self.state_from_fp(first)? else { return Ok(None) };
+        // `sinfo.state.uid = prev.ptr`: a regenerated state carries the record it was written
+        // at, so `TLCExt!Trace` answers for it as it did during the search.
+        init.state.set_uid(first_uid);
         let mut steps = vec![init];
         let mut pred_fp = first;
-        for &fp in rest {
+        for &(fp, uid) in rest {
             let pred = steps.last().expect("non-empty").state.clone();
-            let Some(next) = self.successor_from_fp(&pred, pred_fp, fp)? else { return Ok(None) };
+            let Some(mut next) = self.successor_from_fp(&pred, pred_fp, fp)? else { return Ok(None) };
+            next.state.set_uid(uid);
             steps.push(next);
             pred_fp = fp;
         }

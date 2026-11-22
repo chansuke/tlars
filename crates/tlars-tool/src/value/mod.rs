@@ -846,7 +846,7 @@ impl Value {
         match self {
             // The classes a permutation cannot touch return `this`.
             Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Interval(_) => Ok(None),
-            Value::Model(mv) => Ok(perm.get(*mv).map(Value::Model)),
+            Value::Model(mv) => Ok(perm.get(*mv)?.map(Value::Model)),
             Value::SetEnum(set) => {
                 let elems = set.snapshot().to_vec();
                 let (vals, changed) = permute_all(ev, perm, &elems)?;

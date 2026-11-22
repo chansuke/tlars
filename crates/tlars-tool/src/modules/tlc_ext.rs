@@ -187,10 +187,10 @@ fn prefix_records(ev: &mut Ev<'_>, uid: crate::state::TraceUid) -> EvalResult<Ve
     let Some(checker) = ev.tool().main_checker() else {
         return Err(EvalError::unimplemented("TLCExt!Trace with no checker running (TLC raises a NullPointerException)".into()));
     };
-    let fps = checker.trace_fingerprints(uid);
+    let records = checker.trace_fingerprints(uid);
     // `records.size() - 1`: the record's own fingerprint is dropped, so the reconstruction
     // stops at its predecessor.
-    let Some(prefix) = fps.split_last().map(|(_, rest)| rest.to_vec()) else { return Ok(Vec::new()) };
+    let Some(prefix) = records.split_last().map(|(_, rest)| rest.to_vec()) else { return Ok(Vec::new()) };
     let Some(steps) = ev.reconstruct_states(&prefix)? else {
         return Err(EvalError::unimplemented("TLCExt!Trace over a behaviour TLC cannot regenerate (M3 unit 6)".into()));
     };
@@ -579,7 +579,7 @@ fn tlc_eval2_impl(
             let key = ev.eval(closure, c, s0, s1, control)?;
             // `HashMap.get(key)`: the key's own hash decides which entries are compared at
             // all, so a stored key of another kind is never handed to `equals`.
-            let hash = value_hash(ev, &key)?;
+            let hash = super::tlc_get_set::value_hash(ev, &key)?;
             for (stored, value) in ev.tool().tlc_cache_get(expr, hash) {
                 // `key.equals(entry.key)`: the lookup's key is the receiver, so its class
                 // decides the text of a comparison that fails.
@@ -602,7 +602,7 @@ fn tlc_eval2_impl(
             // expression's own evaluation. The three node hash codes that make up the key
             // are pure.
             let key = ev.eval(closure, c, s0, StateRef::Empty, EvalControl::CLEAR)?;
-            value_hash(ev, &key)?;
+            super::tlc_get_set::value_hash(ev, &key)?;
             ev.eval(expr, c, s0, s1, control)?;
             Ok(None)
         }
@@ -612,12 +612,6 @@ fn tlc_eval2_impl(
     }
 }
 
-/// `Value.hashCode()` (`Value.java:296-307`): the two halves of the value's fingerprint
-/// under a fresh polynomial, xored.
-fn value_hash(ev: &mut Ev<'_>, v: &Value) -> EvalResult<i32> {
-    let fp = v.fingerprint(ev, ev.tool().fp64.new_fp())?.raw();
-    Ok(((fp >> 32) as i32) ^ (fp as i32))
-}
 
 /// `TLCExt.tlcNoOp(val)` (`TLCExt.java:303-306`): the value itself. It exists so a Java
 /// breakpoint can be set inside TLC's evaluator.

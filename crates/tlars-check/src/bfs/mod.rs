@@ -135,7 +135,7 @@ impl tlars_tool::MainChecker for Published {
     fn fpset_put(&self, fp: tlars_tool::Fp) {
         let _ = self.fpset.put(fp);
     }
-    fn trace_fingerprints(&self, uid: tlars_tool::TraceUid) -> Vec<tlars_tool::Fp> {
+    fn trace_fingerprints(&self, uid: tlars_tool::TraceUid) -> Vec<tlars_tool::TraceStep> {
         self.traces.fingerprints_to_uid(uid)
     }
 }
@@ -827,7 +827,7 @@ impl<'a> ModelChecker<'a> {
             // `tlc.getTraceInfo(curState)` followed by `tool.getState(curState, last)`.
             let mut trace = crate::trace::reconstruct(ev, &fps[..fps.len() - 1]).ok()??;
             let last = trace.last()?;
-            let (pred, pred_fp) = (last.state.clone(), fps[fps.len() - 2]);
+            let (pred, pred_fp) = (last.state.clone(), fps[fps.len() - 2].0);
             trace.push(ev.successor_from_fp(&pred, pred_fp, cur.fp).ok()??);
             Some(trace)
         };
@@ -1015,7 +1015,7 @@ impl<'a> ModelChecker<'a> {
         // been printed, which is why a `Print` in the next-state relation shows up between
         // the two.
         let pred = prefix.last().expect("a prefix of at least one state").state.clone();
-        let pred_fp = fps[fps.len() - 2];
+        let pred_fp = fps[fps.len() - 2].0;
         number += 1;
         trace.push(PartialState::from_state(&cur.state));
         // `if (s2 == null) lastPrinted = null`: the final state of a trace is printed whole.

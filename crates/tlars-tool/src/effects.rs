@@ -80,7 +80,7 @@ pub trait MainChecker: Send + Sync {
     /// `ConcurrentTLCTrace.getTrace(state)`'s record chain (`ConcurrentTLCTrace.java:87-110`):
     /// the fingerprints of the behaviour that ends at the trace record `uid`, initial state
     /// first and that record's own fingerprint last.
-    fn trace_fingerprints(&self, uid: crate::state::TraceUid) -> Vec<Fp>;
+    fn trace_fingerprints(&self, uid: crate::state::TraceUid) -> Vec<crate::state::TraceStep>;
 }
 
 /// `IdThread.localValues` and `IdThread.namedRegisters`: what `TLCSet` writes and `TLCGet`
