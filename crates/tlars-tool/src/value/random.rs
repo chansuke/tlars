@@ -347,19 +347,68 @@ fn random_subset_of_product(ev: &mut Ev<'_>, set: &Value, k: i32) -> EvalResult<
     if set.is_empty(ev)? {
         return Ok(Value::set_enum_of(out, false));
     }
-    if need_big_integer(ev, set)? {
-        return Err(EvalError::unimplemented(
-            "RandomSubset over a set of functions, records or tuples with more than 2^31 elements".into(),
-        ));
-    }
+    let big = need_big_integer(ev, set)?;
     let product = Product::of(ev, set)?;
+    if big {
+        // `BigIntegerSubsetEnumerator`: its `rescaleBy` is built from `SetEnumValue.size()`,
+        // which normalises the constituent, where the int enumerator reads `elems.size()`
+        // without normalising.
+        let mut weights = vec![0i128; product.sets.len()];
+        let mut total: i128 = 1;
+        for i in (0..product.sets.len()).rev() {
+            weights[i] = total;
+            let size = i128::from(super::order::normalized(ev, &product.sets[i])?.len() as i64);
+            total = total.checked_mul(size).ok_or_else(|| {
+                EvalError::unimplemented("a set of functions, records or tuples with more than 2^127 elements".into())
+            })?;
+        }
+        let mut e = BigEnumerator::new(ev, k, total);
+        while e.has_next() {
+            let index = e.next_index();
+            out.push(product.element_at_big(index, &weights));
+        }
+        return Ok(Value::set_enum_of(out, false));
+    }
+    let weights = product.int_weights();
     let n = set.size(ev)?;
     let mut e = SubsetEnumerator::new(ev, k, n);
     while e.has_next() {
         let index = e.next_index();
-        out.push(product.element_at(index));
+        out.push(product.element_at(index, &weights));
     }
     Ok(Value::set_enum_of(out, false))
+}
+
+/// `SetOfFcnsOrRcdsValue.BigIntegerSubsetEnumerator` (`SetOfFcnsOrRcdsValue.java:156-230`):
+/// the same walk with a modulus that no longer fits an `int`. Its LCG has a fixed
+/// multiplier, no rejection loop and one random term, so it costs a single `nextLong`
+/// whatever `k` is, and consecutive indices are a fixed stride apart.
+struct BigEnumerator {
+    k: i32,
+    i: i32,
+    a: i128,
+    sz: i128,
+}
+
+impl BigEnumerator {
+    fn new(ev: &mut Ev<'_>, k: i32, sz: i128) -> BigEnumerator {
+        // `Math.abs(nextLong())`, which leaves `Long.MIN_VALUE` negative.
+        let a = i128::from(ev.rng().next_long().wrapping_abs());
+        BigEnumerator { k, i: 0, a, sz }
+    }
+
+    fn has_next(&self) -> bool {
+        self.i < self.k
+    }
+
+    /// `((x * i) + a) mod sz` with `x = 2^63 - 25`. `BigInteger.mod` is never negative,
+    /// which matters for the one `a` that `Math.abs` leaves negative.
+    fn next_index(&mut self) -> i128 {
+        const X: i128 = i64::MAX as i128 - 24;
+        let index = X * i128::from(self.i) + self.a;
+        self.i += 1;
+        index.rem_euclid(self.sz)
+    }
 }
 
 /// `needBigInteger()`: whether the product of the constituents' cardinalities leaves the
@@ -407,16 +456,22 @@ fn need_big_integer(ev: &mut Ev<'_>, set: &Value) -> EvalResult<bool> {
 }
 
 /// `SetOfFcnsOrRcdsValue.Product`: the constituent sets from the most to the least
-/// significant digit, their mixed-radix weights (`rescaleBy`), and how one value per
-/// constituent makes an element. Each variant mirrors one subclass's `Product`.
-enum Product {
-    /// `FcnProduct`: the co-domain repeated once per element of the normalised domain, so
-    /// every digit has the same radix however large `S` is.
-    Fcn { domain: Arc<SetEnumValue>, range: Arc<SetEnumValue>, weights: Vec<i64> },
-    /// `RcdProduct`: one set per field.
-    Rcd { names: Box<[Atom]>, sets: Vec<Arc<SetEnumValue>>, weights: Vec<i64> },
-    /// `TupleProduct`: one set per component.
-    Tuple { sets: Vec<Arc<SetEnumValue>>, weights: Vec<i64> },
+/// significant digit of the index, and how one value per constituent makes an element.
+struct Product {
+    /// `constituents()`. `[S -> T]` repeats the co-domain once per element of the domain,
+    /// so every digit of a function set has the same radix however large `S` is.
+    sets: Vec<Arc<SetEnumValue>>,
+    shape: Shape,
+}
+
+/// What the digits are assembled into (`elementOf`), one variant per subclass's `Product`.
+enum Shape {
+    /// `FcnProduct`: the normalised domain the result function is built over.
+    Fcn(Arc<SetEnumValue>),
+    /// `RcdProduct`: the field names, already sorted.
+    Rcd(Box<[Atom]>),
+    /// `TupleProduct`.
+    Tuple,
 }
 
 impl Product {
@@ -429,20 +484,17 @@ impl Product {
                 let domain = as_set_enum(ev, &domain)?;
                 super::order::normalized(ev, &domain)?;
                 let range = as_set_enum(ev, &range)?;
-                let arity = domain.snapshot().len();
-                let weights = weights(&vec![range.clone(); arity]);
-                Ok(Product::Fcn { domain, range, weights })
+                let sets = vec![range; domain.snapshot().len()];
+                Ok(Product { sets, shape: Shape::Fcn(domain) })
             }
             Value::SetOfRcds(s) => {
                 let names = s.names.clone();
                 let sets = constituents(ev, &s.sets.to_vec())?;
-                let weights = weights(&sets);
-                Ok(Product::Rcd { names, sets, weights })
+                Ok(Product { sets, shape: Shape::Rcd(names) })
             }
             Value::SetOfTuples(s) => {
                 let sets = constituents(ev, &s.sets.to_vec())?;
-                let weights = weights(&sets);
-                Ok(Product::Tuple { sets, weights })
+                Ok(Product { sets, shape: Shape::Tuple })
             }
             _ => unreachable!("only the three product kinds have a Product"),
         }
@@ -451,29 +503,54 @@ impl Product {
     /// `SubsetEnumerator.elementAt(idx)` (`SetOfFcnsOrRcdsValue.java:145-155`): the digits
     /// of `idx` in mixed radix, read off each constituent's *current* elements, which are
     /// the sorted ones only where the constituent happens to be normalised.
-    fn element_at(&self, index: i32) -> Value {
-        let weights = match self {
-            Product::Fcn { weights, .. } | Product::Rcd { weights, .. } | Product::Tuple { weights, .. } => weights,
-        };
-        let digit = |set: &Arc<SetEnumValue>, weight: i64| -> Value {
-            let elems = set.snapshot();
-            elems[((i64::from(index) / weight) % elems.len() as i64) as usize].clone()
-        };
-        match self {
-            Product::Fcn { domain, range, .. } => {
-                let values = weights.iter().map(|&w| digit(range, w)).collect();
-                Value::FcnRcd(Value::fcn_rcd_arc(domain.snapshot().to_vec(), values, true))
-            }
+    fn element_at(&self, index: i32, weights: &[i64]) -> Value {
+        let values = self
+            .sets
+            .iter()
+            .zip(weights)
+            .map(|(set, &weight)| {
+                let elems = set.snapshot();
+                elems[((i64::from(index) / weight) % elems.len() as i64) as usize].clone()
+            })
+            .collect();
+        self.element_of(values)
+    }
+
+    /// `BigIntegerSubsetEnumerator.elementAt(idx)` (`SetOfFcnsOrRcdsValue.java:222-230`):
+    /// the weights come from `size()` but the radix of each digit is still `elems.size()`.
+    fn element_at_big(&self, index: i128, weights: &[i128]) -> Value {
+        let values = self
+            .sets
+            .iter()
+            .zip(weights)
+            .map(|(set, &weight)| {
+                let elems = set.snapshot();
+                elems[((index / weight) % elems.len() as i128) as usize].clone()
+            })
+            .collect();
+        self.element_of(values)
+    }
+
+    /// `rescaleBy` of the `int` enumerator: each digit's weight, accumulated from the least
+    /// significant end with `elems.size()` (the constituent's current elements, duplicates
+    /// included) as its radix.
+    fn int_weights(&self) -> Vec<i64> {
+        let mut weights = vec![1i64; self.sets.len()];
+        let mut n = 1i64;
+        for i in (0..self.sets.len()).rev() {
+            weights[i] = n;
+            n = n.wrapping_mul(self.sets[i].snapshot().len() as i64);
+        }
+        weights
+    }
+
+    fn element_of(&self, values: Vec<Value>) -> Value {
+        match &self.shape {
+            Shape::Fcn(domain) => Value::FcnRcd(Value::fcn_rcd_arc(domain.snapshot().to_vec(), values, true)),
             // `new RecordValue(names, fields, false)`: the names are sorted already, so the
             // flag only decides whether the record reports itself normalised.
-            Product::Rcd { names, sets, .. } => {
-                let values = sets.iter().zip(weights).map(|(s, &w)| digit(s, w)).collect();
-                Value::Record(Value::record_arc(names.to_vec(), values, false))
-            }
-            Product::Tuple { sets, .. } => {
-                let values = sets.iter().zip(weights).map(|(s, &w)| digit(s, w)).collect();
-                Value::tuple(values)
-            }
+            Shape::Rcd(names) => Value::Record(Value::record_arc(names.to_vec(), values, false)),
+            Shape::Tuple => Value::tuple(values),
         }
     }
 }
@@ -492,18 +569,6 @@ fn constituents(ev: &mut Ev<'_>, sets: &[Value]) -> EvalResult<Vec<Arc<SetEnumVa
         out.push(as_set_enum(ev, set)?);
     }
     Ok(out)
-}
-
-/// `rescaleBy`: each digit's weight, walked from the least significant end with
-/// `elems.size()` (the constituent's current elements, duplicates included) as its radix.
-fn weights(sets: &[Arc<SetEnumValue>]) -> Vec<i64> {
-    let mut weights = vec![1i64; sets.len()];
-    let mut n = 1i64;
-    for i in (0..sets.len()).rev() {
-        weights[i] = n;
-        n = n.wrapping_mul(sets[i].snapshot().len() as i64);
-    }
-    weights
 }
 
 /// `SubsetValue.getRandomSetOfSubsets(numOfPicks, probability)`
