@@ -27,7 +27,7 @@ pub(crate) mod random;
 mod sets;
 pub(crate) mod stream;
 
-pub(crate) use function::{Except, warn};
+pub(crate) use function::{Except, empty_rcd, warn};
 pub(crate) use sets::{lazy_cap, lazy_cup, lazy_diff, set_of_fcns, set_of_rcds, set_of_tuples, subset};
 
 use crate::ctx::Ctx;

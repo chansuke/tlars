@@ -410,6 +410,10 @@ impl In<'_> {
             return Ok(Value::Interval(super::IntervalValue { lo, hi }));
         }
         if kind == ValueKind::Record as u8 {
+            // `RecordValue.createFromExternal` is a static of the class, so the class
+            // initialises - and its field-name statics take their intern tokens - before the
+            // names in the file are read.
+            ev.tool().graph().interner().ensure(tlars_sany::JavaClass::RecordValue);
             let slot = self.index();
             let len = length(self.int()?)?;
             let (mut names, mut values) = (Vec::new(), Vec::new());

@@ -14,18 +14,11 @@ mod parse;
 use crate::error::{EvalError, EvalResult};
 use crate::eval::Ev;
 use crate::modules::eval_exception;
+use crate::modules::file::{EISDIR, io_exception, io_message, resolve, string_argument};
 use crate::value::{FcnDomain, FcnRcdValue, IntervalValue, RecordValue, Value};
 use node::Node;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tlars_msg::Ec;
-
-/// An `IOException` the module raises on purpose. It is a checked exception, not an
-/// `EvalException`, so `MethodValue.eval` wraps it in the message naming the Java method
-/// (`MethodValue.java:147-169`); any kind that `modules::wrap` wraps will do.
-fn io_exception(message: String) -> EvalError {
-    EvalError::detailed(message, None)
-}
 
 /// `"Cannot convert value: unsupported value type " + value.getClass().getName()`.
 fn unsupported(v: &Value) -> EvalError {
@@ -298,9 +291,6 @@ fn open_for_writing(ev: &mut Ev<'_>, path: &Value) -> EvalResult<Writer> {
     }
 }
 
-/// `EISDIR` on Linux.
-const EISDIR: i32 = 21;
-
 /// `JsonDeserialize(path)` (`Json.java:146-150`).
 pub(crate) fn deserialize(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
     let text = read_file(ev, &a[0])?;
@@ -374,29 +364,6 @@ fn read_file(ev: &mut Ev<'_>, path: &Value) -> EvalResult<String> {
     }
 }
 
-/// How the JDK builds a `FileNotFoundException`'s message: the path as the spec wrote it,
-/// then the C library's text for `errno` in parentheses (`io_util_md.c`,
-/// `throwFileNotFoundException`). The path is not made absolute, so a relative one is
-/// reported relative.
-fn io_message(path: &str, e: &std::io::Error) -> String {
-    format!("{path} ({})", tlars_java::last_error_string(e.raw_os_error().unwrap_or(0)))
-}
-
-/// The path argument, which `MethodValue.eval` has already cast to `StringValue`
-/// (`JavaParam::StringValue`), so anything else failed before the method ran.
-fn string_argument(ev: &Ev<'_>, v: &Value) -> String {
-    match v {
-        Value::Str(a) => ev.tool().graph().interner().text(*a).to_string(),
-        other => unreachable!("the path is cast to StringValue first, not {}", other.java_class()),
-    }
-}
-
-/// `new File(path)` opened by the process: a relative path resolves against the directory
-/// the run was started in, not against `user.dir`, because the JDK hands the path to
-/// `open(2)` unchanged.
-fn resolve(ev: &Ev<'_>, path: &str) -> PathBuf {
-    ev.tool().globals().cwd.join(path)
-}
 
 /// `new File(path).getParent()` (`UnixFileSystem.normalize` then `File.getParent`):
 /// repeated separators collapse and a trailing one goes, and a path with no separator left

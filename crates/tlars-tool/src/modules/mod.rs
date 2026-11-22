@@ -15,6 +15,7 @@
 
 mod any_set;
 mod bags;
+mod file;
 mod finite_sets;
 mod java_overrides;
 mod json;
@@ -25,6 +26,7 @@ mod sequences;
 pub(crate) mod tlc;
 mod tlc_eval;
 pub(crate) mod tlc_ext;
+mod tlc_trace;
 pub(crate) mod tlc_get_set;
 
 pub(crate) use naturals::eval_exception;
@@ -185,6 +187,8 @@ natives! {
     "Bags" "SetToBag" (V) Strict bags::set_to_bag, "public static tlc2.value.impl.Value tlc2.module.Bags.SetToBag(tlc2.value.impl.Value)";
     "TLC" "Any" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.TLC.Any()";
     "TLC" "TLCEval" (V) Lazy tlc_eval::tlc_eval, "public static tlc2.value.impl.Value tlc2.module.TLCEval.tlcEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "_TLCTrace" "_TLCTraceSerialize" (V, S) Strict tlc_trace::serialize, "public static final tlc2.value.IValue tlc2.module._TLCTrace.ioSerialize(tlc2.value.IValue,tlc2.value.impl.StringValue) throws java.io.IOException";
+    "_TLCTrace" "_TLCTraceDeserialize" (S) Strict tlc_trace::deserialize, "public static final tlc2.value.IValue tlc2.module._TLCTrace.ioDeserialize(tlc2.value.impl.StringValue) throws java.io.IOException";
     "Json" "ToJson" (V) Strict json::to_json, "public static tlc2.value.impl.StringValue tlc2.module.Json.toJson(tlc2.value.IValue) throws java.io.IOException";
     "Json" "ToJsonArray" (V) Strict json::to_json_array, "public static tlc2.value.impl.StringValue tlc2.module.Json.toJsonArray(tlc2.value.IValue) throws java.io.IOException";
     "Json" "ToJsonObject" (V) Strict json::to_json_object, "public static tlc2.value.impl.StringValue tlc2.module.Json.toJsonObject(tlc2.value.IValue) throws java.io.IOException";

@@ -284,7 +284,7 @@ fn empty_tuple() -> Arc<TupleValue> {
 }
 
 /// `RecordValue.EmptyRcd`.
-fn empty_rcd() -> Arc<RecordValue> {
+pub(crate) fn empty_rcd() -> Arc<RecordValue> {
     Value::record_arc(Vec::new(), Vec::new(), true)
 }
 
