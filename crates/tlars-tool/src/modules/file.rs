@@ -20,8 +20,8 @@ pub(crate) fn io_exception(message: String) -> EvalError {
 /// then the C library's text for `errno` in parentheses (`io_util_md.c`,
 /// `throwFileNotFoundException`). The path is not made absolute, so a relative one is
 /// reported relative.
-pub(crate) fn io_message(path: &str, e: &std::io::Error) -> String {
-    format!("{path} ({})", tlars_java::last_error_string(e.raw_os_error().unwrap_or(0)))
+pub(crate) fn io_message(locale: &tlars_java::Locale, path: &str, e: &std::io::Error) -> String {
+    format!("{path} ({})", tlars_java::last_error_string(e.raw_os_error().unwrap_or(0), locale))
 }
 
 /// The path argument, which `MethodValue.eval` has already cast to `StringValue`

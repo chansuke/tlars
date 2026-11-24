@@ -37,7 +37,7 @@ pub mod time;
 mod zip;
 
 pub use concurrent_hashmap::JavaConcurrentHashMap;
-pub use errno::last_error_string;
+pub use errno::{Locale, last_error_string};
 pub use exception::{class_cast, index_out_of_bounds, null_method_call, range_out_of_bounds, substring};
 pub use hashmap::{JavaHashMap, capacity_for_mappings, table_size_for};
 pub use hashset::JavaIntHashSet;

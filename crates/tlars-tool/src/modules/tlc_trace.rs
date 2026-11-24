@@ -32,7 +32,7 @@ pub(crate) fn serialize(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
             return Err(e);
         }
     };
-    file.write_all(&tlars_java::gzip(&bytes)).map_err(|e| io_exception(io_message(&path, &e)))?;
+    file.write_all(&tlars_java::gzip(&bytes)).map_err(|e| io_exception(io_message(&ev.tool().globals().locale, &path, &e)))?;
     Ok(Value::Bool(true))
 }
 
@@ -43,9 +43,9 @@ fn create(ev: &mut Ev<'_>, path: &str) -> EvalResult<std::fs::File> {
     // `FileOutputStream`'s native open refuses a directory, which Unix `open(2)` with
     // `O_WRONLY` does too, with the same `EISDIR`.
     if target.is_dir() {
-        return Err(io_exception(io_message(path, &std::io::Error::from_raw_os_error(EISDIR))));
+        return Err(io_exception(io_message(&ev.tool().globals().locale, path, &std::io::Error::from_raw_os_error(EISDIR))));
     }
-    std::fs::File::create(&target).map_err(|e| io_exception(io_message(path, &e)))
+    std::fs::File::create(&target).map_err(|e| io_exception(io_message(&ev.tool().globals().locale, path, &e)))
 }
 
 /// `ioDeserialize(absolutePath)` (`_TLCTrace.java:64-83`).
@@ -65,9 +65,9 @@ pub(crate) fn deserialize(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
         return Ok(Value::Record(empty_rcd()));
     }
     if source.is_dir() {
-        return Err(io_exception(io_message(&path, &std::io::Error::from_raw_os_error(EISDIR))));
+        return Err(io_exception(io_message(&ev.tool().globals().locale, &path, &std::io::Error::from_raw_os_error(EISDIR))));
     }
-    let bytes = std::fs::read(&source).map_err(|e| io_exception(io_message(&path, &e)))?;
+    let bytes = std::fs::read(&source).map_err(|e| io_exception(io_message(&ev.tool().globals().locale, &path, &e)))?;
     let plain = tlars_java::gunzip(&bytes).map_err(gzip_failure)?;
     stream::read_external(ev, &plain)
 }

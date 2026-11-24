@@ -295,6 +295,7 @@ fn globals(session: &Session<'_>) -> TlcGlobals {
         properties: session.properties.clone(),
         install_location: session.env.install_location.clone(),
         cwd: session.cwd.clone(),
+        locale: session.env.locale.clone(),
     }
 }
 

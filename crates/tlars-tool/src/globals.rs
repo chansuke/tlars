@@ -45,4 +45,6 @@ pub struct TlcGlobals {
     /// name a file). Not `user.dir`: the JDK only consults that property to *print* an
     /// absolute path, never to open one.
     pub cwd: std::path::PathBuf,
+    /// The locale whose C library text a `FileNotFoundException` message carries.
+    pub locale: tlars_java::Locale,
 }

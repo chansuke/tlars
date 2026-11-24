@@ -95,6 +95,7 @@ fn globals(poly: usize) -> crate::globals::TlcGlobals {
         properties: Vec::new(),
         install_location: String::new(),
         cwd: std::path::PathBuf::new(),
+        locale: tlars_java::Locale::c_utf8(),
     }
 }
 

@@ -263,12 +263,13 @@ pub(crate) fn serialize(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
 struct Writer {
     file: std::fs::File,
     path: String,
+    locale: tlars_java::Locale,
 }
 
 impl Writer {
     fn write(&mut self, text: &str) -> EvalResult<()> {
         use std::io::Write as _;
-        self.file.write_all(text.as_bytes()).map_err(|e| io_exception(io_message(&self.path, &e)))
+        self.file.write_all(text.as_bytes()).map_err(|e| io_exception(io_message(&self.locale, &self.path, &e)))
     }
 }
 
@@ -283,11 +284,11 @@ fn open_for_writing(ev: &mut Ev<'_>, path: &Value) -> EvalResult<Writer> {
     // `FileOutputStream`'s native open refuses a directory, which Unix `open(2)` with
     // `O_WRONLY` does too, with the same `EISDIR`.
     if target.is_dir() {
-        return Err(io_exception(io_message(&path, &std::io::Error::from_raw_os_error(EISDIR))));
+        return Err(io_exception(io_message(&ev.tool().globals().locale, &path, &std::io::Error::from_raw_os_error(EISDIR))));
     }
     match std::fs::File::create(&target) {
-        Ok(file) => Ok(Writer { file, path }),
-        Err(e) => Err(io_exception(io_message(&path, &e))),
+        Ok(file) => Ok(Writer { file, path, locale: ev.tool().globals().locale.clone() }),
+        Err(e) => Err(io_exception(io_message(&ev.tool().globals().locale, &path, &e))),
     }
 }
 
@@ -356,11 +357,11 @@ fn read_file(ev: &mut Ev<'_>, path: &Value) -> EvalResult<String> {
     // `new FileInputStream(File)` refuses a directory up front, where Unix `open(2)` for
     // reading would accept it and fail at the first `read`.
     if source.is_dir() {
-        return Err(io_exception(io_message(&path, &std::io::Error::from_raw_os_error(EISDIR))));
+        return Err(io_exception(io_message(&ev.tool().globals().locale, &path, &std::io::Error::from_raw_os_error(EISDIR))));
     }
     match std::fs::read(&source) {
         Ok(bytes) => Ok(String::from_utf8_lossy(&bytes).into_owned()),
-        Err(e) => Err(io_exception(io_message(&path, &e))),
+        Err(e) => Err(io_exception(io_message(&ev.tool().globals().locale, &path, &e))),
     }
 }
 
