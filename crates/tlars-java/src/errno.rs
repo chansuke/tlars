@@ -14,46 +14,91 @@
 //! library, through two POSIX calls. There is no unit test for the text, because the right
 //! answer is whatever the host's locale says; the check that matters is the forty-odd
 //! `tlc/standard/json` corpus cases, which compare these bytes with TLC's.
+//!
+//! The category masks below are glibc's, so the C library path is compiled for glibc
+//! Linux only. Elsewhere the message is the C locale's text, the one `strerror` gives
+//! before anything calls `setlocale`, taken from the standard library.
 
-use std::ffi::{CStr, c_char, c_int, c_void};
-use std::sync::OnceLock;
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+pub use linux::last_error_string;
 
-/// `LC_CTYPE_MASK | LC_MESSAGES_MASK` (`bits/locale.h`: `__LC_CTYPE` 0, `__LC_MESSAGES` 5).
-/// `LC_MESSAGES` picks the catalog and `LC_CTYPE` its charset: without the latter, glibc
-/// transcodes the catalog's UTF-8 to the C locale's ASCII and every character comes out
-/// as `?`.
-const LC_CTYPE_MESSAGES_MASK: c_int = (1 << 0) | (1 << 5);
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+mod linux {
+    use std::ffi::{CStr, c_char, c_int, c_void};
+    use std::sync::OnceLock;
 
-/// `LC_GLOBAL_LOCALE`, the process-wide locale, which is `C` here because nothing in this
-/// program calls `setlocale`.
-const LC_GLOBAL_LOCALE: *mut c_void = usize::MAX as *mut c_void;
+    /// `LC_CTYPE_MASK | LC_MESSAGES_MASK` (`bits/locale.h`: `__LC_CTYPE` 0, `__LC_MESSAGES` 5).
+    /// `LC_MESSAGES` picks the catalog and `LC_CTYPE` its charset: without the latter, glibc
+    /// transcodes the catalog's UTF-8 to the C locale's ASCII and every character comes out
+    /// as `?`.
+    const LC_CTYPE_MESSAGES_MASK: c_int = (1 << 0) | (1 << 5);
 
-unsafe extern "C" {
-    fn newlocale(category_mask: c_int, locale: *const c_char, base: *mut c_void) -> *mut c_void;
-    fn strerror_l(errnum: c_int, locale: *mut c_void) -> *mut c_char;
+    /// `LC_GLOBAL_LOCALE`, the process-wide locale, which is `C` here because nothing in this
+    /// program calls `setlocale`.
+    const LC_GLOBAL_LOCALE: *mut c_void = usize::MAX as *mut c_void;
+
+    unsafe extern "C" {
+        fn newlocale(category_mask: c_int, locale: *const c_char, base: *mut c_void)
+        -> *mut c_void;
+        fn strerror_l(errnum: c_int, locale: *mut c_void) -> *mut c_char;
+    }
+
+    /// The locale `setlocale(LC_ALL, "")` would select, built once. Held as a `usize` because a
+    /// `locale_t` is a pointer that `strerror_l` only reads. It is never freed: one locale per
+    /// process, alive as long as the process is.
+    fn environment_locale() -> *mut c_void {
+        static LOCALE: OnceLock<usize> = OnceLock::new();
+        let handle = *LOCALE.get_or_init(|| {
+            // SAFETY: the name is a nul-terminated literal and the base is null, which asks
+            // `newlocale` for a fresh locale rather than one to modify.
+            let locale =
+                unsafe { newlocale(LC_CTYPE_MESSAGES_MASK, c"".as_ptr(), std::ptr::null_mut()) };
+            locale as usize
+        });
+        // A locale the host does not have leaves the process locale, so the message is the C
+        // one rather than nothing.
+        if handle == 0 {
+            LC_GLOBAL_LOCALE
+        } else {
+            handle as *mut c_void
+        }
+    }
+
+    /// `getLastErrorString()`: `strerror(errno)` under the environment's locale.
+    pub fn last_error_string(errno: i32) -> String {
+        let locale = environment_locale();
+        // SAFETY: `strerror_l` returns a nul-terminated string that stays valid as long as the
+        // locale does, and this locale outlives the process. The copy happens before anything
+        // else can run on this thread, and `strerror_l` needs no lock of its own.
+        unsafe { CStr::from_ptr(strerror_l(errno, locale)) }
+            .to_string_lossy()
+            .into_owned()
+    }
 }
 
-/// The locale `setlocale(LC_ALL, "")` would select, built once. Held as a `usize` because a
-/// `locale_t` is a pointer that `strerror_l` only reads. It is never freed: one locale per
-/// process, alive as long as the process is.
-fn environment_locale() -> *mut c_void {
-    static LOCALE: OnceLock<usize> = OnceLock::new();
-    let handle = *LOCALE.get_or_init(|| {
-        // SAFETY: the name is a nul-terminated literal and the base is null, which asks
-        // `newlocale` for a fresh locale rather than one to modify.
-        let locale = unsafe { newlocale(LC_CTYPE_MESSAGES_MASK, c"".as_ptr(), std::ptr::null_mut()) };
-        locale as usize
-    });
-    // A locale the host does not have leaves the process locale, so the message is the C
-    // one rather than nothing.
-    if handle == 0 { LC_GLOBAL_LOCALE } else { handle as *mut c_void }
-}
-
-/// `getLastErrorString()`: `strerror(errno)` under the environment's locale.
+/// `getLastErrorString()` where tlars does not ask the C library.
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
 pub fn last_error_string(errno: i32) -> String {
-    let locale = environment_locale();
-    // SAFETY: `strerror_l` returns a nul-terminated string that stays valid as long as the
-    // locale does, and this locale outlives the process. The copy happens before anything
-    // else can run on this thread, and `strerror_l` needs no lock of its own.
-    unsafe { CStr::from_ptr(strerror_l(errno, locale)) }.to_string_lossy().into_owned()
+    c_locale_message(errno)
+}
+
+/// The C locale's text, which is what `std::io::Error` prints before its ` (os error N)`
+/// suffix. Compiled everywhere so the fallback is built and tested on the host CI runs on.
+#[cfg_attr(all(target_os = "linux", target_env = "gnu"), allow(dead_code))]
+fn c_locale_message(errno: i32) -> String {
+    let text = std::io::Error::from_raw_os_error(errno).to_string();
+    let suffix = format!(" (os error {errno})");
+    text.strip_suffix(&suffix).map(str::to_string).unwrap_or(text)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn c_locale_message_drops_the_os_error_suffix() {
+        // ENOENT is 2 on Linux, macOS and Windows alike.
+        let text = super::c_locale_message(2);
+        assert!(!text.contains("os error"), "{text}");
+        #[cfg(target_os = "linux")]
+        assert_eq!(text, "No such file or directory");
+    }
 }
