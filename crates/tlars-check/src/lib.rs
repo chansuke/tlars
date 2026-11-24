@@ -72,6 +72,9 @@ pub struct Env {
     /// `TLCGlobals.Version.installLocation()`, the jar TLC runs from: where this tool lives.
     /// `TLCGet("config").install` is its only reader.
     pub install_location: String,
+    /// The locale the JVM's `setlocale(LC_ALL, "")` would select, which decides the C
+    /// library text inside a `FileNotFoundException` message.
+    pub locale: tlars_java::Locale,
 }
 
 #[derive(Clone, Copy)]
@@ -104,6 +107,7 @@ impl Env {
             worker_stack_bytes: 64 << 20,
             host: HostInfo::current(),
             install_location: std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default(),
+            locale: tlars_java::Locale::from_environment(|name| std::env::var(name).ok()),
         }
     }
 
@@ -116,6 +120,8 @@ impl Env {
             worker_stack_bytes: 64 << 20,
             host: HostInfo { os_name: "Linux".into(), os_version: "0".into(), os_arch: "amd64".into(), cores: 1 },
             install_location: String::new(),
+            // The locale TLC's conformance recordings run under.
+            locale: tlars_java::Locale::c_utf8(),
         }
     }
 

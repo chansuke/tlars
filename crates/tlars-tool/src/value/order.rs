@@ -288,6 +288,13 @@ impl Value {
                 let (a, b) = (self.ppr(ev)?, other.ppr(ev)?);
                 return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[&a, &b]));
             }
+            // `AnySet.compareTo` (`AnySet.java:27-31`) always throws, so even `ANY = ANY`
+            // is an error. A non-`UserValue` never gets here: `UserValue.compareTo` has
+            // already answered it above.
+            UserValue::AnySet => {
+                let shown = other.ppr(ev)?;
+                return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["ANY", &shown]));
+            }
             _ => return Err(EvalError::unimplemented("comparison of this special set (M2 unit 3)".into())),
         };
         match other {
@@ -508,6 +515,10 @@ impl Value {
                     }
                     Ok(true)
                 }
+                // `AnySet.member` (`AnySet.java:33-37`): true for every value, a model value
+                // among them, since there is no `ModelValue` branch to send it to
+                // `modelValueMember`.
+                (UserValue::AnySet, _) => Ok(true),
                 _ => Err(EvalError::unimplemented("membership in this special set (M2 unit 5)".into())),
             },
             Value::Tuple(_) => Err(EvalError::detailed("Attempted to check set membership in a tuple value.".into(), None)),
@@ -693,6 +704,8 @@ impl Value {
             Value::User(u) => match &**u {
                 UserValue::Nat | UserValue::Int | UserValue::String => Ok(false),
                 UserValue::Seq(range) => Ok(range.is_finite(ev)? && range.is_empty(ev)?),
+                // `AnySet.isFinite` (`AnySet.java:39-43`).
+                UserValue::AnySet => Ok(false),
                 _ => Err(EvalError::unimplemented("isFinite of this special set (M2 unit 4)".into())),
             },
             Value::Subset(s) => s.base.is_finite(ev),
@@ -788,6 +801,10 @@ impl Value {
             Value::User(u) => match &**u {
                 UserValue::Nat | UserValue::Int | UserValue::String => Ok(false),
                 UserValue::Seq(_) => Ok(false),
+                // `AnySet` deliberately leaves `isEmpty` to `UserObj.isEmpty`
+                // (`UserObj.java:21-24`), whose `Assert.fail` names the `UserObj` itself
+                // rather than a `Values.ppr` of the `UserValue`. Both read `ANY`.
+                UserValue::AnySet => Err(EvalError::detailed("Shouldn't call isEmpty() on value ANY".into(), None)),
                 _ => Err(EvalError::unimplemented("isEmpty of this special set (M2 unit 4)".into())),
             },
             _ => {

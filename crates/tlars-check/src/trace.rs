@@ -2,13 +2,24 @@
 //! appends only to its own store (per-actor state); readers merge at reconstruction time.
 
 use std::sync::Mutex;
-use tlars_tool::{Ev, EvalResult, Fp, StateInfo};
+use tlars_tool::{Ev, EvalResult, Fp, StateInfo, TraceStep};
 
 /// TLC's `(workerId, uid)` pair.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TracePtr {
     worker: u16,
     index: u32,
+}
+
+impl TracePtr {
+    /// `TLCState.uid`, which TLC sets to the record's file offset. tlars has one store per
+    /// worker, so the pair is packed instead.
+    pub(crate) fn to_uid(self) -> tlars_tool::TraceUid {
+        (u64::from(self.worker) << 32) | u64::from(self.index)
+    }
+    fn from_uid(uid: tlars_tool::TraceUid) -> TracePtr {
+        TracePtr { worker: (uid >> 32) as u16, index: uid as u32 }
+    }
 }
 
 /// `pred == None` marks an initial state (TLC's `ptr == 1` marker).
@@ -46,17 +57,24 @@ impl TraceStores {
         let max = &self.per_worker[worker as usize].max_level;
         max.fetch_max(level, std::sync::atomic::Ordering::Relaxed);
     }
-    /// Follow `pred` links back to the initial record; returns fingerprints init-first.
-    pub(crate) fn fingerprints_to(&self, end: TracePtr) -> Vec<Fp> {
-        let mut fps = Vec::new();
+    /// `ConcurrentTLCTrace.getTrace`'s record chain: follow `pred` links back to the initial
+    /// record, init-first. Each entry is a state's fingerprint and the trace record it was
+    /// written at, which the reconstruction puts back on the regenerated state as
+    /// `TLCState.uid` (`ConcurrentTLCTrace.java:168-191`).
+    pub(crate) fn fingerprints_to(&self, end: TracePtr) -> Vec<TraceStep> {
+        let mut steps = Vec::new();
         let mut cur = Some(end);
         while let Some(ptr) = cur {
             let record = self.record(ptr);
-            fps.push(record.fp);
+            steps.push((record.fp, ptr.to_uid()));
             cur = record.pred;
         }
-        fps.reverse();
-        fps
+        steps.reverse();
+        steps
+    }
+    /// `fingerprints_to` for a state's `TLCState.uid`.
+    pub(crate) fn fingerprints_to_uid(&self, uid: tlars_tool::TraceUid) -> Vec<TraceStep> {
+        self.fingerprints_to(TracePtr::from_uid(uid))
     }
     fn record(&self, ptr: TracePtr) -> TraceRecord {
         self.per_worker[ptr.worker as usize].records.lock().expect("trace store")[ptr.index as usize]
@@ -68,20 +86,7 @@ impl TraceStores {
 }
 
 /// `ConcurrentTLCTrace.getTrace(..)`: replay forward taking the first fingerprint match at
-/// every step. RandomElement repeats its choices because each replayed step re-seeds from
-/// its predecessor's fingerprint, as in the search. `Ok(None)` =
-/// `TLC_FAILED_TO_RECOVER_INIT` / "failed to recover state".
-pub(crate) fn reconstruct(ev: &mut Ev<'_>, fps: &[Fp]) -> EvalResult<Option<Vec<StateInfo>>> {
-    ev.reset_init_random();
-    let Some((&first, rest)) = fps.split_first() else { return Ok(Some(Vec::new())) };
-    let Some(init) = ev.state_from_fp(first)? else { return Ok(None) };
-    let mut steps = vec![init];
-    let mut pred_fp = first;
-    for &fp in rest {
-        let pred = &steps.last().expect("non-empty").state;
-        let Some(next) = ev.successor_from_fp(pred, pred_fp, fp)? else { return Ok(None) };
-        steps.push(next);
-        pred_fp = fp;
-    }
-    Ok(Some(steps))
+/// every step. `Ok(None)` = `TLC_FAILED_TO_RECOVER_INIT` / "failed to recover state".
+pub(crate) fn reconstruct(ev: &mut Ev<'_>, steps: &[TraceStep]) -> EvalResult<Option<Vec<StateInfo>>> {
+    ev.reconstruct_states(steps)
 }

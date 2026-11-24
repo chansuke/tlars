@@ -16,12 +16,15 @@
 //! | `SimpleDateFormat`            | timestamps, `TLC_FINISHED` durations, metadir      |
 //! | `tlc2.pprint.*`               | state values wrapped at `Values.width` (80)        |
 //! | JVM exception messages        | the casts and array reads TLC lets escape          |
+//! | `strerror` under the locale   | the message of every `FileNotFoundException`       |
+//! | `java.util.zip` gzip + CRC32  | trace files (`ValueOutputStream(File, true)`)       |
 //!
 //! Golden files under `tests/golden` come from `tools/golden/JavaGolden.java` run on the
 //! pinned JDK 21, with `$TLA2TOOLS_JAR` on the class path for the one corpus that asks TLC
 //! itself rather than the JDK (`pprint.txt`).
 
 mod concurrent_hashmap;
+mod errno;
 mod exception;
 mod hashmap;
 mod hashset;
@@ -31,9 +34,11 @@ mod parse;
 mod pprint;
 mod random;
 pub mod time;
+mod zip;
 
 pub use concurrent_hashmap::JavaConcurrentHashMap;
-pub use exception::{class_cast, index_out_of_bounds, range_out_of_bounds, substring};
+pub use errno::{Locale, last_error_string};
+pub use exception::{class_cast, index_out_of_bounds, null_method_call, range_out_of_bounds, substring};
 pub use hashmap::{JavaHashMap, capacity_for_mappings, table_size_for};
 pub use hashset::JavaIntHashSet;
 pub use hashtable::{Elements, Hashtable};
@@ -41,6 +46,7 @@ pub use number::{decimal_format_grouped, double_to_string, reciprocal_two_digits
 pub use parse::{NumberFormatError, parse_double, parse_int, parse_long};
 pub use pprint::pretty_print;
 pub use random::JavaRandom;
+pub use zip::{GzipError, crc32, gunzip, gzip};
 
 /// `java.lang.String.hashCode()`: `s[0]*31^(n-1) + ...` over UTF-16 code units, with `int`
 /// wrapping arithmetic.

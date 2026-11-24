@@ -45,7 +45,7 @@ impl<'t> Ev<'t> {
     /// sink (TLC: an exception out of `addElement`) stops the loop. `s0_fp` is the parent's
     /// fingerprint: it seeds RandomElement for this expansion (`fp ^ seed`, once per parent).
     pub fn next_states(&mut self, s0: &State, s0_fp: Fp, sink: &mut dyn NextSink) -> Flow {
-        self.begin_expansion(s0_fp);
+        self.begin_expansion(s0, s0_fp);
         let tool = self.tool;
         for action in tool.actions() {
             self.next_states_of_action(s0, action, sink)?;

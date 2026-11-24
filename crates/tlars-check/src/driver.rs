@@ -294,6 +294,8 @@ fn globals(session: &Session<'_>) -> TlcGlobals {
         no_timestamps: session.property_is_true("tlc2.output.MP.noTimestamps"),
         properties: session.properties.clone(),
         install_location: session.env.install_location.clone(),
+        cwd: session.cwd.clone(),
+        locale: session.env.locale.clone(),
     }
 }
 

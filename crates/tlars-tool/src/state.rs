@@ -47,9 +47,34 @@ pub struct State {
     /// `TLCState.level`, as `setPredecessor` maintains it: one more than the predecessor's.
     /// `TLCGet("level")` is the only reader; no equality, fingerprint or printing sees it.
     level: u32,
+    /// `TLCState.uid`, which `Worker.writeState` sets to the trace record the state was
+    /// written at; `None` is `TLCState.INIT_UID`, "not in the trace yet". `TLCExt!Trace` is
+    /// the only reader, and like `level` it takes no part in equality, fingerprints or
+    /// printing.
+    uid: Option<TraceUid>,
 }
 
+/// The position of a state's record in the trace store, as `TLCState.uid` holds it. The
+/// checker chooses the encoding; the evaluator only hands it back through
+/// [`crate::effects::MainChecker::trace_fingerprints`].
+pub type TraceUid = u64;
+
+/// One record of the chain `ConcurrentTLCTrace.getTrace` walks: a state's fingerprint and
+/// the trace record it was written at.
+pub type TraceStep = (crate::fp64::Fp, TraceUid);
+
 impl State {
+    /// `TLCState.isInitial()`: `level == INIT_LEVEL`.
+    pub fn is_initial(&self) -> bool {
+        self.level == INIT_LEVEL
+    }
+    pub fn uid(&self) -> Option<TraceUid> {
+        self.uid
+    }
+    /// `Worker.writeState`: the state is now in the trace at `uid`.
+    pub fn set_uid(&mut self, uid: TraceUid) {
+        self.uid = Some(uid);
+    }
     pub fn get(&self, slot: VarSlot) -> &Value {
         &self.values[slot.index()]
     }
@@ -67,7 +92,7 @@ impl State {
     /// `fingerPrint` evaluates the VIEW against (`TLCStateMut.java:265-268`). The private
     /// constructor leaves `level` at `INIT_LEVEL` (`TLCState.java:38`).
     pub(crate) fn of_values(values: Vec<Value>) -> State {
-        State { values: values.into(), level: INIT_LEVEL }
+        State { values: values.into(), level: INIT_LEVEL, uid: None }
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
         Snapshot { values: self.values.iter().map(|v| Some(v.clone())).collect(), fun: None }
@@ -121,7 +146,7 @@ impl PartialState {
         if !self.all_assigned() {
             return None;
         }
-        Some(State { values: self.slots.iter().map(|v| v.clone().expect("all assigned")).collect(), level: self.level })
+        Some(State { values: self.slots.iter().map(|v| v.clone().expect("all assigned")).collect(), level: self.level, uid: None })
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
         Snapshot { values: self.slots.clone(), fun: None }

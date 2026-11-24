@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tlars_conformance::{Case, Context, Corpus, Expectations, Outcome, TLC_JVM_ARGS, transcript};
+use tlars_conformance::{Case, Context, Corpus, Expectations, Outcome, RECORDING_LOCALE, TLC_JVM_ARGS, transcript};
 
 pub(crate) struct Args {
     pub(crate) suite: String,
@@ -110,6 +110,7 @@ fn run_tlc(jar: &str, root: &Path, case: &Case, context: Context) -> Result<Outc
         .args(["-cp", jar, "tlc2.TLC"])
         .args(&args)
         .current_dir(&dir)
+        .env("LC_ALL", RECORDING_LOCALE)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()

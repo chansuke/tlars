@@ -21,6 +21,12 @@ pub const DETERMINISTIC_ARGS: &[&str] =
 pub const TLC_JVM_ARGS: &[&str] =
     &["-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1", "-XX:-UsePerfData", "-Xmx1g", "-Xss2m"];
 
+/// `LC_ALL` for the recordings. The JVM calls `setlocale(LC_ALL, "")`, so a C library text
+/// in TLC's output (a `FileNotFoundException`'s `strerror`) follows the recorder's locale;
+/// pinning it makes the expectations the same on every machine. tlars' hermetic `Env` uses
+/// the same locale (`tlars_java::Locale::c_utf8`).
+pub const RECORDING_LOCALE: &str = "C.UTF-8";
+
 const STATE: &str = "conformance_state";
 
 /// Where a case runs: one of `EXPRESSION_CONTEXTS` for `flags: [expression]` cases, else

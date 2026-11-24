@@ -561,6 +561,9 @@ impl Value {
                 super::UserValue::Nat => Some("Nat"),
                 super::UserValue::Int => Some("Int"),
                 super::UserValue::String => None,
+                // `AnySet` has no `getNonEnumerableErrorMsg`, so `UserValue`'s falls back to
+                // `Value`'s generic text (`UserValue.java:137-143`, `Value.java:447-450`).
+                super::UserValue::AnySet => None,
                 // `Sequences.getNonEnumerableErrorMsg` (`Sequences.java:506-517`).
                 super::UserValue::Seq(_) => {
                     return Ok(format!(

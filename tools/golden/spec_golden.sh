@@ -36,7 +36,8 @@ for case_dir in "$specs"/*/; do
     done < "$case_dir/args"
   fi
   args+=(-config "$name.cfg" "$name.tla")
-  stdout=$(cd "$dir" && java -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:-UsePerfData -Xmx1g -Xss2m \
+  # LC_ALL as `tlars_conformance::RECORDING_LOCALE`: the JVM's strerror text follows it.
+  stdout=$(cd "$dir" && LC_ALL=C.UTF-8 java -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:-UsePerfData -Xmx1g -Xss2m \
              "${props[@]}" -cp "$TLA2TOOLS_JAR" tlc2.TLC "${args[@]}" 2>/dev/null)
   status=$?
   # The normalisation the test applies to tlars' output, so both sides are compared the

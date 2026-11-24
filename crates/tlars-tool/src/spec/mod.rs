@@ -149,9 +149,12 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         symmetry: Box::new([]),
         temporal: crate::tool::Temporal { fairness: Box::new([]), properties: Box::new([]) },
         fp64: crate::fp64::Fp64::new(globals.fp_index),
+        tlc_caches: std::sync::Mutex::new(Default::default()),
         model_values,
+        added_model_values: std::sync::Mutex::new(Vec::new()),
         globals,
         registers: std::sync::Mutex::new(crate::effects::Registers::default()),
+        tlc_eval_values: std::sync::Mutex::new(std::collections::BTreeMap::new()),
         set_properties: std::sync::Mutex::new(Vec::new()),
         stdin: std::sync::Mutex::new(stdin),
         main_checker: std::sync::OnceLock::new(),
@@ -1379,9 +1382,31 @@ fn config_counter_example(tool: &Tool, defns: &Defns) -> CounterExampleDef {
     let Some(name) = tool.graph.interner().interned("CounterExample") else { return CounterExampleDef::Absent };
     match defns.get(&name).cloned().flatten() {
         None => CounterExampleDef::Absent,
-        Some(OpBinding::Native(_) | OpBinding::Unimplemented { .. }) => CounterExampleDef::Evaluating,
+        Some(OpBinding::Native(_) | OpBinding::Unimplemented { .. }) => match override_def(&tool.graph, name) {
+            Some(d) => CounterExampleDef::Evaluating(d),
+            // Unreachable: the entry is there because a module with a Java class has a
+            // definition of that name.
+            None => CounterExampleDef::NotEvaluating,
+        },
         Some(_) => CounterExampleDef::NotEvaluating,
     }
+}
+
+/// `((EvaluatingValue) defns.get(name)).getOpDef()`: the definition `processModuleOverrides`
+/// bound the method to. It walks the modules in the same order, so a name several modules
+/// with a Java class define resolves to the last binding, as `defns` does.
+fn override_def(graph: &SemanticGraph, name: Atom) -> Option<OpDefId> {
+    let mut found = None;
+    for (id, m) in graph.modules() {
+        let module = graph.interner().text(m.name);
+        if crate::modules::java_override(&module, &graph.interner().text(name)).is_none() {
+            continue;
+        }
+        if let Some(d) = graph.module_op_def(id, name) {
+            found = Some(d);
+        }
+    }
+    found
 }
 
 /// `Tool.getSymmetryPerms` (`Tool.java:3836-3943`), the other half of what

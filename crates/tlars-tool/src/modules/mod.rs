@@ -13,13 +13,21 @@
 //! implements; the rest stops evaluation as unimplemented. Everything else, including the
 //! other definitions of a module that does have a Java class, is an ordinary TLA+ definition.
 
+mod any_set;
+mod bags;
+mod file;
 mod finite_sets;
 mod java_overrides;
+mod json;
 mod naturals;
 mod possible;
+mod randomization;
 mod sequences;
 pub(crate) mod tlc;
-mod tlc_get_set;
+mod tlc_eval;
+pub(crate) mod tlc_ext;
+mod tlc_trace;
+pub(crate) mod tlc_get_set;
 
 pub(crate) use naturals::eval_exception;
 
@@ -36,8 +44,11 @@ use tlars_sany::graph::ExprOrOpArg;
 pub(crate) struct NativeId(u16);
 
 pub(crate) type StrictFn = fn(&mut Ev<'_>, &[Value]) -> EvalResult<Value>;
-/// `@Evaluation`-style: receives unevaluated arguments (TLCGet, Assert, ...).
-pub(crate) type LazyFn = fn(&mut Ev<'_>, &[ExprOrOpArg], &Ctx, StateRef<'_>, StateRef<'_>, EvalControl) -> EvalResult<Value>;
+/// `@Evaluation`-style: receives unevaluated arguments (TLCGet, Assert, ...). `Ok(None)` is
+/// the Java method returning `null`, which makes `EvaluatingValue.eval` fall back to the
+/// operator's own TLA+ definition (`EvaluatingValue.java:84-88`).
+pub(crate) type LazyFn =
+    fn(&mut Ev<'_>, &[ExprOrOpArg], &Ctx, StateRef<'_>, StateRef<'_>, EvalControl) -> EvalResult<Option<Value>>;
 
 #[derive(Clone, Copy)]
 pub(crate) enum NativeImpl {
@@ -51,6 +62,19 @@ pub(crate) enum NativeImpl {
 pub(crate) enum JavaParam {
     Value,
     IntValue,
+    StringValue,
+}
+
+impl JavaParam {
+    /// The parameter's class when the argument cannot be cast to it. `Value` (and `IValue`,
+    /// which no value fails either) accepts everything.
+    fn mismatch(self, arg: &Value) -> Option<&'static str> {
+        match self {
+            JavaParam::Value => None,
+            JavaParam::IntValue => (!matches!(arg, Value::Int(_))).then_some("IntValue"),
+            JavaParam::StringValue => (!matches!(arg, Value::Str(_))).then_some("StringValue"),
+        }
+    }
 }
 
 pub(crate) struct NativeOp {
@@ -67,7 +91,7 @@ pub(crate) struct NativeOp {
     pub(crate) min_level: u8,
 }
 
-use JavaParam::{IntValue as I, Value as V};
+use JavaParam::{IntValue as I, StringValue as S, Value as V};
 
 macro_rules! natives {
     ($( $class:literal $name:literal ($($p:ident),*) $kind:ident $imp:expr, $sig:literal $(, min_level $lvl:literal)?; )*) => {
@@ -111,6 +135,9 @@ natives! {
     "Integers" "\\div" (I, I) Strict naturals::divide_integers, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Divide(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
     "Integers" "%" (I, I) Strict naturals::modulo, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Mod(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
     "Integers" "^" (I, I) Strict naturals::expt, "public static tlc2.value.impl.IntValue tlc2.module.Integers.Expt(tlc2.value.impl.IntValue,tlc2.value.impl.IntValue)";
+    "Randomization" "RandomSubset" (V, V) Strict randomization::random_subset, "public static tlc2.value.impl.Value tlc2.module.Randomization.RandomSubset(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Randomization" "RandomSetOfSubsets" (V, V, V) Strict randomization::random_set_of_subsets, "public static tlc2.value.impl.Value tlc2.module.Randomization.RandomSetOfSubsets(tlc2.value.impl.Value,tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Randomization" "RandomSubsetSet" (V, V, V) Strict randomization::random_subset_set, "public static tlc2.value.impl.Value tlc2.module.Randomization.RandomSubsetSet(tlc2.value.impl.Value,tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "Sequences" "Seq" (V) Strict sequences::seq, "public static tlc2.value.impl.Value tlc2.module.Sequences.Seq(tlc2.value.impl.Value)";
     "Sequences" "Len" (V) Strict sequences::len, "public static tlc2.value.impl.IntValue tlc2.module.Sequences.Len(tlc2.value.impl.Value)";
     "Sequences" "Head" (V) Strict sequences::head, "public static tlc2.value.impl.Value tlc2.module.Sequences.Head(tlc2.value.impl.Value)";
@@ -126,11 +153,49 @@ natives! {
     "TLC" "ToString" (V) Strict tlc::to_string, "public static tlc2.value.impl.Value tlc2.module.TLC.ToString(tlc2.value.impl.Value)";
     "TLC" "Assert" (V, V) Strict tlc::assert, "public static tlc2.value.impl.Value tlc2.module.TLC.Assert(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "Permutations" (V) Strict tlc::permutations, "public static tlc2.value.impl.Value tlc2.module.TLC.Permutations(tlc2.value.impl.Value)";
+    "TLC" "SortSeq" (V, V) Lazy tlc::sort_seq, "public static tlc2.value.impl.Value tlc2.module.TLC.SortSeq(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLC" "RandomElement" (V) Strict tlc::random_element, "public static tlc2.value.impl.Value tlc2.module.TLC.RandomElement(tlc2.value.impl.Value)";
     "TLC" ":>" (V, V) Strict tlc::make_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.MakeFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "@@" (V, V) Strict tlc::combine_fcn, "public static tlc2.value.impl.Value tlc2.module.TLC.CombineFcn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "TLC" "TLCGet" (V) Lazy tlc_get_set::tlc_get, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCGetEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 1;
     "TLC" "TLCSet" (V, V) Strict tlc_get_set::tlc_set, "public static tlc2.value.impl.Value tlc2.module.TLCGetSet.TLCSet(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "TLCExt" "AssertError" (V, V) Lazy tlc_ext::assert_error, "public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.assertError(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "TLCExt" "PickSuccessor" (V) Lazy tlc_ext::pick_successor, "public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.pickSuccessor(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)", min_level 2;
+    "TLCExt" "TLCCache" (V, V) Lazy tlc_ext::tlc_eval2, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcEval2(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "TLCExt" "TLCDefer" (V) Lazy tlc_ext::tlc_defer, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcDefer(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "TLCExt" "CounterExample" () Lazy tlc_ext::counter_example, "public static tlc2.value.impl.Value tlc2.module.TLCExt.error(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel) throws java.io.IOException", min_level 1;
+    "TLCExt" "Trace" () Lazy tlc_ext::get_trace, "public static tlc2.value.impl.TupleValue tlc2.module.TLCExt.getTrace(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel) throws java.io.IOException", min_level 1;
+    "TLCExt" "ToTrace" (V) Strict tlc_ext::to_trace, "public static tlc2.value.impl.Value tlc2.module.TLCExt.lassoOrdinal(tlc2.value.impl.Value)";
+    "TLCExt" "TLCEvalDefinition" (V) Lazy tlc_ext::tlc_def_by_name, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcDefByName(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "TLCExt" "TLCNoOp" (V) Strict tlc_ext::tlc_no_op, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcNoOp(tlc2.value.impl.Value)";
+    "TLCExt" "TLCFP" (V) Strict tlc_ext::tlc_fingerprint, "public static synchronized tlc2.value.impl.IntValue tlc2.module.TLCExt.tlcFingerprint(tlc2.value.impl.Value)";
+    "TLCExt" "TLCModelValue" (V) Strict tlc_ext::tlc_model_value, "public static synchronized tlc2.value.impl.Value tlc2.module.TLCExt.tlcModelValue(tlc2.value.impl.Value)";
+    "TLCExt" "TLCGetOrDefault" (V, V) Strict tlc_ext::tlc_get_or_default, "public static tlc2.value.impl.Value tlc2.module.TLCExt.tlcGetOrDefault(tlc2.value.impl.Value,tlc2.value.impl.Value)";
     "_Possible" "_Counts" () Strict possible::counts, "public static tlc2.value.impl.Value tlc2.module._Possible.counts()", min_level 1;
+    "AnySet" "ANY" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.AnySet.ANY()";
+    "Bags" "EmptyBag" () Strict bags::empty_bag, "public static tlc2.value.impl.Value tlc2.module.Bags.EmptyBag()";
+    "Bags" "IsABag" (V) Strict bags::is_a_bag, "public static tlc2.value.IBoolValue tlc2.module.Bags.IsABag(tlc2.value.impl.Value)";
+    "Bags" "BagCardinality" (V) Strict bags::bag_cardinality, "public static tlc2.value.impl.IntValue tlc2.module.Bags.BagCardinality(tlc2.value.impl.Value)";
+    "Bags" "BagIn" (V, V) Strict bags::bag_in, "public static tlc2.value.IBoolValue tlc2.module.Bags.BagIn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "CopiesIn" (V, V) Strict bags::copies_in, "public static tlc2.value.impl.IntValue tlc2.module.Bags.CopiesIn(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "\\oplus" (V, V) Strict bags::bag_cup, "public static tlc2.value.impl.Value tlc2.module.Bags.BagCup(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "\\ominus" (V, V) Strict bags::bag_diff, "public static tlc2.value.impl.Value tlc2.module.Bags.BagDiff(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "BagUnion" (V) Strict bags::bag_union, "public static tlc2.value.impl.Value tlc2.module.Bags.BagUnion(tlc2.value.impl.Value)";
+    "Bags" "\\sqsubseteq" (V, V) Strict bags::sq_subseteq, "public static tlc2.value.IBoolValue tlc2.module.Bags.SqSubseteq(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "BagOfAll" (V, V) Lazy bags::bag_of_all, "public static tlc2.value.impl.Value tlc2.module.Bags.BagOfAll(tlc2.value.impl.Value,tlc2.value.impl.Value)";
+    "Bags" "BagToSet" (V) Strict bags::bag_to_set, "public static tlc2.value.impl.Value tlc2.module.Bags.BagToSet(tlc2.value.impl.Value)";
+    "Bags" "SetToBag" (V) Strict bags::set_to_bag, "public static tlc2.value.impl.Value tlc2.module.Bags.SetToBag(tlc2.value.impl.Value)";
+    "TLC" "Any" () Strict any_set::any, "public static tlc2.value.impl.Value tlc2.module.TLC.Any()";
+    "TLC" "TLCEval" (V) Lazy tlc_eval::tlc_eval, "public static tlc2.value.impl.Value tlc2.module.TLCEval.tlcEval(tlc2.tool.impl.Tool,tla2sany.semantic.ExprOrOpArgNode[],tlc2.util.Context,tlc2.tool.TLCState,tlc2.tool.TLCState,int,tlc2.tool.coverage.CostModel)";
+    "_TLCTrace" "_TLCTraceSerialize" (V, S) Strict tlc_trace::serialize, "public static final tlc2.value.IValue tlc2.module._TLCTrace.ioSerialize(tlc2.value.IValue,tlc2.value.impl.StringValue) throws java.io.IOException";
+    "_TLCTrace" "_TLCTraceDeserialize" (S) Strict tlc_trace::deserialize, "public static final tlc2.value.IValue tlc2.module._TLCTrace.ioDeserialize(tlc2.value.impl.StringValue) throws java.io.IOException";
+    "Json" "ToJson" (V) Strict json::to_json, "public static tlc2.value.impl.StringValue tlc2.module.Json.toJson(tlc2.value.IValue) throws java.io.IOException";
+    "Json" "ToJsonArray" (V) Strict json::to_json_array, "public static tlc2.value.impl.StringValue tlc2.module.Json.toJsonArray(tlc2.value.IValue) throws java.io.IOException";
+    "Json" "ToJsonObject" (V) Strict json::to_json_object, "public static tlc2.value.impl.StringValue tlc2.module.Json.toJsonObject(tlc2.value.IValue) throws java.io.IOException";
+    "Json" "JsonSerialize" (S, V) Strict json::serialize, "public static synchronized tlc2.value.impl.BoolValue tlc2.module.Json.serialize(tlc2.value.impl.StringValue,tlc2.value.impl.Value) throws java.io.IOException";
+    "Json" "JsonDeserialize" (S) Strict json::deserialize, "public static tlc2.value.IValue tlc2.module.Json.deserialize(tlc2.value.impl.StringValue) throws java.io.IOException";
+    "Json" "ndJsonSerialize" (S, V) Strict json::nd_serialize, "public static synchronized tlc2.value.impl.BoolValue tlc2.module.Json.ndSerialize(tlc2.value.impl.StringValue,tlc2.value.impl.Value) throws java.io.IOException";
+    "Json" "ndJsonDeserialize" (S) Strict json::nd_deserialize, "public static tlc2.value.IValue tlc2.module.Json.ndDeserialize(tlc2.value.impl.StringValue) throws java.io.IOException";
 }
 
 /// The Java override `processModuleOverrides` binds to `module!tla_name`, if any. A
@@ -179,12 +244,22 @@ pub(crate) fn wrap_evaluating(ev: &Ev<'_>, module: &str, tla_name: &str, e: Eval
     EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message)
 }
 
+/// [`wrap`] for an override tlars registers as `Lazy` because the Java method takes an
+/// operator: the dispatcher hands it the argument expressions instead of calling [`apply`],
+/// so the method body runs `MethodValue.eval`'s catch itself.
+pub(crate) fn wrap_method(ev: &Ev<'_>, module: &str, tla_name: &str, e: EvalError) -> EvalError {
+    let op = NativeId::of_module(module, tla_name).expect("a registered native").op();
+    wrap(ev, op, e)
+}
+
 /// `MethodValue.eval(args)`: the arguments are cast to the method's parameter types first.
 pub(crate) fn apply(ev: &mut Ev<'_>, id: NativeId, args: &[Value]) -> EvalResult<Value> {
     let op = id.op();
     for (arg, param) in args.iter().zip(op.params) {
-        if *param == JavaParam::IntValue && !matches!(arg, Value::Int(_)) {
-            let cause = format!("Cannot cast tlc2.value.impl.{} to tlc2.value.impl.IntValue", arg.java_class());
+        if let Some(to) = param.mismatch(arg) {
+            // `MethodHandle.invoke`'s own `asType` cast, whose message is shorter than the
+            // `ClassCastException` of a cast written in Java.
+            let cause = format!("Cannot cast tlc2.value.impl.{} to tlc2.value.impl.{to}", arg.java_class());
             let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[op.signature, &cause]);
             return Err(EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message));
         }

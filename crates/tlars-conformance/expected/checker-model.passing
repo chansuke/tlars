@@ -569,6 +569,10 @@ tlc/checker/postcondition/after_exit_register
 tlc/checker/postcondition/after_init_error
 tlc/checker/postcondition/after_next_error
 tlc/checker/postcondition/constant_rejected
+tlc/checker/postcondition/counterexample_deadlock
+tlc/checker/postcondition/counterexample_empty_on_success
+tlc/checker/postcondition/counterexample_initial
+tlc/checker/postcondition/counterexample_to_trace
 tlc/checker/postcondition/eval_error
 tlc/checker/postcondition/false_fails
 tlc/checker/postcondition/no_states
@@ -583,6 +587,7 @@ tlc/checker/postcondition/reads_stats
 tlc/checker/postcondition/reads_variable
 tlc/checker/postcondition/several_first_failure_reported
 tlc/checker/postcondition/skipped_after_invariant
+tlc/checker/postcondition/true_after_invariant
 tlc/checker/postcondition/true_success
 tlc/checker/postcondition/undefined_name
 tlc/checker/prime/constant_level_operator_constant_prime_cached

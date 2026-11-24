@@ -27,11 +27,12 @@ pub use actions::{Action, ActionId};
 pub use effects::MainChecker;
 pub use error::{EvalError, EvalErrorKind, EvalResult, Flow, Halt};
 pub use eval::{Aliased, CallStack, EvalControl, Ev, InitSink, NextSink, StateInfo, WorkerLocals};
+pub use modules::tlc_ext::{CounterExampleStep, counter_example_of};
 pub use fp64::{Fp, FpKey};
 pub use globals::{LnCheck, TlcGlobals};
 pub use live::{CheckBits, LiveSpec, Pem, Solution, Tableau};
 pub use spec::{CliSpecExtras, PostCondition, RuntimeInvariant, SpecError, ToolInput, TraceConstraint, build_tool};
-pub use state::{PartialState, State, StateRef, VarSlot};
+pub use state::{PartialState, State, StateRef, TraceStep, TraceUid, VarSlot};
 pub use tool::{CheckId, ImpliedAction, ImpliedInit, Invariant, Temporal, Tool};
 pub use value::Value;
 

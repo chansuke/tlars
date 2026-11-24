@@ -238,18 +238,7 @@ fn sublist_error(from: i32, to: i32) -> JThrow {
 
 /// `Validator.checksum(string)`: CRC-32 of the UTF-8 bytes, as `Long.toHexString`.
 pub(crate) fn checksum(text: &str) -> String {
-    format!("{:x}", crc32(text.as_bytes()))
-}
-
-fn crc32(bytes: &[u8]) -> u32 {
-    let mut crc = !0u32;
-    for &b in bytes {
-        crc ^= u32::from(b);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
-        }
-    }
-    !crc
+    format!("{:x}", tlars_java::crc32(text.as_bytes()))
 }
 
 /// `Validator.CHECKSUM_PATTERN.matcher(line).find()`, with its `pcalchecksum` and

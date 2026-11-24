@@ -1,9 +1,12 @@
 //! `tlc2.module.TLC`.
 
+use crate::ctx::Ctx;
 use crate::error::EvalResult;
-use crate::eval::Ev;
+use crate::eval::{EvalControl, Ev};
+use crate::state::StateRef;
 use crate::value::Value;
 use tlars_msg::Ec;
+use tlars_sany::graph::ExprOrOpArg;
 
 /// `deepCopy`, `deepNormalize`, then `Values.ppr(toStringUnchecked())`.
 fn shown(ev: &mut Ev<'_>, v: &Value) -> EvalResult<String> {
@@ -138,6 +141,177 @@ pub(crate) fn permutations(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
         }
     }
     Ok(Value::SetEnum(crate::value::set_enum_arc(fcns, false)))
+}
+
+/// `SortSeq(s, cmp)` (`TLC.java:253-292`): a stable insertion sort that keeps every element,
+/// duplicates included. The comparator is an operator, so its argument arrives unevaluated
+/// and is resolved as `Sequences!SelectSeq` resolves its own (`evalImplOpArgKind`).
+///
+/// The first argument's error says "natural number" because the Java passes that string;
+/// the message is the operator's, not a description of what a sequence is.
+/// The `LazyFn` shape: an `@Evaluation`-style override that always answers, so never falls
+/// back to the TLA+ definition.
+pub(crate) fn sort_seq(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Option<Value>> {
+    sort_seq_value(ev, args, c, s0, s1, control).map(Some)
+}
+
+fn sort_seq_value(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    s0: StateRef<'_>,
+    s1: StateRef<'_>,
+    control: EvalControl,
+) -> EvalResult<Value> {
+    // `MethodValue.eval` receives its arguments already evaluated, so a failure in
+    // evaluating them is outside its catch; everything from the method body on is inside it.
+    let sval = ev.eval(args[0].expect_expr(), c, s0, s1, control)?;
+    let cmp = ev.op_arg_value(args[1], c, control)?;
+    let sorted = sort_seq_body(ev, args, c, &sval, cmp.as_ref());
+    sorted.map_err(|e| super::wrap_method(ev, "TLC", "SortSeq", e))
+}
+
+fn sort_seq_body(
+    ev: &mut Ev<'_>,
+    args: &[ExprOrOpArg],
+    c: &Ctx,
+    sval: &Value,
+    cmp: Option<&crate::eval::expr::OpArgValue>,
+) -> EvalResult<Value> {
+    let Some(seq) = sval.to_tuple(ev)? else {
+        let shown = sval.ppr(ev)?;
+        return Err(super::eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["first", "SortSeq", "natural number", &shown]));
+    };
+    let Some(cmp) = cmp else {
+        // `cmp instanceof OpValue` fails, so what TLC prints is the value the argument
+        // evaluated to; `LAMBDA x, y : 7` resolves to the literal 7.
+        let shown = match ev.op_arg_as_value(args[1], c)? {
+            Some(v) => v.ppr(ev)?,
+            None => ev.op_arg_text(args[1], None)?,
+        };
+        return Err(super::eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["second", "SortSeq", "operator", &shown]));
+    };
+    let elems = &seq.elems;
+    if elems.is_empty() {
+        // The converted tuple, not the argument: `SortSeq([i \in {} |-> 0], op)` is `<<>>`.
+        return Ok(Value::Tuple(seq));
+    }
+    let mut sorted: Vec<Value> = Vec::with_capacity(elems.len());
+    sorted.push(elems[0].clone());
+    for elem in elems.iter().skip(1) {
+        let mut j = sorted.len();
+        sorted.push(elem.clone());
+        while compare(ev, cmp, elem, &sorted[j - 1])? {
+            sorted[j] = sorted[j - 1].clone();
+            j -= 1;
+            if j == 0 {
+                break;
+            }
+        }
+        sorted[j] = elem.clone();
+    }
+    Ok(Value::tuple(sorted))
+}
+
+/// `TLC.compare` (`TLC.java:294-303`): `fcmp.eval(args, EvalControl.Clear)` must answer a
+/// `BoolValue`; the error prints the *result*, not the comparator.
+fn compare(ev: &mut Ev<'_>, cmp: &crate::eval::expr::OpArgValue, x: &Value, y: &Value) -> EvalResult<bool> {
+    let res = ev.apply_operator(cmp, &[x.clone(), y.clone()], EvalControl::CLEAR)?;
+    match res {
+        Value::Bool(b) => Ok(b),
+        _ => {
+            let shown = res.ppr(ev)?;
+            Err(super::eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["second", "SortSeq", "boolean function", &shown]))
+        }
+    }
+}
+
+/// `RandomElement(val)` (`TLC.java:381-438`): one element drawn with
+/// `floor(nextDouble() * size)`. The function-, record- and tuple-set kinds are *not*
+/// enumerated; they recurse into the component sets, so `[1..5 -> 1..100]` costs five draws
+/// and never builds 100^5 functions.
+///
+/// An empty set reaches the draw with size 0, so `index` is 0 and the read past the end is
+/// the JVM exception `MethodValue.eval` rewraps, not a checked error.
+pub(crate) fn random_element(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
+    random_element_of(ev, &a[0])
+}
+
+fn not_a_finite_set(ev: &mut Ev<'_>, val: &Value) -> EvalResult<crate::error::EvalError> {
+    let shown = val.ppr(ev)?;
+    Ok(super::eval_exception(ev, Ec::TLC_MODULE_APPLYING_TO_WRONG_VALUE, &["RandomElement", "a finite set", &shown]))
+}
+
+fn random_element_of(ev: &mut Ev<'_>, val: &Value) -> EvalResult<Value> {
+    match val {
+        Value::SetOfFcns(sfv) => {
+            val.normalize(ev)?;
+            let domain = sfv.domain.clone();
+            let range = sfv.range.clone();
+            let Some(dom_set) = domain.to_set_enum(ev)? else {
+                // The error names the whole `[S -> T]`, not the domain alone.
+                return Err(not_a_finite_set(ev, val)?);
+            };
+            let domain = crate::value::order::normalized(ev, &dom_set)?.to_vec();
+            let mut values = Vec::with_capacity(domain.len());
+            for _ in 0..domain.len() {
+                values.push(random_element_of(ev, &range)?);
+            }
+            Ok(Value::FcnRcd(Value::fcn_rcd_arc(domain, values, true)))
+        }
+        Value::SetOfRcds(srv) => {
+            val.normalize(ev)?;
+            let (names, sets) = (srv.names.to_vec(), srv.sets.to_vec());
+            let mut values = Vec::with_capacity(sets.len());
+            for set in &sets {
+                values.push(random_element_of(ev, set)?);
+            }
+            Ok(Value::Record(Value::record_arc(names, values, true)))
+        }
+        Value::SetOfTuples(stv) => {
+            val.normalize(ev)?;
+            let sets = stv.sets.to_vec();
+            let mut values = Vec::with_capacity(sets.len());
+            for set in &sets {
+                values.push(random_element_of(ev, set)?);
+            }
+            Ok(Value::tuple(values))
+        }
+        // `IntervalValue.randomElement()` indexes arithmetically, so the out-of-range read
+        // of an empty interval is `IntervalValue.elementAt`'s own `Assert.fail`.
+        Value::Interval(iv) => {
+            let sz = iv.size(ev)?;
+            let index = (ev.rng().next_double() * f64::from(sz)).floor() as i64;
+            if index < 0 || index >= i64::from(sz) {
+                let shown = val.ppr(ev)?;
+                return Err(crate::error::EvalError::detailed(
+                    format!("Attempted to retrieve out-of-bounds element from the interval value {shown}."),
+                    None,
+                ));
+            }
+            Ok(Value::Int(iv.lo + index as i32))
+        }
+        _ => {
+            let Some(set) = val.to_set_enum(ev)? else {
+                return Err(not_a_finite_set(ev, val)?);
+            };
+            // `normalize()` runs before the draw, so the index is into the sorted elements.
+            let len = crate::value::order::normalized(ev, &set)?.len();
+            let index = (ev.rng().next_double() * len as f64).floor() as i64;
+            let elems = crate::value::order::normalized(ev, &set)?;
+            match usize::try_from(index).ok().and_then(|i| elems.get(i)) {
+                Some(v) => Ok(v.clone()),
+                None => Err(crate::error::EvalError::index_out_of_bounds(index as usize, len)),
+            }
+        }
+    }
 }
 
 pub(crate) fn assert(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
