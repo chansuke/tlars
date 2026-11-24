@@ -110,6 +110,10 @@ and `.../json/parse.rs` reproduce the part of gson that decides them: `JsonEleme
 `JsonElement.toString()`'s writer, and `JsonParser.parseReader` with the lenient
 `JsonReader` it drives, error messages included.
 
+Both files are modified translations of gson's Java sources into Rust; each names in its
+header the gson classes it reproduces. gson ships no NOTICE file (neither the repository at
+that tag nor the jar has one), so its license text below is the only notice.
+
 ```
 
                                  Apache License
