@@ -16,6 +16,7 @@ tlc/standard/internal/possible_track_state_dependent
 tlc/standard/internal/possible_track_true
 tlc/standard/internal/possible_track_two_names
 tlc/standard/internal/tlc_trace_no_violation
+tlc/standard/internal/tlc_trace_violation
 tlc/standard/real_time/extends_declares_now
 tlc/standard/real_time/now_must_be_assigned
 tlc/standard/real_time/now_next_real_enumeration
