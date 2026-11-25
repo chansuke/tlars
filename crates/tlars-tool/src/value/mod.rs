@@ -880,38 +880,26 @@ impl Value {
             Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Interval(_) => Ok(None),
             Value::Model(mv) => Ok(perm.get(*mv)?.map(Value::Model)),
             Value::SetEnum(set) => {
-                let elems = set.snapshot().to_vec();
-                let (vals, changed) = permute_all(ev, perm, &elems)?;
-                Ok(changed.then(|| Value::SetEnum(set_enum_arc(vals, false))))
+                Ok(permute_all(ev, perm, set.snapshot())?.map(|vals| Value::SetEnum(set_enum_arc(vals, false))))
             }
             Value::Record(r) => {
                 let (names, values) = order::record_normalized(ev, r)?;
-                let (names, values) = (names.to_vec(), values.to_vec());
-                let (vals, changed) = permute_all(ev, perm, &values)?;
-                Ok(changed.then(|| Value::Record(Value::record_arc(names, vals, true))))
+                Ok(permute_all(ev, perm, values)?.map(|vals| Value::Record(Value::record_arc(names.to_vec(), vals, true))))
             }
-            Value::Tuple(t) => {
-                let elems = t.elems.to_vec();
-                let (vals, changed) = permute_all(ev, perm, &elems)?;
-                Ok(changed.then(|| Value::tuple(vals)))
-            }
+            Value::Tuple(t) => Ok(permute_all(ev, perm, &t.elems)?.map(Value::tuple)),
             Value::FcnRcd(fcn) => {
                 let (domain, values) = fcn.normalize(ev)?;
-                let (domain, values) = (domain.map(<[Value]>::to_vec), values.to_vec());
-                let interval = fcn.interval();
-                let (vals, vchanged) = permute_all(ev, perm, &values)?;
-                match (domain, interval) {
-                    (Some(domain), _) => {
-                        let (dom, dchanged) = permute_all(ev, perm, &domain)?;
-                        if dchanged {
+                let vals = permute_all(ev, perm, values)?;
+                match (domain, fcn.interval()) {
+                    (Some(domain), _) => match (permute_all(ev, perm, domain)?, vals) {
+                        (Some(dom), vals) => {
+                            let vals = vals.unwrap_or_else(|| values.to_vec());
                             Ok(Some(Value::FcnRcd(Value::fcn_rcd_arc(dom, vals, false))))
-                        } else if vchanged {
-                            Ok(Some(Value::FcnRcd(Value::fcn_rcd_arc(domain, vals, true))))
-                        } else {
-                            Ok(None)
                         }
-                    }
-                    (None, Some(iv)) => Ok(vchanged.then(|| Value::FcnRcd(Value::fcn_rcd_interval_arc(iv, vals)))),
+                        (None, Some(vals)) => Ok(Some(Value::FcnRcd(Value::fcn_rcd_arc(domain.to_vec(), vals, true)))),
+                        (None, None) => Ok(None),
+                    },
+                    (None, Some(iv)) => Ok(vals.map(|vals| Value::FcnRcd(Value::fcn_rcd_interval_arc(iv, vals)))),
                     (None, None) => unreachable!("a function record has an explicit or an interval domain"),
                 }
             }
@@ -943,21 +931,24 @@ impl Value {
     }
 }
 
-/// One `for` loop of `permute`: the permuted elements and whether any of them is a new
-/// object, which is TLC's `changed`.
-fn permute_all(ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm, values: &[Value]) -> EvalResult<(Vec<Value>, bool)> {
-    let mut out = Vec::with_capacity(values.len());
-    let mut changed = false;
-    for v in values {
-        match v.permute(ev, perm)? {
-            Some(p) => {
-                changed = true;
-                out.push(p);
+/// One `for` loop of `permute`: the permuted elements, or `None` when none of them is a
+/// new object, which is TLC's `!changed`. The copy is only made once an element changes.
+fn permute_all(ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm, values: &[Value]) -> EvalResult<Option<Vec<Value>>> {
+    let mut out: Option<Vec<Value>> = None;
+    for (i, v) in values.iter().enumerate() {
+        match (v.permute(ev, perm)?, &mut out) {
+            (Some(p), Some(out)) => out.push(p),
+            (Some(p), None) => {
+                let mut vals = Vec::with_capacity(values.len());
+                vals.extend_from_slice(&values[..i]);
+                vals.push(p);
+                out = Some(vals);
             }
-            None => out.push(v.clone()),
+            (None, Some(out)) => out.push(v.clone()),
+            (None, None) => {}
         }
     }
-    Ok((out, changed))
+    Ok(out)
 }
 
 /// `new SetEnumValue(vals, isNorm)` as an `Arc`.
