@@ -449,7 +449,7 @@ impl<'t> Ev<'t> {
                     let Value::Bool(b) = v else {
                         // `Assert.fail(TLC_EXPECTED_VALUE, {"boolean", expr}, body, c1)`.
                         let message = self.out().text(Ec::TLC_EXPECTED_VALUE, &["boolean", &text(self, expr)]);
-                        return Err(EvalError { loc: Some(graph.loc(body)), ..EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message) });
+                        return Err(EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message).with_loc(Some(graph.loc(body))));
                     };
                     if b != forall {
                         return Ok(Value::Bool(b));
@@ -492,7 +492,7 @@ impl<'t> Ev<'t> {
                     let bval = self.eval(pred, &c1, s0, s1, control)?;
                     let Value::Bool(b) = bval else {
                         let message = self.out().text(Ec::TLC_EXPECTED_VALUE, &["boolean", &text(self, expr)]);
-                        return Err(EvalError { loc: Some(graph.loc(pred)), ..EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message) });
+                        return Err(EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message).with_loc(Some(graph.loc(pred))));
                     };
                     if b {
                         return Ok(val);

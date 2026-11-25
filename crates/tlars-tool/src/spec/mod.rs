@@ -475,6 +475,7 @@ fn java_hash(s: &str) -> i32 {
 /// it. `Assert.fail(reason)` builds a `TLCRuntimeException` without parameters, which TLC
 /// reports under its parent class.
 fn uncaught(e: crate::error::EvalError) -> SpecError {
+    let e = e.into_data();
     match e.kind {
         EvalErrorKind::Runtime if e.ec == Ec::GENERAL => SpecError::Unexpected { class: "java.lang.RuntimeException", message: e.message },
         EvalErrorKind::Eval => SpecError::Unexpected { class: "tlc2.tool.EvalException", message: e.message },

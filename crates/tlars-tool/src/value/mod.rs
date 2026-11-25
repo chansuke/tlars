@@ -31,7 +31,7 @@ pub(crate) use function::{Except, empty_rcd, warn};
 pub(crate) use sets::{lazy_cap, lazy_cup, lazy_diff, set_of_fcns, set_of_rcds, set_of_tuples, subset};
 
 use crate::ctx::Ctx;
-use crate::error::{EvalError, EvalResult};
+use crate::error::{EvalError, EvalErrorData, EvalResult};
 use crate::eval::{EvalControl, Ev};
 use crate::state::StateRef;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -416,6 +416,7 @@ impl Value {
     /// FingerprintException.getNewHead(this, e); } else { throw e; } }` that every method of
     /// every value class carries. The head of the chain is the outermost value, as
     /// `prependNewHead` builds it.
+    #[inline]
     pub(crate) fn fp<T>(&self, r: EvalResult<T>) -> EvalResult<T> {
         let Err(e) = r else { return r };
         let Some(source) = self.source() else { return Err(e) };
@@ -428,7 +429,9 @@ impl Value {
             }
             _ => vec![source],
         };
-        Err(EvalError { kind: crate::error::EvalErrorKind::Fingerprint { sources }, ..e })
+        let mut e = e;
+        e.kind = crate::error::EvalErrorKind::Fingerprint { sources };
+        Err(e)
     }
 
     pub(crate) fn kind(&self) -> ValueKind {
@@ -979,13 +982,13 @@ impl ValueVec {
                 // not an `Assert.TLCRuntimeException`, so no `CallStackTool` catch freezes
                 // the nested-expression stack (`ValueVec.java:90-93`).
                 let bound = self.bound;
-                return Err(EvalError {
+                return Err(EvalError::from(EvalErrorData {
                     ec: tlars_msg::Ec::GENERAL,
                     message: format!("Attempted to construct a set with too many elements (>{bound})."),
                     loc: None,
                     kind: crate::error::EvalErrorKind::Jvm { class: "util.WrongInvocationException" },
                     params: Vec::new(),
-                });
+                }));
             }
             let doubled = (self.capacity as i64 * 2).min(i64::from(i32::MAX) - 8);
             self.capacity = doubled.max(self.elems.len() as i64 + 1).min(self.bound as i64) as usize;

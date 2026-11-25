@@ -261,7 +261,7 @@ impl<'t> Ev<'t> {
                 let bval = fval.apply(self, &argv, EvalControl::CLEAR)?;
                 let Value::Bool(b) = bval else {
                     let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["next states", "boolean", &graph.expr_tlc_text(pred)]);
-                    return Err(EvalError { loc: Some(graph.loc(arg(1))), ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message) }.into());
+                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message).with_loc(Some(graph.loc(arg(1)))).into());
                 };
                 if b { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
             }
@@ -320,10 +320,7 @@ impl<'t> Ev<'t> {
             let shown = v.to_tlc_string(self)?;
             let message =
                 self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["next states", "boolean", &shown, &graph.expr_tlc_text(pred)]);
-            return Err(EvalError {
-                loc: Some(graph.loc(pred)),
-                ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
-            }
+            return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred)))
             .into());
         };
         if b { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
@@ -484,10 +481,7 @@ impl<'t> Ev<'t> {
                         let shown = v.to_tlc_string(self)?;
                         let text = graph.expr_tlc_text(item.pred);
                         let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["next states", "boolean", &shown, &text]);
-                        return Err(EvalError {
-                            loc: Some(graph.loc(item.pred)),
-                            ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
-                        }
+                        return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(item.pred)))
                         .into());
                     };
                     if !b {

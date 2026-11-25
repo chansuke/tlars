@@ -5,7 +5,7 @@
 
 use super::{eval_exception, wrap_evaluating};
 use crate::ctx::Ctx;
-use crate::error::{EvalError, EvalErrorKind, EvalResult};
+use crate::error::{EvalError, EvalErrorData, EvalErrorKind, EvalResult};
 use crate::eval::{EvalControl, Ev};
 use crate::state::StateRef;
 use crate::value::Value;
@@ -419,13 +419,13 @@ fn pick_successor_impl(
     };
     let Some(action) = ev.action_of_step(state, successor)? else {
         // `action.getName()` on the null no action matched, which TLC dereferences.
-        return Err(EvalError {
+        return Err(EvalError::from(EvalErrorData {
             ec: Ec::GENERAL,
             message: tlars_java::null_method_call("tlc2.tool.Action.getName()", "action"),
             loc: None,
             kind: EvalErrorKind::Jvm { class: "java.lang.NullPointerException" },
             params: Vec::new(),
-        });
+        }));
     };
     prompt_for_successor(ev, state, successor, action)
 }
@@ -437,13 +437,13 @@ fn pick_successor_impl(
 /// `minVals[i]` of the source reads `<local2>[<local5>]`.
 fn successor_fingerprint(ev: &mut Ev<'_>, s1: StateRef<'_>) -> EvalResult<crate::fp64::Fp> {
     let null = || {
-        Err(EvalError {
+        Err(EvalError::from(EvalErrorData {
             ec: Ec::GENERAL,
             message: tlars_java::null_method_call("tlc2.value.IValue.fingerPrint(long)", "<local2>[<local5>]"),
             loc: None,
             kind: EvalErrorKind::Jvm { class: "java.lang.NullPointerException" },
             params: Vec::new(),
-        })
+        }))
     };
     match s1 {
         StateRef::Full(s) => ev.fingerprint(s),
@@ -516,13 +516,13 @@ fn read_line(ev: &mut Ev<'_>) -> EvalResult<String> {
         }
     }
     if bytes.is_empty() {
-        return Err(EvalError {
+        return Err(EvalError::from(EvalErrorData {
             ec: Ec::GENERAL,
             message: "No line found".to_string(),
             loc: None,
             kind: EvalErrorKind::Jvm { class: "java.util.NoSuchElementException" },
             params: Vec::new(),
-        });
+        }));
     }
     // A last line with no newline is still a line.
     Ok(String::from_utf8_lossy(&bytes).into_owned())

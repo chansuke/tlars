@@ -76,13 +76,13 @@ fn not_an_op_def(op: SymbolRef) -> crate::error::EvalError {
         SymbolRef::Module(_) => "ModuleNode",
     };
     let message = tlars_java::class_cast(&format!("tla2sany.semantic.{from}"), "tla2sany.semantic.OpDefNode");
-    crate::error::EvalError {
+    crate::error::EvalError::from(crate::error::EvalErrorData {
         ec: tlars_msg::Ec::GENERAL,
         message,
         loc: None,
         kind: crate::error::EvalErrorKind::Jvm { class: "java.lang.ClassCastException" },
         params: Vec::new(),
-    }
+    })
 }
 
 fn split(ev: &mut Ev<'_>, pred: ExprId, c: &Ctx, name: Option<OpDefId>, out: &mut Vec<Action>, is_init: bool) -> EvalResult<()> {

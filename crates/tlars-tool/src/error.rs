@@ -29,10 +29,15 @@ pub enum EvalErrorKind {
     Unimplemented,
 }
 
-/// A failed evaluation. `message` is already TLC's text (`tlars_msg::render` at the throw
-/// site, as `Assert.fail` builds it).
+/// A failed evaluation, boxed so that an `EvalResult` is not much larger than its value:
+/// every evaluation step returns one, and almost all of them succeed.
 #[derive(Clone, Debug)]
-pub struct EvalError {
+pub struct EvalError(Box<EvalErrorData>);
+
+/// What a failed evaluation carries. `message` is already TLC's text (`tlars_msg::render` at
+/// the throw site, as `Assert.fail` builds it).
+#[derive(Clone, Debug)]
+pub struct EvalErrorData {
     pub ec: Ec,
     pub message: String,
     pub loc: Option<Loc>,
@@ -45,44 +50,73 @@ pub struct EvalError {
 
 pub type EvalResult<T> = Result<T, EvalError>;
 
+impl From<EvalErrorData> for EvalError {
+    fn from(data: EvalErrorData) -> EvalError {
+        EvalError(Box::new(data))
+    }
+}
+
+impl std::ops::Deref for EvalError {
+    type Target = EvalErrorData;
+    fn deref(&self) -> &EvalErrorData {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for EvalError {
+    fn deref_mut(&mut self) -> &mut EvalErrorData {
+        &mut self.0
+    }
+}
+
 impl EvalError {
+    /// The same error raised at `loc`.
+    pub(crate) fn with_loc(mut self, loc: Option<Loc>) -> EvalError {
+        self.loc = loc;
+        self
+    }
+
+    pub fn into_data(self) -> EvalErrorData {
+        *self.0
+    }
+
     /// `new EvalException(ec, params)`; `message` is `MP.getMessage(ec, params)`.
     pub(crate) fn eval(ec: Ec, message: String, params: Vec<String>) -> EvalError {
-        EvalError { ec, message, loc: None, kind: EvalErrorKind::Eval, params }
+        EvalError::from(EvalErrorData { ec, message, loc: None, kind: EvalErrorKind::Eval, params })
     }
 
     /// `Assert.fail(ec, params)`; `message` is `MP.getMessage(ec, params)`.
     pub(crate) fn runtime(ec: Ec, message: String) -> EvalError {
-        EvalError { ec, message, loc: None, kind: EvalErrorKind::Runtime, params: Vec::new() }
+        EvalError::from(EvalErrorData { ec, message, loc: None, kind: EvalErrorKind::Runtime, params: Vec::new() })
     }
 
     /// `Assert.fail(reason, expr, ctxt)`: a `TLCDetailedRuntimeException` with
     /// `EC.GENERAL` and the reason as its message.
     pub(crate) fn detailed(reason: String, loc: Option<Loc>) -> EvalError {
-        EvalError { ec: Ec::GENERAL, message: reason, loc, kind: EvalErrorKind::Runtime, params: Vec::new() }
+        EvalError::from(EvalErrorData { ec: Ec::GENERAL, message: reason, loc, kind: EvalErrorKind::Runtime, params: Vec::new() })
     }
 
     /// `(T) v` on a value of another class, as TLC's value classes cast without checking.
     pub(crate) fn class_cast(from: &str, to: &str) -> EvalError {
         let message = tlars_java::class_cast(&format!("tlc2.value.impl.{from}"), &format!("tlc2.value.impl.{to}"));
-        EvalError { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ClassCastException" }, params: Vec::new() }
+        EvalError::from(EvalErrorData { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ClassCastException" }, params: Vec::new() })
     }
 
     /// `a[i]` past the end, as TLC's value classes index without checking.
     pub(crate) fn index_out_of_bounds(index: usize, length: usize) -> EvalError {
         let message = tlars_java::index_out_of_bounds(index as i64, length);
-        EvalError { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ArrayIndexOutOfBoundsException" }, params: Vec::new() }
+        EvalError::from(EvalErrorData { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ArrayIndexOutOfBoundsException" }, params: Vec::new() })
     }
 
     /// `new T[n]` with a negative `n`, whose message is just the size. The randomized
     /// enumerators allocate their result before they draw, so a negative count fails here.
     pub(crate) fn negative_array_size(size: i32) -> EvalError {
         let kind = EvalErrorKind::Jvm { class: "java.lang.NegativeArraySizeException" };
-        EvalError { ec: Ec::GENERAL, message: size.to_string(), loc: None, kind, params: Vec::new() }
+        EvalError::from(EvalErrorData { ec: Ec::GENERAL, message: size.to_string(), loc: None, kind, params: Vec::new() })
     }
 
     pub(crate) fn unimplemented(what: String) -> EvalError {
-        EvalError { ec: Ec::GENERAL, message: format!("tlars does not implement {what} yet"), loc: None, kind: EvalErrorKind::Unimplemented, params: Vec::new() }
+        EvalError::from(EvalErrorData { ec: Ec::GENERAL, message: format!("tlars does not implement {what} yet"), loc: None, kind: EvalErrorKind::Unimplemented, params: Vec::new() })
     }
 }
 

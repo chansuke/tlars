@@ -103,7 +103,7 @@ impl Ev<'_> {
                     Ok(Some(record)) => return Ok(Aliased { original: current.copy(), record: Some(record) }),
                     // `toState()` returned null: not a record, so TLC prints the state.
                     Ok(None) => None,
-                    Err(e) if caught_by_eval_alias(&e) => Some(e.message),
+                    Err(e) if caught_by_eval_alias(&e) => Some(e.into_data().message),
                     Err(e) => return Err(e),
                 }
             }

@@ -136,7 +136,7 @@ impl<'t> Ev<'t> {
         let temporal = |ev: &mut Ev<'_>, what: &str| -> EvalError {
             let graph = &ev.tool().graph;
             let message = ev.out().text(Ec::TLC_ENABLED_WRONG_FORMULA, &[what, &graph.expr_tlc_text(pred)]);
-            EvalError { loc: Some(graph.loc(pred)), ..EvalError::runtime(Ec::TLC_ENABLED_WRONG_FORMULA, message) }
+            EvalError::runtime(Ec::TLC_ENABLED_WRONG_FORMULA, message).with_loc(Some(graph.loc(pred)))
         };
         let encountered = |ev: &mut Ev<'_>, what: &str| -> EvalError {
             let graph = &ev.tool().graph;
@@ -246,10 +246,7 @@ impl<'t> Ev<'t> {
                 let bval = fval.apply(self, &argv, EvalControl::ENABLED)?;
                 let Value::Bool(b) = bval else {
                     let message = self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["ENABLED", "boolean", &graph.expr_tlc_text(pred)]);
-                    return Err(EvalError {
-                        loc: Some(graph.loc(arg(1))),
-                        ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message)
-                    });
+                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message).with_loc(Some(graph.loc(arg(1)))));
                 };
                 if !b {
                     return Ok(false);
@@ -363,7 +360,7 @@ impl<'t> Ev<'t> {
         let graph = &self.tool().graph;
         let message =
             self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["ENABLED", "boolean", shown, &graph.expr_tlc_text(pred)]);
-        EvalError { loc: Some(graph.loc(pred)), ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message) }
+        EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred)))
     }
 
     /// `x' \in S` and `x' \subseteq S`: bind the primed variable to each element in turn if it
