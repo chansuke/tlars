@@ -466,7 +466,7 @@ impl<'t> Ev<'t> {
         if self.tool.possible.is_empty() {
             return Ok(());
         }
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         for i in 0..self.tool.possible.len() {
             let (name, expr) = {
                 let check = &self.tool.possible[i];
@@ -507,7 +507,7 @@ impl<'t> Ev<'t> {
             (Some(v), Some(d)) => Ctx::EMPTY.cons(tlars_sany::graph::SymbolRef::OpDef(d), crate::ctx::Binding::Value(v)),
             _ => Ctx::EMPTY,
         };
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         for i in 0..self.tool.postconditions.len() {
             // `isValid(pc.pred, ctxt)` evaluates in `ctxt`, not in the Action's own context,
             // which `getPostConditionSpecs` leaves empty anyway.
@@ -708,7 +708,7 @@ impl<'t> Ev<'t> {
     /// `Action.getLocation(name)`: the action's parameters, as bound by splitting, then the
     /// predicate's location.
     pub(crate) fn labelled(&mut self, name: &str, pred: ExprId, op_def: Option<tlars_sany::graph::OpDefId>, ctx: &crate::ctx::Ctx) -> String {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         let params = op_def.map(|d| graph.op_def(d).params.clone()).unwrap_or_default();
         let mut shown = Vec::new();
         for &p in params.iter() {
@@ -761,7 +761,7 @@ impl<'t> Ev<'t> {
     /// `Tool.checkAssumptions` (`Tool.java:3645-3663`): the root module's assumptions in
     /// order; the first false one is 2104, the first that fails to evaluate 2105.
     pub fn check_assumptions(&mut self) -> Ec {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         for a in graph.module(graph.root()).assumptions.iter() {
             if a.is_axiom {
                 continue;

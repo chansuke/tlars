@@ -45,7 +45,7 @@ impl<'t> Ev<'t> {
 
     /// `Tool.evalImpl` (`Tool.java:1795-1850`).
     fn eval_impl(&mut self, expr: ExprId, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Value> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(expr) {
             ExprNode::OpAppl { op, args, bound, .. } => self.eval_appl(expr, *op, args, bound.as_deref(), c, s0, s1, control),
             ExprNode::Label { body, .. } => self.eval(*body, c, s0, s1, control),
@@ -168,7 +168,7 @@ impl<'t> Ev<'t> {
 
     /// `getOpContext`: bind params to call-by-name thunks over `c`.
     pub(crate) fn op_context(&mut self, def: OpDefId, args: &[ExprOrOpArg], c: &Ctx, cachable: bool) -> Ctx {
-        let params = self.tool().graph.op_def(def).params.clone();
+        let params = &self.tool().graph.op_def(def).params;
         let mut c1 = c.clone();
         for (&p, &arg) in params.iter().zip(args) {
             let val = self.get_val(arg, c, cachable);
@@ -214,7 +214,7 @@ impl<'t> Ev<'t> {
         s1: StateRef<'_>,
         control: EvalControl,
     ) -> EvalResult<Value> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         let mut builtin = self.builtin(op);
         if builtin.is_none() {
             match self.lookup(op, c, s0, control.has(EvalControl::PRIMED)) {
@@ -613,7 +613,7 @@ impl<'t> Ev<'t> {
                 let mut names = Vec::with_capacity(args.len());
                 let mut sets = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
-                    let (name, set) = pair(&graph, arg(i));
+                    let (name, set) = pair(graph, arg(i));
                     names.push(self.field_name(name));
                     sets.push(self.eval(set, c, s0, s1, control)?);
                 }
@@ -637,7 +637,7 @@ impl<'t> Ev<'t> {
                 let mut names = Vec::with_capacity(args.len());
                 let mut vals = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
-                    let (name, value) = pair(&graph, arg(i));
+                    let (name, value) = pair(graph, arg(i));
                     names.push(self.field_name(name));
                     vals.push(self.eval(value, c, s0, s1, control)?);
                 }
@@ -722,7 +722,7 @@ impl<'t> Ev<'t> {
             Builtin::Except => {
                 let mut result = self.eval(arg(0), c, s0, s1, control)?;
                 for i in 1..args.len() {
-                    let (lhs_node, rhs_node) = pair(&graph, arg(i));
+                    let (lhs_node, rhs_node) = pair(graph, arg(i));
                     let ExprNode::OpAppl { args: cmpts, .. } = graph.expr(lhs_node) else { unreachable!("an EXCEPT path is $Seq") };
                     let mut lhs = Vec::with_capacity(cmpts.len());
                     for &cmpt in cmpts.iter() {
@@ -888,7 +888,7 @@ impl<'t> Ev<'t> {
             OpArgValue::Native(id) => crate::modules::apply(self, *id, args),
             OpArgValue::Op { def, ctx, control: captured } => {
                 let def = *def;
-                let params = self.tool().graph.op_def(def).params.clone();
+                let params = &self.tool().graph.op_def(def).params;
                 let body = self.tool().graph.op_def(def).body.expect("a definition has a body");
                 let mut c1 = ctx.clone();
                 for (&p, v) in params.iter().zip(args) {
@@ -914,7 +914,7 @@ impl<'t> Ev<'t> {
     /// `Tool.contexts` (`Tool.java:4080-4110`): every domain is evaluated first; then the
     /// bindings run like an odometer with the first variable fastest.
     pub(crate) fn contexts(&mut self, bound: &BoundSymbols, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Contexts> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         let mut vars = Vec::new();
         for list in bound.lists.iter() {
             let set = self.eval(list.domain, c, s0, s1, control)?;
@@ -1034,7 +1034,7 @@ impl<'t> Ev<'t> {
                 let f = Value::FcnLambda(fcn.clone()).ppr(self)?;
                 let a = arg.ppr(self)?;
                 let at = args[0].expect_expr();
-                let graph = self.tool().graph.clone();
+                let graph = &self.tool().graph;
                 let reason = format!(
                     "In applying the function\n{f},\nthe first argument is:\n{a}which is not in its domain.\n{}",
                     graph.expr_tlc_text(at)
@@ -1089,7 +1089,7 @@ impl<'t> Ev<'t> {
     /// `Spec.getVar(expr, c, cutoff)` (`SymbolNodeValueLookupProvider.java:29-84`): the state
     /// variable `expr` denotes, if any.
     pub(crate) fn get_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<tlars_sany::graph::DeclId> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(expr) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
                 let c1 = self.subst_context(substs, c);
@@ -1115,7 +1115,7 @@ impl<'t> Ev<'t> {
 
     /// `Spec.getPrimedVar` (`Spec.java:138-205`): the variable `expr` primes, if any.
     pub(crate) fn get_primed_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<tlars_sany::graph::DeclId> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(expr) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
                 let c1 = self.subst_context(substs, c);
@@ -1159,7 +1159,7 @@ impl<'t> Ev<'t> {
     /// The context `getVar` / `getLevelBound` build for a LET: every 0-arity definition
     /// becomes a thunk over the context so far.
     pub(crate) fn let_context(&mut self, defs: &[OpDefId], c: &Ctx) -> Ctx {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         let mut c1 = c.clone();
         for &d in defs {
             let def = graph.op_def(d);
@@ -1194,7 +1194,7 @@ impl<'t> Ev<'t> {
     /// uses to split SPECIFICATION into initial predicate, next-state relation and temporal
     /// formulas.
     pub(crate) fn level_bound(&mut self, expr: ExprId, c: &Ctx) -> u8 {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(expr) {
             ExprNode::OpAppl { op, args, bound, .. } => {
                 if let Some(code) = self.opcode(*op) {
