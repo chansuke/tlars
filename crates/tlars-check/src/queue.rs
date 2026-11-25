@@ -18,7 +18,11 @@ pub(crate) struct Queued {
 
 pub(crate) struct StateQueue {
     inner: Mutex<QueueInner>,
+    /// Workers wait here for a state.
     avail: Condvar,
+    /// The main thread waits here for the search to end or the workers to park. Kept apart
+    /// from `avail` so that enqueueing a state does not wake it.
+    idle: Condvar,
 }
 
 struct QueueInner {
@@ -33,12 +37,16 @@ struct QueueInner {
 impl StateQueue {
     pub(crate) fn new(workers: usize) -> Self {
         let inner = QueueInner { fifo: VecDeque::new(), workers, waiting: 0, suspend_requested: false, finished: false };
-        StateQueue { inner: Mutex::new(inner), avail: Condvar::new() }
+        StateQueue { inner: Mutex::new(inner), avail: Condvar::new(), idle: Condvar::new() }
     }
     pub(crate) fn enqueue(&self, s: Queued) {
         let mut inner = self.inner.lock().expect("queue");
         inner.fifo.push_back(s);
-        self.avail.notify_all();
+        // A notify is a syscall even with nobody waiting, and a worker only waits after
+        // counting itself in `waiting` under this lock.
+        if inner.waiting > 0 {
+            self.avail.notify_one();
+        }
     }
     /// `sDequeue`: blocks; `None` once the queue is empty and every worker waits
     /// (`StateQueue.isAvail`), or after `finish_all`.
@@ -59,7 +67,11 @@ impl StateQueue {
                 inner.finished = true;
                 inner.waiting -= 1;
                 self.avail.notify_all();
+                self.idle.notify_all();
                 return None;
+            }
+            if inner.suspend_requested {
+                self.idle.notify_all();
             }
             inner = self.avail.wait(inner).expect("queue");
             inner.waiting -= 1;
@@ -74,7 +86,7 @@ impl StateQueue {
         inner.suspend_requested = true;
         self.avail.notify_all();
         while inner.waiting < inner.workers && !inner.finished {
-            inner = self.avail.wait(inner).expect("queue");
+            inner = self.idle.wait(inner).expect("queue");
         }
         !inner.finished
     }
@@ -87,6 +99,7 @@ impl StateQueue {
         let mut inner = self.inner.lock().expect("queue");
         inner.finished = true;
         self.avail.notify_all();
+        self.idle.notify_all();
     }
     pub(crate) fn len(&self) -> u64 {
         self.inner.lock().expect("queue").fifo.len() as u64
@@ -99,14 +112,14 @@ impl StateQueue {
     pub(crate) fn wait_finished(&self, timeout: std::time::Duration) -> bool {
         let deadline = std::time::Instant::now() + timeout;
         let mut inner = self.inner.lock().expect("queue");
-        // The condvar also carries "a state was enqueued", so the wait is resumed until the
+        // A wakeup can be spurious or for parked workers, so the wait is resumed until the
         // search is over or the deadline passes.
         while !inner.finished {
             let now = std::time::Instant::now();
             if now >= deadline {
                 return false;
             }
-            let (guard, _) = self.avail.wait_timeout(inner, deadline - now).expect("queue");
+            let (guard, _) = self.idle.wait_timeout(inner, deadline - now).expect("queue");
             inner = guard;
         }
         true
