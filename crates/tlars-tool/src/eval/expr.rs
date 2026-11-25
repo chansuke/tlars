@@ -843,11 +843,18 @@ impl<'t> Ev<'t> {
     /// `evalImplOpArgKind` (`Tool.java:1884-1892`): an operator argument evaluated as a
     /// value, which TLC wraps in an `OpLambdaValue` carrying the context of the *use* site.
     /// `None` = the argument does not name an operator.
-    pub(crate) fn op_arg_value(&mut self, arg: ExprOrOpArg, c: &Ctx, control: EvalControl) -> EvalResult<Option<OpArgValue>> {
+    pub(crate) fn op_arg_value<'s>(
+        &mut self,
+        arg: ExprOrOpArg,
+        c: &Ctx,
+        s0: StateRef<'s>,
+        s1: StateRef<'s>,
+        control: EvalControl,
+    ) -> EvalResult<Option<OpArgValue<'s>>> {
         let ExprOrOpArg::OpArg(sym) = arg else { return Ok(None) };
         Ok(match self.lookup(sym, c, StateRef::Empty, false) {
             Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
-                Some(OpArgValue::Op { def: d, ctx: c.clone(), control })
+                Some(OpArgValue::Op { def: d, ctx: c.clone(), s0, s1, control })
             }
             Resolved::Binding(Binding::Native(id)) | Resolved::Native(id) => Some(OpArgValue::Native(id)),
             _ => None,
@@ -870,7 +877,7 @@ impl<'t> Ev<'t> {
     /// `Values.ppr(op.toString())` of an operator argument: `<Operator name>` for a
     /// definition, which for a LAMBDA is named `LAMBDA`, and the Java signature for an
     /// override (`OpLambdaValue.java:189-193`, `MethodValue.java:249-252`).
-    pub(crate) fn op_arg_text(&mut self, arg: ExprOrOpArg, op: Option<&OpArgValue>) -> EvalResult<String> {
+    pub(crate) fn op_arg_text(&mut self, arg: ExprOrOpArg, op: Option<&OpArgValue<'_>>) -> EvalResult<String> {
         if let Some(OpArgValue::Native(id)) = op {
             return Ok(format!("<Java Method: {}>", id.op().signature));
         }
@@ -881,12 +888,12 @@ impl<'t> Ev<'t> {
     }
 
     /// `OpLambdaValue.eval(args, control)` (`OpLambdaValue.java:100-119`) and
-    /// `MethodValue.eval(args)`: the body runs in the captured context, and the captured
-    /// control contributes only its Enabled bit.
-    pub(crate) fn apply_operator(&mut self, op: &OpArgValue, args: &[Value], control: EvalControl) -> EvalResult<Value> {
+    /// `MethodValue.eval(args)`: the body runs in the captured context and states, and the
+    /// captured control contributes only its Enabled bit.
+    pub(crate) fn apply_operator(&mut self, op: &OpArgValue<'_>, args: &[Value], control: EvalControl) -> EvalResult<Value> {
         match op {
             OpArgValue::Native(id) => crate::modules::apply(self, *id, args),
-            OpArgValue::Op { def, ctx, control: captured } => {
+            OpArgValue::Op { def, ctx, s0, s1, control: captured } => {
                 let def = *def;
                 let params = &self.tool().graph.op_def(def).params;
                 let body = self.tool().graph.op_def(def).body.expect("a definition has a body");
@@ -895,7 +902,7 @@ impl<'t> Ev<'t> {
                     c1 = c1.cons(SymbolRef::Param(p), Binding::Value(v.clone()));
                 }
                 let control = if captured.has(EvalControl::ENABLED) { control.with(EvalControl::ENABLED) } else { control };
-                self.eval(body, &c1, StateRef::Empty, StateRef::Empty, control)
+                self.eval(body, &c1, *s0, *s1, control)
             }
         }
     }
@@ -1287,9 +1294,10 @@ fn is_variable(tool: &crate::tool::Tool, d: tlars_sany::graph::DeclId) -> bool {
 }
 
 /// What an operator argument of a Java module resolves to: `OpLambdaValue` for a definition,
-/// `MethodValue` for another module's override.
-pub(crate) enum OpArgValue {
-    Op { def: OpDefId, ctx: Ctx, control: EvalControl },
+/// `MethodValue` for another module's override. An `OpLambdaValue` keeps the states it was
+/// built in (`Tool.java:1888-1892`), so a test that reads a variable reads the caller's.
+pub(crate) enum OpArgValue<'s> {
+    Op { def: OpDefId, ctx: Ctx, s0: StateRef<'s>, s1: StateRef<'s>, control: EvalControl },
     Native(crate::modules::NativeId),
 }
 

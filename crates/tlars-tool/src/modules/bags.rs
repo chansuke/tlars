@@ -346,7 +346,7 @@ fn bag_of_all_impl(
     s1: StateRef<'_>,
     control: EvalControl,
 ) -> EvalResult<Value> {
-    let f = ev.op_arg_value(args[0], c, control)?;
+    let f = ev.op_arg_value(args[0], c, s0, s1, control)?;
     let b = ev.eval(args[1].expect_expr(), c, s0, s1, control)?;
     let Some(f) = f else {
         // Not an `OpValue`, so what TLC prints is the value the argument evaluated to: an

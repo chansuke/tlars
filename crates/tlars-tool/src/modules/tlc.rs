@@ -173,7 +173,7 @@ fn sort_seq_value(
     // `MethodValue.eval` receives its arguments already evaluated, so a failure in
     // evaluating them is outside its catch; everything from the method body on is inside it.
     let sval = ev.eval(args[0].expect_expr(), c, s0, s1, control)?;
-    let cmp = ev.op_arg_value(args[1], c, control)?;
+    let cmp = ev.op_arg_value(args[1], c, s0, s1, control)?;
     let sorted = sort_seq_body(ev, args, c, &sval, cmp.as_ref());
     sorted.map_err(|e| super::wrap_method(ev, "TLC", "SortSeq", e))
 }
@@ -183,7 +183,7 @@ fn sort_seq_body(
     args: &[ExprOrOpArg],
     c: &Ctx,
     sval: &Value,
-    cmp: Option<&crate::eval::expr::OpArgValue>,
+    cmp: Option<&crate::eval::expr::OpArgValue<'_>>,
 ) -> EvalResult<Value> {
     let Some(seq) = sval.to_tuple(ev)? else {
         let shown = sval.ppr(ev)?;
@@ -222,7 +222,7 @@ fn sort_seq_body(
 
 /// `TLC.compare` (`TLC.java:294-303`): `fcmp.eval(args, EvalControl.Clear)` must answer a
 /// `BoolValue`; the error prints the *result*, not the comparator.
-fn compare(ev: &mut Ev<'_>, cmp: &crate::eval::expr::OpArgValue, x: &Value, y: &Value) -> EvalResult<bool> {
+fn compare(ev: &mut Ev<'_>, cmp: &crate::eval::expr::OpArgValue<'_>, x: &Value, y: &Value) -> EvalResult<bool> {
     let res = ev.apply_operator(cmp, &[x.clone(), y.clone()], EvalControl::CLEAR)?;
     match res {
         Value::Bool(b) => Ok(b),
