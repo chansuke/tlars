@@ -933,13 +933,10 @@ impl<'t> Ev<'t> {
 
     /// `BuiltInOPs.getOpCode(name)` for a built-in operator; `None` for everything else
     /// (user definitions, and built-ins such as TRUE that TLC binds as values).
+    #[inline]
     fn builtin(&self, op: SymbolRef) -> Option<Builtin> {
         let SymbolRef::OpDef(d) = op else { return None };
-        let def = self.tool().graph.op_def(d);
-        if def.kind != OpDefKind::BuiltIn {
-            return None;
-        }
-        Builtin::of(&self.tool().graph.interner().text(def.name))
+        self.tool().builtins[d.index()]
     }
 
     /// `Tool.contexts` (`Tool.java:4080-4110`): every domain is evaluated first; then the
@@ -1494,6 +1491,18 @@ const BUILT_IN_OPS: &[&str] = &[
 ];
 
 impl Builtin {
+    /// [`Tool::builtins`](crate::tool::Tool): the opcode of each definition SANY marks
+    /// built-in, by name; `None` for every other definition.
+    pub(crate) fn table(graph: &tlars_sany::graph::SemanticGraph) -> Box<[Option<Builtin>]> {
+        graph
+            .op_def_ids()
+            .map(|d| {
+                let def = graph.op_def(d);
+                if def.kind == OpDefKind::BuiltIn { Builtin::of(&graph.interner().text(def.name)) } else { None }
+            })
+            .collect()
+    }
+
     fn of(name: &str) -> Option<Builtin> {
         Some(match name {
             "$ConjList" => Builtin::ConjList,

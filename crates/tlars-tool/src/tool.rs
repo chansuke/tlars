@@ -104,6 +104,9 @@ pub struct Temporal {
 
 pub struct Tool {
     pub(crate) graph: Arc<SemanticGraph>,
+    /// `BuiltInOPs.getOpCode(name)` of every definition, by `OpDefId`, so an application does
+    /// not look its operator's name up each time.
+    pub(crate) builtins: Box<[Option<crate::eval::expr::Builtin>]>,
     pub(crate) bindings: Bindings,
     pub(crate) vars: VarTable,
     pub(crate) init_actions: Box<[Action]>,

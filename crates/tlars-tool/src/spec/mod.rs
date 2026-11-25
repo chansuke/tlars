@@ -131,6 +131,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
             decls: decls.into(),
             literals: literals.into(),
         },
+        builtins: crate::eval::expr::Builtin::table(&graph),
         graph: std::sync::Arc::new(graph),
         vars,
         init_actions: Box::new([]),
