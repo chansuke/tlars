@@ -670,11 +670,12 @@ impl<'t> Ev<'t> {
             Builtin::RcdSelect => {
                 let rval = self.eval(arg(0), c, s0, s1, control)?;
                 let sval = Value::Str(self.field_name(arg(1)));
-                let field = sval.to_tlc_string(self)?;
+                // The field is only shown in the errors; a string prints without failing.
                 if matches!(rval, Value::Record(_)) {
                     return match rval.select(self, &sval)? {
                         Some(v) => Ok(v),
                         None => {
+                            let field = sval.to_tlc_string(self)?;
                             let shown = rval.ppr(self)?;
                             let reason = format!("Attempted to select nonexistent field {field} from the record\n{shown}\n{}", text(self, expr));
                             Err(not_boolean(self, reason, expr))
@@ -682,6 +683,7 @@ impl<'t> Ev<'t> {
                     };
                 }
                 let Some(fcn) = rval.to_fcn_rcd(self)? else {
+                    let field = sval.to_tlc_string(self)?;
                     let shown = rval.ppr(self)?;
                     let reason = format!("Attempted to select field {field} from a non-record value {shown}\n{}", text(self, expr));
                     return Err(not_boolean(self, reason, expr));
