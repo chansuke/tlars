@@ -368,6 +368,31 @@ impl Value {
     /// `Value.getSource()`. The inline variants (Bool, Int, String, ModelValue, Interval,
     /// Undef, the special constants) carry no source; TLC never sets one on them either,
     /// except on the interval a `DOMAIN <<..>>` returns.
+    /// Java's `a == b` on two values: the same object. Only the shared classes can be; a
+    /// scalar is a fresh copy here, which an identity test treats as a different object.
+    pub(crate) fn same_object(&self, other: &Value) -> bool {
+        fn same<T>(a: &Arc<T>, b: &Arc<T>) -> bool {
+            Arc::ptr_eq(a, b)
+        }
+        match (self, other) {
+            (Value::Tuple(a), Value::Tuple(b)) => same(a, b),
+            (Value::Record(a), Value::Record(b)) => same(a, b),
+            (Value::FcnRcd(a), Value::FcnRcd(b)) => same(a, b),
+            (Value::SetEnum(a), Value::SetEnum(b)) => same(a, b),
+            (Value::Subset(a), Value::Subset(b)) => same(a, b),
+            (Value::KSubset(a), Value::KSubset(b)) => same(a, b),
+            (Value::SetOfFcns(a), Value::SetOfFcns(b)) => same(a, b),
+            (Value::SetOfRcds(a), Value::SetOfRcds(b)) => same(a, b),
+            (Value::SetOfTuples(a), Value::SetOfTuples(b)) => same(a, b),
+            (Value::Union(a), Value::Union(b)) => same(a, b),
+            (Value::SetCup(a), Value::SetCup(b)) | (Value::SetCap(a), Value::SetCap(b)) | (Value::SetDiff(a), Value::SetDiff(b)) => same(a, b),
+            (Value::SetPred(a), Value::SetPred(b)) => same(a, b),
+            (Value::FcnLambda(a), Value::FcnLambda(b)) => same(a, b),
+            (Value::User(a), Value::User(b)) => same(a, b),
+            _ => false,
+        }
+    }
+
     pub(crate) fn source(&self) -> Option<ExprId> {
         match self {
             Value::Tuple(v) => v.source.get(),
