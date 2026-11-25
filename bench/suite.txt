@@ -2,12 +2,12 @@
 # `tlaplus-examples`). Module, expected result and state counts come from the Examples
 # manifests. Chosen for size (TLC seconds to a minute), variety of value kinds and actions,
 # and no CommunityModules or TLAPS dependency (neither ships with TLC). Excluded for that
-# reason: Bakery-Boulangerie/MCBakery, TeachingConcurrency/SimpleRegular (EXTENDS TLAPS).
+# reason: Bakery-Boulangerie/MCBakery, TeachingConcurrency/SimpleRegular (EXTENDS TLAPS),
+# btree/MCbtree (EXTENDS Relation from CommunityModules).
 specifications/transaction_commit/PaxosCommit.cfg
 specifications/lamport_mutex/MCLamportMutex.cfg
 specifications/NanoBlockchain/MCNanoMedium.cfg
 specifications/CoffeeCan/CoffeeCan1000Beans.cfg
-specifications/btree/MCbtree.cfg
 specifications/MultiPaxos-SMR/MultiPaxos_MC_small.cfg
 specifications/SlushProtocol/SlushSmall.cfg
 specifications/Disruptor/MCDisruptor_MPMC.cfg
