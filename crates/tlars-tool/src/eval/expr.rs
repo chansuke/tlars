@@ -32,6 +32,9 @@ pub(crate) enum Resolved {
     /// apart from `Undef` is what lets every caller stop as unimplemented instead of
     /// reporting an undefined operator. The level is the override's `minLevel`.
     Unimplemented { min_level: u8 },
+    /// A theorem or assumption name, which `lookup` returns as the `ThmOrAssumpDefNode`
+    /// itself; the evaluator expands its body like a definition's (`Tool.java:2050-2061`).
+    Thm(tlars_sany::graph::ThmId),
 }
 
 impl<'t> Ev<'t> {
@@ -111,6 +114,9 @@ impl<'t> Ev<'t> {
                 // `lookup` returns the unimplemented `MethodValue` itself; passing it on as
                 // a value makes the use site report it.
                 Resolved::Var(_) | Resolved::Unimplemented { .. } => Binding::Value(Value::Undef),
+                // TLC binds the `ThmOrAssumpDefNode` itself, which the use site then expands.
+                // No binding carries a theorem, so the use site reports an undefined name.
+                Resolved::Thm(_) => Binding::Value(Value::Undef),
             },
             ExprOrOpArg::Absent => unreachable!("only CASE's OTHER guard is absent"),
         }
@@ -162,8 +168,21 @@ impl<'t> Ev<'t> {
             // definition body without expanding its parameters (`processConfigSpec`'s level
             // check). `lookup` then returns the node itself, which resolves to nothing
             // (`SymbolNodeValueLookupProvider.java:86-118`).
-            SymbolRef::Param(_) | SymbolRef::Thm(_) | SymbolRef::Module(_) => Resolved::Value(Value::Undef),
+            SymbolRef::Param(_) | SymbolRef::Module(_) => Resolved::Value(Value::Undef),
+            SymbolRef::Thm(t) => Resolved::Thm(t),
         }
+    }
+
+    /// `Spec.getOpContext(ThmOrAssumpDefNode, ..)` (`Spec.java:485-496`): the same binding
+    /// of parameters to thunks as a definition's.
+    pub(crate) fn thm_context(&mut self, thm: tlars_sany::graph::ThmId, args: &[ExprOrOpArg], c: &Ctx) -> Ctx {
+        let params = &self.tool().graph.thm(thm).params;
+        let mut c1 = c.clone();
+        for (&p, &arg) in params.iter().zip(args) {
+            let val = self.get_val(arg, c, true);
+            c1 = c1.cons(SymbolRef::Param(p), val);
+        }
+        c1
     }
 
     /// `getOpContext`: bind params to call-by-name thunks over `c`.
@@ -274,6 +293,11 @@ impl<'t> Ev<'t> {
                 Resolved::Unimplemented { .. } => {
                     let name = self.symbol_name(op);
                     return Err(EvalError::unimplemented(format!("the Java implementation of {name}")));
+                }
+                Resolved::Thm(t) => {
+                    let body = graph.thm(t).body;
+                    let c1 = self.thm_context(t, args, c);
+                    return self.eval(body, &c1, s0, s1, control);
                 }
                 Resolved::Binding(Binding::Value(_)) | Resolved::Value(_) | Resolved::Var(_) => {
                     // Fairness on a sub-action that leaves a subscript variable unassigned

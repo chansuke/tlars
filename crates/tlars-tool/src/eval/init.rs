@@ -76,6 +76,12 @@ impl<'t> Ev<'t> {
                         return self.init_impl(body, acts, &c1, ps, sink);
                     }
                 }
+                // `Tool.java:603-609`.
+                Resolved::Thm(t) => {
+                    let body = graph.thm(t).body;
+                    let c1 = self.thm_context(t, args, c);
+                    return self.init_impl(body, acts, &c1, ps, sink);
+                }
                 Resolved::Binding(Binding::Thunk(t)) => {
                     match t.cached(self, StateRef::Partial(ps), StateRef::Null, EvalControl::CLEAR) {
                         None => {

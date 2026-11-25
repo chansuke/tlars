@@ -127,6 +127,12 @@ impl<'t> Ev<'t> {
                         return self.next_impl(a, body, acts, &c1, s0, s1, sink);
                     }
                 }
+                // `Tool.java:1129-1132`.
+                Resolved::Thm(t) => {
+                    let body = graph.thm(t).body;
+                    let c1 = self.thm_context(t, args, c);
+                    return self.next_impl(a, body, acts, &c1, s0, s1, sink);
+                }
                 Resolved::Binding(Binding::Thunk(t)) => {
                     match t.cached(self, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR) {
                         None => {

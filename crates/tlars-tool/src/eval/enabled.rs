@@ -113,6 +113,12 @@ impl<'t> Ev<'t> {
                         return self.enabled(body, acts, &c1, s0, s1);
                     }
                 }
+                // `Tool.java:3106-3111`.
+                Resolved::Thm(t) => {
+                    let body = graph.thm(t).body;
+                    let c1 = self.thm_context(t, args, c);
+                    return self.enabled(body, acts, &c1, s0, s1);
+                }
                 // Unlike `getNextStatesAppl`, ENABLED never reads a cached `LazyValue`: it
                 // always expands the body (`Tool.java:3115-3118`).
                 Resolved::Binding(Binding::Thunk(t)) => {
