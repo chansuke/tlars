@@ -76,6 +76,13 @@ impl EvalError {
         self
     }
 
+    /// The same error with the `Assert.fail` parameters it was raised with, which
+    /// `printTLCRuntimeException` prints the message from.
+    pub(crate) fn with_params(mut self, params: Vec<String>) -> EvalError {
+        self.params = params;
+        self
+    }
+
     pub fn into_data(self) -> EvalErrorData {
         *self.0
     }
