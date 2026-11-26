@@ -56,10 +56,10 @@ impl StateQueue {
             if inner.finished {
                 return None;
             }
-            if !inner.suspend_requested {
-                if let Some(s) = inner.fifo.pop_front() {
-                    return Some(s);
-                }
+            if !inner.suspend_requested
+                && let Some(s) = inner.fifo.pop_front()
+            {
+                return Some(s);
             }
             // Every worker idle with an empty queue means the search is over.
             inner.waiting += 1;

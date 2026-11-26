@@ -23,6 +23,10 @@ jobs:
             target
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'flake.lock') }}
           restore-keys: cargo-${{ runner.os }}-
+      - name: Formatting
+        run: nix develop -c cargo fmt --check
+      - name: Clippy
+        run: nix develop -c cargo clippy --workspace --all-targets -- -D warnings
       - name: Generated files match the pinned sources
         run: |
           nix develop -c cargo run -q -p xtask -- gen-fidelity --check

@@ -176,7 +176,7 @@ impl IntervalValue {
     }
 
     /// `toSetEnum()`: the elements in order, already normalised.
-    pub(crate) fn to_set_enum_arc(&self) -> Arc<SetEnumValue> {
+    pub(crate) fn to_set_enum_arc(self) -> Arc<SetEnumValue> {
         let elems: Box<[Value]> = (i64::from(self.lo)..=i64::from(self.hi)).map(|n| Value::Int(n as i32)).collect();
         let norm = OnceLock::new();
         let _ = norm.set(elems.clone());
@@ -210,11 +210,14 @@ impl SetEnumValue {
     }
 }
 
+/// A record's names and values, in the same order.
+pub(crate) type RecordFields = (Box<[Atom]>, Box<[Value]>);
+
 /// Fields as constructed; normalised = sorted by name token.
 pub struct RecordValue {
     pub(crate) names: Box<[Atom]>,
     pub(crate) values: Box<[Value]>,
-    pub(crate) norm: OnceLock<(Box<[Atom]>, Box<[Value]>)>,
+    pub(crate) norm: OnceLock<RecordFields>,
     pub(crate) source: Source,
     /// `tlc2.value.impl.CounterExample`, a subclass of `RecordValue` that behaves like one
     /// everywhere but in `TLCExt!ToTrace`, which refuses a record of the same shape, and in
@@ -232,10 +235,13 @@ pub enum FcnDomain {
 /// computed. An interval domain is normalised by construction, so `norm` stays empty and
 /// `is_normalized` reports the domain's kind. A failed sort (a duplicate domain element) is
 /// not cached, so the error re-surfaces at the next use, as in TLC.
+/// A function's domain and values, in the same order.
+pub(crate) type FcnPairs = (Box<[Value]>, Box<[Value]>);
+
 pub struct FcnRcdValue {
     pub(crate) domain: FcnDomain,
     pub(crate) values: Box<[Value]>,
-    pub(crate) norm: OnceLock<(Box<[Value]>, Box<[Value]>)>,
+    pub(crate) norm: OnceLock<FcnPairs>,
 }
 
 /// Lazy sets. `converted` is `convertAndCache()`'s SetEnum.
@@ -343,9 +349,12 @@ pub struct SetPredValue {
 /// functions. Recursion: TLC stores the function in its own context (`makeRecursive`), a
 /// cycle that would leak under `Arc`. Here `rec_name` is kept and `f := self` is consed onto
 /// the context *at apply time*: same semantics, no cycle.
+/// One `x, y \in S` list of `FcnParams`, as `(formals, isTuple, domain)`.
+pub(crate) type FcnParam = (Box<[ParamId]>, bool, Value);
+
 pub struct FcnLambdaValue {
-    /// `FcnParams`: one entry per `x, y \in S` list, as `(formals, isTuple, domain)`.
-    pub(crate) params: Box<[(Box<[ParamId]>, bool, Value)]>,
+    /// `FcnParams`: one entry per `x, y \in S` list.
+    pub(crate) params: Box<[FcnParam]>,
     pub(crate) body: ExprId,
     pub(crate) env: Closure,
     pub(crate) rec_name: Option<SymbolRef>,

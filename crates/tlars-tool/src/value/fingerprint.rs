@@ -7,6 +7,7 @@
 //! - FcnRcd: `FCNRCD, n, (dom, val)*` (interval domain writes `INT, i`); Tuple as FCNRCD with
 //!   keys `1..n`; Record as FCNRCD with STRING keys in token order.
 //! - Lazy sets / FcnLambda: converted first.
+//!
 //! So equal values fingerprint equally whatever their representation, and `<<>>` differs
 //! from `{}`.
 
