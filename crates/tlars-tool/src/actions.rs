@@ -35,6 +35,11 @@ pub struct Action {
     pub(crate) op_def: Option<OpDefId>,
     pub(crate) is_init: bool,
     pub(crate) is_internal: bool,
+    /// The `SubstInNode`s `Specs.addSubsts` wraps `pred` in, outermost first, when the cfg
+    /// reached `pred` through an INSTANCE. tlars already holds their substitutions in `ctx`;
+    /// TLC's action is the outermost wrapper, so it reports that node's location and every
+    /// wrapper is a frame of the nested-expression stack.
+    pub(crate) wraps: Box<[ExprId]>,
 }
 
 impl Action {
@@ -44,12 +49,40 @@ impl Action {
     pub fn name(&self) -> Option<Atom> {
         self.name
     }
+    /// The node whose location `Action.getLocation()` reports.
+    pub(crate) fn located_at(&self) -> ExprId {
+        self.wraps.first().copied().unwrap_or(self.pred)
+    }
 }
 
 /// `new Action(this, pred, con, opDef)`: the action's name is the definition's, if any.
 fn action(ev: &Ev<'_>, pred: ExprId, c: &Ctx, op_def: Option<OpDefId>, is_init: bool, index: usize) -> Action {
     let name = op_def.map(|d| ev.tool().graph().op_def(d).name);
-    Action { id: ActionId(index as u32), pred, ctx: c.clone(), name, op_def, is_init, is_internal: false }
+    Action { id: ActionId(index as u32), pred, ctx: c.clone(), name, op_def, is_init, is_internal: false, wraps: Box::new([]) }
+}
+
+/// `getActions` on a next-state relation that `Specs.addSubsts` wrapped: a `SubstInNode`
+/// with substitutions is one action, not split further (`Tool.java:287-299`). A leading
+/// wrapper without substitutions is looked through, as `getActions` recurses into its body.
+pub(crate) fn split_wrapped_next(
+    ev: &mut Ev<'_>,
+    next: ExprId,
+    c: &Ctx,
+    op_def: Option<OpDefId>,
+    wraps: &[ExprId],
+    out: &mut Vec<Action>,
+) -> EvalResult<()> {
+    let graph = ev.tool().graph();
+    let has_substs = |w: ExprId| matches!(graph.expr(w), ExprNode::SubstIn { substs, .. } | ExprNode::APSubstIn { substs, .. } if !substs.is_empty());
+    match wraps.iter().position(|&w| has_substs(w)) {
+        None => split_next(ev, next, c, op_def, out),
+        Some(first) => {
+            let mut a = action(ev, next, c, op_def, false, out.len());
+            a.wraps = wraps[first..].into();
+            out.push(a);
+            Ok(())
+        }
+    }
 }
 
 /// `getActions(next)` (`Tool.java:269-271`), which threads the next-state *definition* down
@@ -61,9 +94,9 @@ pub(crate) fn split_next(ev: &mut Ev<'_>, next: ExprId, c: &Ctx, op_def: Option<
 /// `getInitStateSpec()`: one action per initial predicate, unsplit. `new Action(pred, con,
 /// opDef, ...)` names it after the definition the cfg's INIT gave, which `TLCGet("spec")`
 /// reports; a conjunct of SPECIFICATION has no definition and stays unnamed.
-pub(crate) fn init_action(graph: &tlars_sany::graph::SemanticGraph, index: usize, pred: ExprId, c: &Ctx, op_def: Option<OpDefId>) -> Action {
+pub(crate) fn init_action(graph: &tlars_sany::graph::SemanticGraph, index: usize, pred: ExprId, c: &Ctx, op_def: Option<OpDefId>, wraps: &[ExprId]) -> Action {
     let name = op_def.map(|d| graph.op_def(d).name);
-    Action { id: ActionId(index as u32), pred, ctx: c.clone(), name, op_def, is_init: true, is_internal: false }
+    Action { id: ActionId(index as u32), pred, ctx: c.clone(), name, op_def, is_init: true, is_internal: false, wraps: wraps.into() }
 }
 
 /// `(OpDefNode) opNode` on a symbol that is not a definition.

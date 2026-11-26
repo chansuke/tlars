@@ -61,7 +61,19 @@ impl<'t> Ev<'t> {
 
     fn next_states_of_action(&mut self, s0: &State, action: &Action, sink: &mut dyn NextSink) -> Flow {
         let mut s1 = PartialState::successor_of(s0.len(), s0);
-        self.next_impl(action, action.pred, Acts::Empty, &action.ctx, s0, &mut s1, sink)
+        self.next_wrapped(action, &action.wraps, s0, &mut s1, sink)
+    }
+
+    /// The `getNextStates` calls on the `Specs.addSubsts` wrappers, each a frame of the
+    /// nested-expression stack; their substitutions are in the action's context already.
+    fn next_wrapped(&mut self, action: &Action, wraps: &[ExprId], s0: &State, s1: &mut PartialState, sink: &mut dyn NextSink) -> Flow {
+        let Some((&w, rest)) = wraps.split_first() else {
+            return self.next_impl(action, action.pred, Acts::Empty, &action.ctx, s0, s1, sink);
+        };
+        self.enter_generator(w)?;
+        let r = self.next_wrapped(action, rest, s0, s1, sink);
+        self.leave_generator(r.as_ref().err());
+        r
     }
 
     /// `getNextStatesImpl`: dispatch on node kind.

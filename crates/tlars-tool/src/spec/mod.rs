@@ -782,6 +782,8 @@ struct Pred {
     expr: ExprId,
     ctx: Ctx,
     op_def: Option<OpDefId>,
+    /// The `SubstInNode`s `Specs.addSubsts` wraps the predicate in, outermost first.
+    wraps: Box<[ExprId]>,
 }
 
 /// `processConfig` (`SpecProcessor.java:782-955`): INIT/NEXT/SPECIFICATION and the named
@@ -796,6 +798,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
         implied_actions: Vec::new(),
         implied_temporals: Vec::new(),
         temporals: Vec::new(),
+        wraps: Vec::new(),
     };
     pass.invariants(config, tool, defns, out)?;
     match config.specification.as_deref().filter(|s| !s.is_empty()) {
@@ -878,13 +881,13 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
         let mut locals = WorkerLocals::new(0, tool.globals.seed);
         let mut ev = tool.ev(&mut locals, out);
         if let Some(next) = &next_pred {
-            crate::actions::split_next(&mut ev, next.expr, &next.ctx, next.op_def, &mut actions).map_err(uncaught)?;
+            crate::actions::split_wrapped_next(&mut ev, next.expr, &next.ctx, next.op_def, &next.wraps, &mut actions).map_err(uncaught)?;
         }
     }
     tool.init_actions = init_preds
         .iter()
         .enumerate()
-        .map(|(i, p)| crate::actions::init_action(&graph, i, p.expr, &p.ctx, p.op_def))
+        .map(|(i, p)| crate::actions::init_action(&graph, i, p.expr, &p.ctx, p.op_def, &p.wraps))
         .collect();
     tool.actions = actions.into();
     Ok(())
@@ -899,6 +902,9 @@ struct ConfigPass {
     implied_actions: Vec<PassCheck>,
     implied_temporals: Vec<PassCheck>,
     temporals: Vec<Pred>,
+    /// The `SubstInNode`s the walk is under, outermost first: the `subs` list
+    /// `Specs.addSubsts` wraps a predicate in, in wrapping order reversed.
+    wraps: Vec<ExprId>,
 }
 
 /// A check `processConfigInvariants` or `processConfigProps` collects: the `Action`'s name
@@ -937,7 +943,7 @@ impl ConfigPass {
                     }
                     let body = graph.op_def(d).body.expect("a user definition has a body");
                     let atom = graph.interner().intern(name);
-                    self.invariants.push(PassCheck { name: atom, shown: name.clone(), pred: Pred { expr: body, ctx: Ctx::EMPTY, op_def: Some(d) } });
+                    self.invariants.push(PassCheck { name: atom, shown: name.clone(), pred: Pred { expr: body, ctx: Ctx::EMPTY, op_def: Some(d), wraps: Box::new([]) } });
                 }
                 None => {
                     return Err(SpecError::Config {
@@ -1024,7 +1030,10 @@ impl ConfigPass {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
                 let body = *body;
                 let c1 = tool.ev(&mut locals, out).subst_context(substs, c);
-                return self.config_props(name, config_name, body, &c1, true, tool, out);
+                self.wraps.push(pred);
+                let r = self.config_props(name, config_name, body, &c1, true, tool, out);
+                self.wraps.pop();
+                return r;
             }
             ExprNode::LetIn { body, .. } => return self.config_props(name, config_name, *body, c, substituted, tool, out),
             _ => {}
@@ -1110,7 +1119,7 @@ impl ConfigPass {
             }
         }
         let level = tool.ev(&mut locals, out).level_bound(pred, c);
-        let check = |shown: String| PassCheck { name: config_name, shown, pred: Pred { expr: pred, ctx: c.clone(), op_def: None } };
+        let check = |shown: String| PassCheck { name: config_name, shown, pred: Pred { expr: pred, ctx: c.clone(), op_def: None, wraps: self.wraps.clone().into() } };
         match level {
             0 | 1 => self.implied_inits.push(check(name)),
             3 => self.implied_temporals.push(check(name)),
@@ -1152,7 +1161,7 @@ impl ConfigPass {
             ExprNode::OpAppl { op, args, .. } => Some((*op, args.is_empty())),
             _ => None,
         };
-        let check = |shown: String, expr: ExprId| PassCheck { name: config_name, shown, pred: Pred { expr, ctx: c.clone(), op_def: None } };
+        let check = |shown: String, expr: ExprId| PassCheck { name: config_name, shown, pred: Pred { expr, ctx: c.clone(), op_def: None, wraps: self.wraps.clone().into() } };
         if let Some((op, _)) = applied
             && ev.opcode(op) == Some(Builtin::SquareAct)
         {
@@ -1187,7 +1196,7 @@ impl ConfigPass {
                         });
                     }
                     let body = graph.op_def(d).body.expect("a user definition has a body");
-                    Ok(Pred { expr: body, ctx: Ctx::EMPTY, op_def: Some(d) })
+                    Ok(Pred { expr: body, ctx: Ctx::EMPTY, op_def: Some(d), wraps: Box::new([]) })
                 }
                 Some(_) => Err(SpecError::Config {
                     ec: Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT,
@@ -1221,7 +1230,10 @@ impl ConfigPass {
                     ev.subst_context(substs, c)
                 };
                 // `subs.cons(pred1)`: from here on the formula is under a substitution.
-                return self.config_spec(body, &c1, true, tool, out);
+                self.wraps.push(pred);
+                let r = self.config_spec(body, &c1, true, tool, out);
+                self.wraps.pop();
+                return r;
             }
             ExprNode::LetIn { body, .. } => return self.config_spec(*body, c, substituted, tool, out),
             ExprNode::OpAppl { .. } => {}
@@ -1302,7 +1314,7 @@ impl ConfigPass {
                     ev.level_bound(body, c)
                 };
                 if level == 1 {
-                    self.init_preds.push(Pred { expr: body, ctx: c.clone(), op_def: Some(d) });
+                    self.init_preds.push(Pred { expr: body, ctx: c.clone(), op_def: Some(d), wraps: self.wraps.clone().into() });
                     return Ok(());
                 }
                 self.config_spec(body, c, substituted, tool, out)
@@ -1356,11 +1368,11 @@ impl ConfigPass {
                 if self.next_pred.is_some() {
                     return Err(SpecError::Failure { ec: Ec::TLC_CANT_HANDLE_TOO_MANY_NEXT_STATE_RELS });
                 }
-                self.next_pred = Some(Pred { expr: action, ctx: c.clone(), op_def: None });
+                self.next_pred = Some(Pred { expr: action, ctx: c.clone(), op_def: None, wraps: self.wraps.clone().into() });
                 return Ok(());
             }
         }
-        self.temporals.push(Pred { expr: pred, ctx: c.clone(), op_def: None });
+        self.temporals.push(Pred { expr: pred, ctx: c.clone(), op_def: None, wraps: self.wraps.clone().into() });
         Ok(())
     }
 
@@ -1373,11 +1385,11 @@ impl ConfigPass {
         };
         match level {
             0 | 1 => {
-                self.init_preds.push(Pred { expr: pred, ctx: c.clone(), op_def: None });
+                self.init_preds.push(Pred { expr: pred, ctx: c.clone(), op_def: None, wraps: self.wraps.clone().into() });
                 Ok(())
             }
             3 => {
-                self.temporals.push(Pred { expr: pred, ctx: c.clone(), op_def: None });
+                self.temporals.push(Pred { expr: pred, ctx: c.clone(), op_def: None, wraps: self.wraps.clone().into() });
                 Ok(())
             }
             _ => {

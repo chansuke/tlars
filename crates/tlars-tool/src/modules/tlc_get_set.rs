@@ -257,7 +257,7 @@ fn bound_parameters(ev: &Ev<'_>, op_def: Option<OpDefId>, ctx: &Ctx) -> Vec<(Ato
 /// `init2Value` / `action2Value` (`TLCGetSet.java:552-576`) without `-coverage`: the action's
 /// own record, whose location is the predicate's.
 pub(crate) fn action_value(ev: &mut Ev<'_>, a: &Action) -> EvalResult<Value> {
-    let loc = ev.tool().graph().loc(a.pred);
+    let loc = ev.tool().graph().loc(a.located_at());
     let (name, op_def, ctx) = (a.name, a.op_def, a.ctx.clone());
     action_record(ev, name, loc, op_def, &ctx)
 }

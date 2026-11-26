@@ -22,7 +22,21 @@ impl<'t> Ev<'t> {
         let inits = tool.init_actions();
         let Some((first, rest)) = inits.split_first() else { return Ok(()) };
         let mut ps = PartialState::empty(tool.vars().decls.len());
-        self.push_init_preds(rest, Acts::Empty, &mut |ev, acts| ev.init_impl(first.pred, acts, &first.ctx, &mut ps, sink))
+        self.push_init_preds(rest, Acts::Empty, &mut |ev, acts| ev.init_wrapped(&first.wraps, first.pred, acts, &first.ctx, &mut ps, sink))
+    }
+
+    /// The `getInitStates` calls on the `Specs.addSubsts` wrappers of the first initial
+    /// predicate, each a frame of the nested-expression stack; their substitutions are in
+    /// the context already. A later predicate waits in the item list as its bare
+    /// expression, so its wrappers leave no frame.
+    fn init_wrapped(&mut self, wraps: &[ExprId], pred: ExprId, acts: Acts<'_>, c: &Ctx, ps: &mut PartialState, sink: &mut dyn InitSink) -> Flow {
+        let Some((&w, rest)) = wraps.split_first() else {
+            return self.init_impl(pred, acts, c, ps, sink);
+        };
+        self.enter_generator(w)?;
+        let r = self.init_wrapped(rest, pred, acts, c, ps, sink);
+        self.leave_generator(r.as_ref().err());
+        r
     }
 
     fn push_init_preds(&mut self, rest: &[crate::actions::Action], acts: Acts<'_>, k: &mut dyn FnMut(&mut Self, Acts<'_>) -> Flow) -> Flow {
