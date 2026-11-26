@@ -41,8 +41,7 @@ use crate::state::StateRef;
 use crate::value::Value;
 use tlars_sany::graph::ExprOrOpArg;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct NativeId(u16);
+pub(crate) use crate::ctx::NativeId;
 
 pub(crate) type StrictFn = fn(&mut Ev<'_>, &[Value]) -> EvalResult<Value>;
 /// `@Evaluation`-style: receives unevaluated arguments (TLCGet, Assert, ...). `Ok(None)` is
@@ -207,11 +206,11 @@ pub(crate) fn java_override(module: &str, tla_name: &str) -> Option<&'static Jav
 
 impl NativeId {
     pub(crate) fn of_module(module: &str, tla_name: &str) -> Option<NativeId> {
-        REGISTRY.iter().position(|op| op.module == module && op.tla_name == tla_name).map(|i| NativeId(i as u16))
+        REGISTRY.iter().position(|op| op.module == module && op.tla_name == tla_name).map(|i| NativeId::new(i as u16))
     }
 
     pub(crate) fn op(self) -> &'static NativeOp {
-        &REGISTRY[self.0 as usize]
+        &REGISTRY[self.index()]
     }
 }
 

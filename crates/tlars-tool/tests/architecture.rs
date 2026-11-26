@@ -25,7 +25,6 @@ const TOOL_LAYERS: &[&[&str]] = &[
 const TOOL_UPWARD_EDGES: &[(&str, &str)] = &[
     ("actions", "eval"),
     ("ctx", "eval"),
-    ("ctx", "modules"),
     ("state", "eval"),
     ("symmetry", "eval"),
     // `value` takes `&mut Ev` as TLC's values take the `Tool`; this one stays (DESIGN.md).
