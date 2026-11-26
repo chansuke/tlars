@@ -229,6 +229,10 @@ impl<'a> ModelChecker<'a> {
         // The `ModelChecker` constructor builds the `LiveCheck`, whose `processLiveness`
         // reports 2212 before `modelCheck` checks the assumptions.
         if self.tool.has_liveness() {
+            let mut locals = WorkerLocals::new(0, self.seed);
+            if let Err(e) = self.tool.ev(&mut locals, self.out).live_spec() {
+                return print_process_failure(self.out, &e);
+            }
             return self.out.error(Ec::GENERAL, &["tlars does not implement liveness checking yet (M4)"]);
         }
         let mut locals = WorkerLocals::new(0, self.seed);
@@ -1322,6 +1326,27 @@ fn init_error_code(e: &EvalError) -> Ec {
     match e.kind {
         EvalErrorKind::Runtime => e.ec,
         _ => Ec::GENERAL,
+    }
+}
+
+/// `TLC.process`'s `catch (Throwable)` (`TLC.java:1420-1444`) for what the `ModelChecker`
+/// constructor throws, such as a temporal formula `processLiveness` cannot handle. An
+/// `Assert.TLCRuntimeException` prints its own code (`printTLCRuntimeException`), with its
+/// parameters when it has them and its message otherwise; anything else is `EC.GENERAL`.
+fn print_process_failure(out: &dyn Report, e: &EvalError) -> Ec {
+    use tlars_tool::EvalErrorKind;
+    match &e.kind {
+        EvalErrorKind::Runtime if !e.params.is_empty() => {
+            let params: Vec<&str> = e.params.iter().map(String::as_str).collect();
+            out.runtime_exception(e.ec, &params)
+        }
+        EvalErrorKind::Runtime => out.error(e.ec, &[&e.message]),
+        EvalErrorKind::StackOverflow => out.error(Ec::SYSTEM_STACK_OVERFLOW, &[]),
+        EvalErrorKind::Unimplemented => out.error(Ec::GENERAL, &[&e.message]),
+        _ => {
+            let body = tlars_msg::unexpected_exception(java_class(e), &e.message);
+            out.error(Ec::GENERAL, &[&body])
+        }
     }
 }
 

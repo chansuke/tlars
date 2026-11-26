@@ -102,7 +102,7 @@ impl<'t> Ev<'t> {
 
     /// `getVal`: an expression argument is passed by name, an operator argument as what it
     /// names.
-    fn get_val(&mut self, arg: ExprOrOpArg, c: &Ctx, cachable: bool) -> Binding {
+    pub(crate) fn get_val(&mut self, arg: ExprOrOpArg, c: &Ctx, cachable: bool) -> Binding {
         match arg {
             ExprOrOpArg::Expr(e) => Binding::Thunk(Thunk::new(e, c.clone(), cachable)),
             ExprOrOpArg::OpArg(sym) => match self.lookup(sym, c, StateRef::Empty, false) {

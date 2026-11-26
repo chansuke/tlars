@@ -30,7 +30,7 @@ pub use eval::{Aliased, CallStack, EvalControl, Ev, InitSink, NextSink, StateInf
 pub use modules::tlc_ext::{CounterExampleStep, counter_example_of};
 pub use fp64::{Fp, FpKey};
 pub use globals::{LnCheck, TlcGlobals};
-pub use live::{CheckBits, LiveSpec, Pem, Solution, Tableau};
+pub use live::{LiveSpec, Pem, Solution, Tableau, TableauNode};
 pub use spec::{CliSpecExtras, PostCondition, RuntimeInvariant, SpecError, ToolInput, TraceConstraint, build_tool};
 pub use state::{PartialState, State, StateRef, TraceStep, TraceUid, VarSlot};
 pub use tool::{CheckId, ImpliedAction, ImpliedInit, Invariant, Temporal, TemporalCheck, Tool};
