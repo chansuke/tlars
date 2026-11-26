@@ -813,7 +813,14 @@ fn emit_on_this_thread(tlaplus_src: &Path, out: &Path, check: bool) -> Result<()
     ));
     if check {
         let current = std::fs::read_to_string(out).map_err(|e| format!("{}: {e}", out.display()))?;
-        return if current == code { Ok(()) } else { Err(format!("{} is stale; run `xtask jj2rs emit`", out.display())) };
+        return if current == code {
+            Ok(())
+        } else {
+            Err(format!(
+                "{} is stale: fix the emitter in crates/xtask/src/jj2rs, then run `xtask jj2rs emit`; do not edit it by hand",
+                out.display()
+            ))
+        };
     }
     std::fs::write(out, code).map_err(|e| format!("{}: {e}", out.display()))?;
     println!("skipped (signature mentions an untranslated class):");
