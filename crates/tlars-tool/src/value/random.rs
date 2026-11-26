@@ -487,11 +487,11 @@ impl Product {
             }
             Value::SetOfRcds(s) => {
                 let names = s.names.clone();
-                let sets = constituents(ev, &s.sets.to_vec())?;
+                let sets = constituents(ev, &s.sets)?;
                 Ok(Product { sets, shape: Shape::Rcd(names) })
             }
             Value::SetOfTuples(s) => {
-                let sets = constituents(ev, &s.sets.to_vec())?;
+                let sets = constituents(ev, &s.sets)?;
                 Ok(Product { sets, shape: Shape::Tuple })
             }
             _ => unreachable!("only the three product kinds have a Product"),

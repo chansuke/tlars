@@ -329,6 +329,7 @@ impl JInteger {
         JInteger(Some(v))
     }
     #[track_caller]
+    #[expect(non_snake_case, reason = "generated.rs calls Java's Integer.intValue by its name")]
     pub(crate) fn intValue(&self) -> i32 {
         self.0.expect("NullPointerException: unboxing null")
     }

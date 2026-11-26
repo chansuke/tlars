@@ -8,6 +8,7 @@
 //! - Union: outer elements, then each inner set's elements (duplicates possible);
 //! - SetCup: all of left, then all of right (duplicates); SetCap/SetDiff: left filtered;
 //! - SetPred: inner set's order, filtered by forcing the predicate.
+//!
 //! `x' \in S` and Init's `x \in S` use `Native`; `\E`, `\A`, CHOOSE use `Normalized`.
 
 use super::{IntervalValue, SetPredValue, Value};

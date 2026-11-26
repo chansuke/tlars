@@ -603,8 +603,7 @@ impl<'c> Emitter<'c> {
         let mut out = Vec::new();
         let mut recv = if self.is_static { None } else { Some("self".to_string()) };
         let mut cur = self.class.clone();
-        loop {
-            let Some(p) = HIER.with(|h| h.borrow().places.get(&cur).cloned()) else { break };
+        while let Some(p) = HIER.with(|h| h.borrow().places.get(&cur).cloned()) {
             let Some(outer) = p.outer else { break };
             recv = match (recv, p.is_inner) {
                 (Some(r), true) => Some(format!("{r}.jread(|o| o.this__0.clone())")),

@@ -65,6 +65,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `getNextStatesImpl`: dispatch on node kind.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     pub(crate) fn next_impl(
         &mut self,
         a: &Action,
@@ -102,6 +103,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `getNextStatesApplImpl` (`Tool.java:1100-1548`).
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_appl(
         &mut self,
         a: &Action,
@@ -308,6 +310,7 @@ impl<'t> Ev<'t> {
 
     /// `getNextStatesApplUsrDefOp` and the `default` case: the value must be a boolean, and a
     /// true one continues with the remaining items.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_filter(
         &mut self,
         a: &Action,
@@ -397,6 +400,7 @@ impl<'t> Ev<'t> {
 
     /// Conjunction: push `args[1..]` (so they run left to right after `args[0]`), then
     /// evaluate `args[0]`. TLC: `for i = alen-1 .. 1: acts = acts.cons(args[i], c, i)`.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_conj(
         &mut self,
         a: &Action,
@@ -502,6 +506,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `processUnchanged`: bind unbound primed vars to their s0 values, test bound ones.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn process_unchanged(
         &mut self,
         a: &Action,
@@ -579,6 +584,7 @@ impl<'t> Ev<'t> {
 
     /// `verifyUnchanged`: the expression is compared in both states without synthesising any
     /// successor value.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn verify_unchanged(
         &mut self,
         a: &Action,
@@ -607,6 +613,7 @@ impl<'t> Ev<'t> {
 
     /// `getNextStatesImplSubstInKind`: cons one fresh `Thunk` (cachable = false) per
     /// substitution over the *outer* context, then recurse into the body.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_subst_in(
         &mut self,
         a: &Action,

@@ -415,12 +415,12 @@ fn constant_table(
 ) -> Result<std::collections::BTreeMap<String, OpBinding>, SpecError> {
     let mut table: std::collections::BTreeMap<String, OpBinding> = Default::default();
     for line in lines {
-        let value = cfg_value(&line.value, graph, mvs);
+        let value = cfg_value(&line.value, mvs);
         if line.args.is_empty() {
             table.insert(line.lhs.clone(), OpBinding::Value(value));
             continue;
         }
-        let args: Box<[Value]> = line.args.iter().map(|a| cfg_value(a, graph, mvs)).collect();
+        let args: Box<[Value]> = line.args.iter().map(|a| cfg_value(a, mvs)).collect();
         match table.get_mut(&line.lhs) {
             None => {
                 table.insert(line.lhs.clone(), OpBinding::Table(std::sync::Arc::from(vec![(args, value)])));
@@ -444,7 +444,7 @@ fn constant_table(
 /// `ModelConfig.parseValue`'s result as a [`Value`]: a `{...}` set stays as written
 /// (`new SetEnumValue(elems, false)`), and a model value is the instance the cfg parse
 /// created.
-fn cfg_value(value: &CfgValue, graph: &SemanticGraph, mvs: &[crate::value::ModelValue]) -> Value {
+fn cfg_value(value: &CfgValue, mvs: &[crate::value::ModelValue]) -> Value {
     match value {
         CfgValue::Int(n) => Value::Int(*n),
         CfgValue::Str(a) => Value::Str(*a),
@@ -453,7 +453,7 @@ fn cfg_value(value: &CfgValue, graph: &SemanticGraph, mvs: &[crate::value::Model
             let mv = mvs.iter().find(|m| m.name == *a).expect("the cfg parse recorded every model value it made");
             Value::Model(*mv)
         }
-        CfgValue::Set(elems) => Value::set_enum(elems.iter().map(|e| cfg_value(e, graph, mvs)).collect()),
+        CfgValue::Set(elems) => Value::set_enum(elems.iter().map(|e| cfg_value(e, mvs)).collect()),
     }
 }
 
@@ -515,11 +515,11 @@ impl ConstantPass<'_> {
             ExprNode::OpAppl { op, args, bound, .. } => {
                 // `defns` holds only the predefined names at this point; an operator found
                 // there gets its value and its arguments are not visited.
-                if let SymbolRef::OpDef(id) = *op {
-                    if let Some(v) = predefined(&graph.interner().text(graph.op_def(id).name)) {
-                        self.op_defs[id.index()] = Some(OpBinding::Value(v));
-                        return Ok(());
-                    }
+                if let SymbolRef::OpDef(id) = *op
+                    && let Some(v) = predefined(&graph.interner().text(graph.op_def(id).name))
+                {
+                    self.op_defs[id.index()] = Some(OpBinding::Value(v));
+                    return Ok(());
                 }
                 for a in args.iter() {
                     match *a {
@@ -1018,6 +1018,7 @@ impl ConfigPass {
     }
 
     /// The `args.length == 0` branch: a name that stands for another formula.
+    #[expect(clippy::too_many_arguments, reason = "the state of SpecProcessor.processConfigSpec's recursion")]
     fn config_spec_name(
         &mut self,
         pred: ExprId,

@@ -81,6 +81,9 @@ impl State {
     pub fn len(&self) -> usize {
         self.values.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
     /// `TLCState.getLevel()`.
     pub fn level(&self) -> u32 {
         self.level
