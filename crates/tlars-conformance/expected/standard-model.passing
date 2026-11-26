@@ -20,7 +20,9 @@ tlc/standard/internal/tlc_trace_violation
 tlc/standard/real_time/extends_declares_now
 tlc/standard/real_time/now_must_be_assigned
 tlc/standard/real_time/now_next_real_enumeration
+tlc/standard/real_time/rtbound_temporal_quantifier
 tlc/standard/real_time/rtbound_unused_is_harmless
+tlc/standard/real_time/rtnow_property_fails
 tlc/standard/tlc_eval/constant_in_invariant_prints_once
 tlc/standard/tlc_eval/next_state_value
 tlc/standard/tlc_eval/state_level_not_cached
