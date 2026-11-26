@@ -251,6 +251,10 @@ impl Freezer {
         self.exprs.insert(key(e), id);
         self.expr_slots.push(None);
         self.parts.expr_levels.push(level(e.getLevel()?));
+        self.parts.expr_level_params.push(Box::new([]));
+        let level_params = e.getLevelParams()?;
+        let level_params: Vec<J<SemanticNodeObj>> = if level_params.is_null() { Vec::new() } else { level_params.items() };
+        self.parts.expr_level_params[id.index()] = level_params.iter().map(|p| self.symbol(p)).collect::<JResult<_>>()?;
         let l = loc(&e.getLocation_0_via_SemanticNode()?);
         let node = match class(e) {
             "OpApplNode" => {

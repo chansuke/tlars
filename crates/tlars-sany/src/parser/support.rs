@@ -896,7 +896,7 @@ impl<E: JValue> HashSet<E> {
 }
 
 impl<E: JValue> J<HashSet<E>> {
-    fn items(&self) -> Vec<E> {
+    pub(crate) fn items(&self) -> Vec<E> {
         self.jget().0.iter().map(|(e, _)| e.clone()).collect()
     }
     pub(crate) fn add(&self, e: E) -> bool {
