@@ -787,9 +787,13 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
         implied_actions: Vec::new(),
         implied_temporals: Vec::new(),
         temporals: Vec::new(),
+        temporal_tags: Vec::new(),
+        property_names: config.properties.clone(),
+        under_property: Vec::new(),
         wraps: Vec::new(),
     };
     pass.invariants(config, tool, defns, out)?;
+    let mut spec_def = None;
     match config.specification.as_deref().filter(|s| !s.is_empty()) {
         None => pass.init_and_next(config, tool, defns)?,
         Some(spec) => {
@@ -802,6 +806,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
                         return Err(SpecError::Config { ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG, params: vec![spec.to_string()] });
                     }
                     let body = graph.op_def(d).body.expect("a user definition has a body");
+                    spec_def = Some((spec.to_string(), graph.op_def(d).loc.tlc_text(graph.interner())));
                     pass.config_spec(body, &Ctx::EMPTY, false, tool, out)?;
                 }
                 None => {
@@ -828,6 +833,20 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     }
     if pass.next_pred.is_none() && has_checks {
         return Err(SpecError::Failure { ec: Ec::TLC_CONFIG_MISSING_NEXT });
+    }
+    // `:904-916`: a lone PROPERTY whose formula every fairness conjunct of SPECIFICATION
+    // came from is implied by the specification, which TLC warns about.
+    if let Some((spec_name, spec_loc)) = &spec_def
+        && config.properties.len() == 1
+        && !pass.temporals.is_empty()
+        && pass.temporal_tags.iter().all(|&t| t)
+    {
+        let live_name = &config.properties[0];
+        if let Some(OpBinding::Replaced(d)) = defn_of(defns, &graph, live_name) {
+            let live_loc = graph.op_def(d).loc.tlc_text(graph.interner());
+            out.warning(Ec::TLC_LIVE_FORMULA_AND_FAIRNESS_TAUTOLOGY, &[live_name, &live_loc, spec_name, spec_loc])
+                .map_err(warning_as_error)?;
+        }
     }
     let model_constraints = named_checks(&config.constraints, tool, defns, out, "constraint")?;
     let action_constraints = named_checks(&config.action_constraints, tool, defns, out, "action constraint")?;
@@ -888,6 +907,14 @@ struct ConfigPass {
     implied_actions: Vec<PassCheck>,
     implied_temporals: Vec<PassCheck>,
     temporals: Vec<Pred>,
+    /// Per entry of `temporals`, whether a PROPERTY name was on the way to it (the
+    /// `PROPERTY` auxiliary `processConfigSpec` tags the `Action` with).
+    temporal_tags: Vec<bool>,
+    /// The cfg's PROPERTY names, which that tagging compares the walk's names with.
+    property_names: Vec<String>,
+    /// `processConfigSpec`'s `stack` of `OpApplNode`s: whether one of the names on the
+    /// way down is a PROPERTY name.
+    under_property: Vec<bool>,
     /// The `SubstInNode`s the walk is under, outermost first: the `subs` list
     /// `Specs.addSubsts` wraps a predicate in, in wrapping order reversed.
     wraps: Vec<ExprId>,
@@ -1242,6 +1269,36 @@ impl ConfigPass {
                 let mut ev = tool.ev(&mut locals, out);
                 (ev.opcode(op), ev.lookup(op, c, StateRef::Empty, false))
             };
+            // `stack.add(pred1)`. TLC compares the node's syntax image with the PROPERTY
+            // names; only a bare name can be equal to one, and its image is its name.
+            let named = args.is_empty() && {
+                let shown = tool.ev(&mut locals, out).symbol_name(op);
+                self.property_names.contains(&shown)
+            };
+            self.under_property.push(named);
+            let r = self.config_spec_appl(pred, op, &args, code, resolved, c, substituted, tool, out);
+            self.under_property.pop();
+            return r;
+        }
+        self.config_spec_level(pred, c, tool, out)
+    }
+
+    /// The `OpApplNode` branch of `processConfigSpec`, with the node on the stack.
+    #[expect(clippy::too_many_arguments, reason = "the state of SpecProcessor.processConfigSpec's recursion")]
+    fn config_spec_appl(
+        &mut self,
+        pred: ExprId,
+        op: tlars_sany::graph::SymbolRef,
+        args: &[ExprOrOpArg],
+        code: Option<Builtin>,
+        resolved: crate::eval::expr::Resolved,
+        c: &Ctx,
+        substituted: bool,
+        tool: &Tool,
+        out: &dyn Report,
+    ) -> Result<(), SpecError> {
+        let graph = tool.graph.clone();
+        {
             if args.is_empty() {
                 return self.config_spec_name(pred, op, c, substituted, tool, out, resolved);
             }
@@ -1259,7 +1316,7 @@ impl ConfigPass {
                 let mut locals = WorkerLocals::new(0, tool.globals.seed);
                 let c1 = {
                     let mut ev = tool.ev(&mut locals, out);
-                    ev.op_context(d, &args, c, false)
+                    ev.op_context(d, args, c, false)
                 };
                 return self.config_spec(body, &c1, substituted, tool, out);
             }
@@ -1273,7 +1330,7 @@ impl ConfigPass {
                     }
                     return Ok(());
                 }
-                Some(Builtin::Box) => return self.config_spec_box(pred, &args, c, tool, out),
+                Some(Builtin::Box) => return self.config_spec_box(pred, args, c, tool, out),
                 Some(Builtin::Nop) => return self.config_spec(args[0].expect_expr(), c, substituted, tool, out),
                 _ => {}
             }
@@ -1318,7 +1375,14 @@ impl ConfigPass {
             }
             Resolved::Binding(crate::ctx::Binding::Thunk(t)) => {
                 let (e, tc) = (t.expr, t.ctx.clone());
-                self.config_spec(e, &tc, substituted, tool, out)
+                // `stack.remove(stack.size() - 1)`: the formal parameter's reference is not
+                // a name the PROPERTY tagging should see.
+                let removed = self.under_property.pop();
+                let r = self.config_spec(e, &tc, substituted, tool, out);
+                if let Some(b) = removed {
+                    self.under_property.push(b);
+                }
+                r
             }
             Resolved::Value(Value::Bool(true)) | Resolved::Binding(crate::ctx::Binding::Value(Value::Bool(true))) => Ok(()),
             Resolved::Value(Value::Bool(false)) | Resolved::Binding(crate::ctx::Binding::Value(Value::Bool(false))) => {
@@ -1363,6 +1427,7 @@ impl ConfigPass {
             }
         }
         self.temporals.push(Pred { expr: pred, ctx: c.clone(), op_def: None, wraps: self.wraps.clone().into() });
+        self.temporal_tags.push(false);
         Ok(())
     }
 
@@ -1380,6 +1445,7 @@ impl ConfigPass {
             }
             3 => {
                 self.temporals.push(Pred { expr: pred, ctx: c.clone(), op_def: None, wraps: self.wraps.clone().into() });
+                self.temporal_tags.push(self.under_property.iter().any(|&b| b));
                 Ok(())
             }
             _ => {
