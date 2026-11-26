@@ -785,9 +785,9 @@ impl<'t> Ev<'t> {
                     let reason = format!("Attempted to evaluate an expression of form {form}, but A was not a boolean.\n{}", text(self, expr));
                     return Err(not_boolean(self, reason, expr));
                 };
-                // `<A>_e` is false and `[A]_e` true as soon as A settles it.
-                if b == angle {
-                    return Ok(Value::Bool(angle));
+                // `<A>_e` is false as soon as A is, and `[A]_e` true as soon as A is.
+                if b != angle {
+                    return Ok(Value::Bool(b));
                 }
                 let v0 = self.eval(arg(1), c, s0, StateRef::Empty, control)?;
                 let v1 = self.eval(arg(1), c, s1, StateRef::Null, control.set_primed_if_enabled())?;
