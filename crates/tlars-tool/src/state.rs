@@ -295,8 +295,9 @@ impl Snapshot {
     /// `TLCState.isSubset(s1, s2)` (`TLCState.java:259-291`), with `self` as `s2`: every
     /// variable `self` has a value for has the same value in `s1`. An equality that throws
     /// makes the answer unknown, which is not a cache hit, but two states that *are* the same
-    /// object answer yes before any value is compared.
-    pub(crate) fn covers(&self, ev: &mut crate::eval::Ev<'_>, s1: &StateRef<'_>) -> bool {
+    /// object answer yes before any value is compared. `equals` is `Value.equals`, false when
+    /// it throws.
+    pub(crate) fn covers(&self, vars: &VarTable, s1: &StateRef<'_>, mut equals: impl FnMut(&Value, &Value) -> bool) -> bool {
         if let (Some(cached), StateRef::Fun(f)) = (&self.fun, s1)
             && let Some(cell) = &f.cell
             && Arc::ptr_eq(cached, cell)
@@ -312,13 +313,13 @@ impl Snapshot {
         }
         for i in 0..self.values.len() {
             let Some(val2) = self.values.get(i) else { continue };
-            let name = ev.tool().vars().names[i];
+            let name = vars.names[i];
             // `Objects.equals(val1, val2)`, which answers yes for the same object without
             // calling `equals`. A cached state shares the values of every variable the step
             // left alone, so this is the common case.
             let equal = match s1.get(name, Some(VarSlot(i as u16))) {
                 None => false,
-                Some(val1) => val1.same_object(val2) || matches!(val1.tlc_equals(ev, val2), Ok(true)),
+                Some(val1) => val1.same_object(val2) || equals(val1, val2),
             };
             if !equal {
                 return false;
