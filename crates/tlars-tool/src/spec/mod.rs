@@ -792,6 +792,9 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
         init_preds: Vec::new(),
         next_pred: None,
         invariants: Vec::new(),
+        implied_inits: Vec::new(),
+        implied_actions: Vec::new(),
+        implied_temporals: Vec::new(),
         temporals: Vec::new(),
     };
     pass.invariants(config, tool, defns, out)?;
@@ -825,12 +828,10 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
             }
         }
     }
-    if !config.properties.is_empty() {
-        return Err(unimplemented("PROPERTY (M4)"));
-    }
+    pass.properties(config, tool, defns, out)?;
     // `:891-902`: the two completeness checks, in TLC's order.
-    let has_checks = !pass.invariants.is_empty();
-    if pass.init_preds.is_empty() && (has_checks || tool.var_count() != 0) {
+    let has_checks = !pass.implied_actions.is_empty() || !pass.invariants.is_empty() || !pass.implied_temporals.is_empty();
+    if pass.init_preds.is_empty() && (!pass.implied_inits.is_empty() || has_checks || tool.var_count() != 0) {
         return Err(SpecError::Failure { ec: Ec::TLC_CONFIG_MISSING_INIT });
     }
     if pass.next_pred.is_none() && has_checks {
@@ -850,11 +851,10 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
 
     // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
     tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
-    let ConfigPass { init_preds, next_pred, invariants, temporals } = pass;
-    tool.invariants = invariants
-        .into_iter()
-        .map(|(name, p)| NamedCheck { name, expr: p.expr, ctx: p.ctx, op_def: p.op_def })
-        .collect();
+    let ConfigPass { init_preds, next_pred, invariants, implied_inits, implied_actions, implied_temporals, temporals, .. } = pass;
+    tool.invariants = invariants.into_iter().map(PassCheck::into_named).collect();
+    tool.implied_inits = implied_inits.into_iter().map(PassCheck::into_named).collect();
+    tool.implied_actions = implied_actions.into_iter().map(PassCheck::into_named).collect();
     tool.model_constraints = model_constraints.into();
     tool.action_constraints = action_constraints.into();
     tool.view = view;
@@ -865,7 +865,10 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     tool.counter_example = counter_example;
     tool.temporal = crate::tool::Temporal {
         fairness: temporals.into_iter().map(|p| (p.expr, p.ctx)).collect(),
-        properties: Box::new([]),
+        properties: implied_temporals
+            .into_iter()
+            .map(|c| crate::tool::TemporalCheck { name: c.name, shown: c.shown.into(), expr: c.pred.expr, ctx: c.pred.ctx })
+            .collect(),
     };
     // The `Tool` constructor's splitting (`Tool.java:224-240`). Only the next-state
     // relation is split; `getInitStateSpec()` hands the initial predicates over as they are,
@@ -891,8 +894,25 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
 struct ConfigPass {
     init_preds: Vec<Pred>,
     next_pred: Option<Pred>,
-    invariants: Vec<(Atom, Pred)>,
+    invariants: Vec<PassCheck>,
+    implied_inits: Vec<PassCheck>,
+    implied_actions: Vec<PassCheck>,
+    implied_temporals: Vec<PassCheck>,
     temporals: Vec<Pred>,
+}
+
+/// A check `processConfigInvariants` or `processConfigProps` collects: the `Action`'s name
+/// (the cfg name), the name its violation message prints, and the predicate.
+struct PassCheck {
+    name: Atom,
+    shown: String,
+    pred: Pred,
+}
+
+impl PassCheck {
+    fn into_named(self) -> NamedCheck {
+        NamedCheck { name: self.name, shown: self.shown.into(), expr: self.pred.expr, ctx: self.pred.ctx, op_def: self.pred.op_def }
+    }
 }
 
 impl ConfigPass {
@@ -917,7 +937,7 @@ impl ConfigPass {
                     }
                     let body = graph.op_def(d).body.expect("a user definition has a body");
                     let atom = graph.interner().intern(name);
-                    self.invariants.push((atom, Pred { expr: body, ctx: Ctx::EMPTY, op_def: Some(d) }));
+                    self.invariants.push(PassCheck { name: atom, shown: name.clone(), pred: Pred { expr: body, ctx: Ctx::EMPTY, op_def: Some(d) } });
                 }
                 None => {
                     return Err(SpecError::Config {
@@ -936,6 +956,216 @@ impl ConfigPass {
                     });
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// The PROPERTY loop of `processConfig` (`SpecProcessor.java:815-838`).
+    fn properties(&mut self, config: &ModelConfig, tool: &Tool, defns: &Defns, out: &dyn Report) -> Result<(), SpecError> {
+        let graph = tool.graph.clone();
+        for name in &config.properties {
+            match defn_of(defns, &graph, name) {
+                Some(OpBinding::Replaced(d)) => {
+                    if !graph.op_def(d).params.is_empty() {
+                        return Err(SpecError::Config { ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG, params: vec![name.clone()] });
+                    }
+                    if graph.op_level(d) == Level::State {
+                        out.warning(Ec::TLC_LIVE_FORMULA_STATE_LEVEL, &[name]).map_err(warning_as_error)?;
+                    }
+                    let body = graph.op_def(d).body.expect("a user definition has a body");
+                    // `new Action(..., configName)` interns the cfg name, which the
+                    // definition has interned already.
+                    let config_name = graph.interner().intern(name);
+                    self.config_props(name.clone(), config_name, body, &Ctx::EMPTY, false, tool, out)?;
+                }
+                None => {
+                    return Err(SpecError::Config {
+                        ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
+                        params: vec!["property".to_string(), name.clone()],
+                    });
+                }
+                Some(OpBinding::Value(Value::Bool(true))) => {}
+                Some(other) => {
+                    let shown = binding_string(tool, &other, out)?;
+                    return Err(SpecError::Config {
+                        ec: Ec::TLC_CONFIG_ID_HAS_VALUE,
+                        params: vec!["property".to_string(), name.clone(), shown],
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `processConfigProps` (`SpecProcessor.java:1398-1607`): split a PROPERTY into implied
+    /// initial predicates, invariants (`[]P` for a state predicate `P`), implied actions
+    /// (`[][A]_v`) and implied temporal formulas. `name` is what a violation prints and
+    /// changes as the walk goes down; `config_name` stays the cfg's name.
+    ///
+    /// As in [`ConfigPass::config_spec`], a substitution is pushed onto the context instead
+    /// of wrapping the expression (`Specs.addSubsts`); `substituted` stands for `subs` not
+    /// being empty.
+    #[allow(clippy::too_many_arguments)]
+    fn config_props(
+        &mut self,
+        name: String,
+        config_name: Atom,
+        pred: ExprId,
+        c: &Ctx,
+        substituted: bool,
+        tool: &Tool,
+        out: &dyn Report,
+    ) -> Result<(), SpecError> {
+        use crate::ctx::Binding;
+        use crate::eval::expr::Resolved;
+        let graph = tool.graph.clone();
+        let mut locals = WorkerLocals::new(0, tool.globals.seed);
+        match graph.expr(pred) {
+            ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
+                let body = *body;
+                let c1 = tool.ev(&mut locals, out).subst_context(substs, c);
+                return self.config_props(name, config_name, body, &c1, true, tool, out);
+            }
+            ExprNode::LetIn { body, .. } => return self.config_props(name, config_name, *body, c, substituted, tool, out),
+            _ => {}
+        }
+        if let ExprNode::OpAppl { op, args, bound, .. } = graph.expr(pred) {
+            let (op, args) = (*op, args.clone());
+            let (code, resolved, op_name) = {
+                let mut ev = tool.ev(&mut locals, out);
+                (ev.opcode(op), ev.lookup(op, c, StateRef::Empty, false), ev.symbol_name(op))
+            };
+            let is_variable = matches!(op, tlars_sany::graph::SymbolRef::Decl(d)
+                if matches!(graph.decl(d).kind, tlars_sany::graph::DeclKind::Variable | tlars_sany::graph::DeclKind::NewVariable));
+            if args.is_empty() && !is_variable {
+                return match resolved {
+                    Resolved::UserOp(d) | Resolved::Binding(Binding::OpDef(d)) => {
+                        if !graph.op_def(d).params.is_empty() {
+                            return Err(SpecError::Config { ec: Ec::TLC_CONFIG_OP_NO_ARGS, params: vec![op_name] });
+                        }
+                        let body = graph.op_def(d).body.expect("a user definition has a body");
+                        self.config_props(op_name, config_name, body, c, substituted, tool, out)
+                    }
+                    // `val instanceof LazyValue`: an operator argument reached through the
+                    // parameterised instantiation below; go on with the argument itself.
+                    Resolved::Binding(Binding::Thunk(t)) => {
+                        let (e, tc) = (t.expr, t.ctx.clone());
+                        self.config_props(name, config_name, e, &tc, substituted, tool, out)
+                    }
+                    Resolved::Value(Value::Bool(true)) | Resolved::Binding(Binding::Value(Value::Bool(true))) => Ok(()),
+                    Resolved::Value(Value::Bool(false)) | Resolved::Binding(Binding::Value(Value::Bool(false))) => {
+                        Err(SpecError::Config { ec: Ec::TLC_CONFIG_SPEC_IS_TRIVIAL, params: vec![op_name] })
+                    }
+                    Resolved::Value(Value::Undef) | Resolved::Binding(Binding::Value(Value::Undef)) => {
+                        Err(SpecError::Config { ec: Ec::TLC_CONFIG_OP_NOT_IN_SPEC, params: vec![op_name] })
+                    }
+                    Resolved::Value(v) | Resolved::Binding(Binding::Value(v)) => {
+                        let shown = value_string(tool, &v, out)?;
+                        Err(SpecError::Config { ec: Ec::TLC_CONFIG_OP_IS_EQUAL, params: vec![op_name, shown, "property".to_string()] })
+                    }
+                    _ => Err(SpecError::Config { ec: Ec::TLC_CONFIG_OP_NOT_IN_SPEC, params: vec![op_name] }),
+                };
+            }
+            // Parameterised instantiation (`iwx4yrb9`), not under a substitution.
+            if let Resolved::UserOp(d) | Resolved::Binding(Binding::OpDef(d)) = resolved
+                && graph.op_def(d).body.is_some()
+                && !graph.op_def(d).recursive
+                && graph.op_def(d).params.len() == args.len()
+                && !substituted
+            {
+                let body = graph.op_def(d).body.expect("just checked");
+                let c1 = tool.ev(&mut locals, out).op_context(d, &args, c, false);
+                return self.config_props(op_name, config_name, body, &c1, substituted, tool, out);
+            }
+            match code {
+                Some(Builtin::BoundedForall) => {
+                    let bound = bound.as_deref().expect("a bounded quantifier has bounds");
+                    // A domain that is not constant, or fails to evaluate, leaves the
+                    // quantifier to the level-based handling below.
+                    let contexts = tool.ev(&mut locals, out).contexts(bound, c, StateRef::Empty, StateRef::Empty, EvalControl::CONST);
+                    if let Ok(mut contexts) = contexts {
+                        let body = args[0].expect_expr();
+                        let shown = graph.expr_tlc_text(body);
+                        let mut any = false;
+                        while let Some(c1) = contexts.next(&mut tool.ev(&mut locals, out)).map_err(uncaught)? {
+                            any = true;
+                            self.config_props(shown.clone(), config_name, body, &c1, substituted, tool, out)?;
+                        }
+                        if !any {
+                            return Err(SpecError::Failure { ec: Ec::TLC_LIVE_FORMULA_TAUTOLOGY });
+                        }
+                        return Ok(());
+                    }
+                }
+                Some(Builtin::ConjList | Builtin::Land) => {
+                    for a in args.iter() {
+                        let conj = a.expect_expr();
+                        self.config_props(graph.expr_tlc_text(conj), config_name, conj, c, substituted, tool, out)?;
+                    }
+                    return Ok(());
+                }
+                Some(Builtin::Box) => return self.config_props_box(name, config_name, pred, args[0].expect_expr(), c, tool, out),
+                Some(Builtin::Nop) => return self.config_props(name, config_name, args[0].expect_expr(), c, substituted, tool, out),
+                _ => {}
+            }
+        }
+        let level = tool.ev(&mut locals, out).level_bound(pred, c);
+        let check = |shown: String| PassCheck { name: config_name, shown, pred: Pred { expr: pred, ctx: c.clone(), op_def: None } };
+        match level {
+            0 | 1 => self.implied_inits.push(check(name)),
+            3 => self.implied_temporals.push(check(name)),
+            2 => {
+                let code = match graph.expr(pred) {
+                    ExprNode::OpAppl { op, .. } => tool.ev(&mut locals, out).opcode(*op),
+                    _ => None,
+                };
+                let ec = match code {
+                    Some(Builtin::SquareAct) => Ec::TLC_CONFIG_PROPERTY_ACTION_LEVEL_SQUARE_A_SUB_V,
+                    Some(Builtin::AngleAct) => Ec::TLC_CONFIG_PROPERTY_ACTION_LEVEL_ANGLE_A_SUB_V,
+                    _ => Ec::TLC_CONFIG_PROPERTY_ACTION_LEVEL,
+                };
+                let loc = graph.loc(pred).tlc_text(graph.interner());
+                return Err(SpecError::Config { ec, params: vec![name, loc] });
+            }
+            _ => return Err(SpecError::Config { ec: Ec::TLC_CONFIG_PROPERTY_NOT_CORRECTLY_DEFINED, params: vec![name] }),
+        }
+        Ok(())
+    }
+
+    /// The `[]` case of `processConfigProps`: `[][A]_v` is an implied action, `[]P` of
+    /// state level an invariant, anything else an implied temporal formula.
+    #[allow(clippy::too_many_arguments)]
+    fn config_props_box(
+        &mut self,
+        name: String,
+        config_name: Atom,
+        pred: ExprId,
+        box_arg: ExprId,
+        c: &Ctx,
+        tool: &Tool,
+        out: &dyn Report,
+    ) -> Result<(), SpecError> {
+        let graph = tool.graph.clone();
+        let mut locals = WorkerLocals::new(0, tool.globals.seed);
+        let mut ev = tool.ev(&mut locals, out);
+        let applied = match graph.expr(box_arg) {
+            ExprNode::OpAppl { op, args, .. } => Some((*op, args.is_empty())),
+            _ => None,
+        };
+        let check = |shown: String, expr: ExprId| PassCheck { name: config_name, shown, pred: Pred { expr, ctx: c.clone(), op_def: None } };
+        if let Some((op, _)) = applied
+            && ev.opcode(op) == Some(Builtin::SquareAct)
+        {
+            // `boxArg1.getArgs().length == 0` never holds for `[A]_v`, so the name stays.
+            self.implied_actions.push(check(name, box_arg));
+        } else if ev.level_bound(box_arg, c) < 2 {
+            let shown = match applied {
+                Some((op, true)) => ev.symbol_name(op),
+                _ => name,
+            };
+            self.invariants.push(check(shown, box_arg));
+        } else {
+            self.implied_temporals.push(check(name, pred));
         }
         Ok(())
     }
@@ -1246,7 +1476,7 @@ fn named_checks(
                     });
                 }
                 let body = graph.op_def(d).body.expect("a user definition has a body");
-                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) });
+                checks.push(NamedCheck { name: graph.interner().intern(name), shown: name.as_str().into(), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) });
             }
             None => {
                 return Err(SpecError::Config {
@@ -1359,7 +1589,7 @@ fn config_postconditions(config: &ModelConfig, tool: &Tool, defns: &Defns, out: 
                     return (Box::new([]), fail(Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG));
                 }
                 let body = graph.op_def(d).body.expect("a user definition has a body");
-                checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) });
+                checks.push(NamedCheck { name: graph.interner().intern(name), shown: name.as_str().into(), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) });
             }
             // `processModuleOverrides` puts a `defns` entry only for a definition that has a
             // matching Java method; tlars binds every definition of a `tlc2.module` class,
@@ -1620,7 +1850,7 @@ fn config_view(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<Optio
                 });
             }
             let body = graph.op_def(d).body.expect("a user definition has a body");
-            Ok(Some(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) }))
+            Ok(Some(NamedCheck { name: graph.interner().intern(name), shown: name.into(), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) }))
         }
         Some(_) => Err(SpecError::Config {
             ec: Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT,

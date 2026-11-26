@@ -496,7 +496,7 @@ impl<'a> ModelChecker<'a> {
     fn check_invariants(&self, ev: &mut Ev<'_>, cur: &Queued, succ: &State, written: bool) -> Flow {
         for id in self.tool.invariants() {
             let name = self.tool.invariant_name(id);
-            let name = ev.tool().graph().interner().text(name).to_string();
+            let name = name.to_string();
             match ev.check_invariant(id, succ) {
                 Ok(true) => {}
                 Ok(false) => {
@@ -539,7 +539,7 @@ impl<'a> ModelChecker<'a> {
     fn check_implied_actions(&self, ev: &mut Ev<'_>, cur: &Queued, succ: &State, written: bool) -> Flow {
         for id in self.tool.implied_actions() {
             let name = self.tool.implied_action_name(id);
-            let name = ev.tool().graph().interner().text(name).to_string();
+            let name = name.to_string();
             match ev.check_implied_action(id, &cur.state, succ) {
                 Ok(true) => {}
                 Ok(false) => {
@@ -1204,7 +1204,7 @@ impl InitSink<'_, '_> {
         }
         for id in mc.tool.invariants() {
             let name = mc.tool.invariant_name(id);
-            let name = ev.tool().graph().interner().text(name).to_string();
+            let name = name.to_string();
             if !ev.check_invariant(id, &state)? {
                 let shown = ev.print_initial_violation(&state)?;
                 mc.out.error(Ec::TLC_INVARIANT_VIOLATED_INITIAL, &[&name, &shown]);
@@ -1219,7 +1219,8 @@ impl InitSink<'_, '_> {
         for id in mc.tool.implied_inits() {
             if !ev.check_implied_init(id, &state)? {
                 let shown = ev.print_initial_violation(&state)?;
-                mc.out.error(Ec::TLC_PROPERTY_VIOLATED_INITIAL, &["", &shown]);
+                let name = mc.tool.implied_init_name(id).to_string();
+                mc.out.error(Ec::TLC_PROPERTY_VIOLATED_INITIAL, &[&name, &shown]);
                 self.result = Ec::TLC_PROPERTY_VIOLATED_INITIAL;
                 self.stopped = true;
                 return Err(Halt::Stop);
