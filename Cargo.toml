@@ -33,3 +33,9 @@ allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
 disallowed_macros = "deny"
 undocumented_unsafe_blocks = "deny"
+
+# CI's test profile: release speed with debug assertions on, so the debug-only cross-checks
+# (`debug_assert!`, `cfg!(debug_assertions)`) run in CI too (`cargo test --profile ci`).
+[profile.ci]
+inherits = "release"
+debug-assertions = true
