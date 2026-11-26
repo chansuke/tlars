@@ -14,6 +14,11 @@ mod driver;
 mod files;
 mod freeze;
 #[rustfmt::skip]
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "xtask jj2rs emits plain #[allow] for the shapes javac accepts; fix the emitter, not this file"
+)]
 mod generated;
 mod java;
 mod load;

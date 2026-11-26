@@ -6,3 +6,12 @@ disallowed-types = [
     { path = "std::collections::HashMap", reason = "iteration order leaks into output; use BTreeMap or tlars_java::Hashtable" },
     { path = "std::collections::HashSet", reason = "iteration order leaks into output; use BTreeSet" },
 ]
+
+# Output contract (DESIGN.md decision 9): only a `Report` writes what TLC would print.
+disallowed-macros = [
+    { path = "std::print", reason = "write TLC-visible output through tlars_msg::Report; remove debugging output" },
+    { path = "std::println", reason = "write TLC-visible output through tlars_msg::Report; remove debugging output" },
+    { path = "std::eprint", reason = "write TLC-visible output through tlars_msg::Report; remove debugging output" },
+    { path = "std::eprintln", reason = "write TLC-visible output through tlars_msg::Report; remove debugging output" },
+    { path = "std::dbg", reason = "remove debugging output before committing" },
+]

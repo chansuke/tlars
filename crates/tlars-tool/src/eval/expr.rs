@@ -203,7 +203,6 @@ impl<'t> Ev<'t> {
     /// null falls back to. The `EvaluatingValue` holds the `OpDefNode`
     /// `processModuleOverrides` bound the method to, so a cfg `<-` override that points a
     /// declaration at such a method has no definition to fall back to.
-    #[allow(clippy::too_many_arguments)]
     fn eval_pure(
         &mut self,
         op: SymbolRef,
@@ -223,7 +222,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `Tool.evalApplImpl` (`Tool.java:1903-2870`) for the operators implemented so far.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.evalAppl*, plus the resolved operator")]
     fn eval_appl(
         &mut self,
         expr: ExprId,
@@ -1019,7 +1018,7 @@ impl<'t> Ev<'t> {
     /// `getNextStatesApplEvalAppl` / the init and next `OpValue` branch: an `OpValue` is
     /// applied to the arguments, and anything else is the value itself. The variants
     /// `next_appl` and `init_appl` handle before this are not reached.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.evalAppl*, plus the resolved operator")]
     pub(crate) fn apply_resolved(
         &mut self,
         resolved: Resolved,

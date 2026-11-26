@@ -118,7 +118,10 @@ pub fn last_error_string(errno: i32, _locale: &Locale) -> String {
 
 /// The C locale's text, which is what `std::io::Error` prints before its ` (os error N)`
 /// suffix. Compiled everywhere so the fallback is built and tested on the host CI runs on.
-#[cfg_attr(all(target_os = "linux", target_env = "gnu"), allow(dead_code))]
+#[cfg_attr(
+    all(target_os = "linux", target_env = "gnu", not(test)),
+    expect(dead_code, reason = "only the non-glibc last_error_string and the tests call it here")
+)]
 fn c_locale_message(errno: i32) -> String {
     let text = std::io::Error::from_raw_os_error(errno).to_string();
     let suffix = format!(" (os error {errno})");

@@ -8,3 +8,6 @@ license.workspace = true
 tlars-java = { path = "../tlars-java" }
 tlars-msg = { path = "../tlars-msg" }
 tlars-sany = { path = "../tlars-sany" }
+
+[lints]
+workspace = true

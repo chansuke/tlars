@@ -365,7 +365,7 @@ impl<'t> Ev<'t> {
 
     /// `x' \in S` and `x' \subseteq S`: bind the primed variable to each element in turn if it
     /// is still free, otherwise test what it is bound to.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.enabled* (pred, acts, ctx, s0, s1)")]
     fn enabled_in(
         &mut self,
         pred: ExprId,

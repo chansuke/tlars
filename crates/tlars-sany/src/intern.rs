@@ -62,8 +62,7 @@ pub struct Interner {
 
 struct InternTable {
     texts: Vec<Arc<str>>,
-    // Lookup index only; never iterated, so its order cannot leak into output.
-    #[allow(clippy::disallowed_types)]
+    #[expect(clippy::disallowed_types, reason = "lookup index only; never iterated, so its order cannot leak into output")]
     index: std::collections::HashMap<Arc<str>, Atom>,
 }
 

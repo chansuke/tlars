@@ -3,7 +3,7 @@
 use crate::{ExitStatus, Template};
 
 /// An `EC` constant. The discriminant is TLC's integer code.
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types, reason = "the variants are TLC's EC constant names")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(i32)]
 pub enum Ec {

@@ -82,7 +82,7 @@ impl<'t> Ev<'t> {
         r
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_impl_inner(
         &mut self,
         a: &Action,
@@ -333,7 +333,7 @@ impl<'t> Ev<'t> {
 
     /// `x' = e`, `x' \in S` and `x' \subseteq S`: bind the primed variable if it is still
     /// free, otherwise test what it is bound to.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_assign(
         &mut self,
         a: &Action,
@@ -431,7 +431,7 @@ impl<'t> Ev<'t> {
 
     /// `\A x \in S : P`: the bindings after the first become predicate items, consed in
     /// enumeration order so the list holds them reversed, exactly as TLC's loop does.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn push_forall(
         &mut self,
         a: &Action,
@@ -523,7 +523,7 @@ impl<'t> Ev<'t> {
         r
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn process_unchanged_inner(
         &mut self,
         a: &Action,

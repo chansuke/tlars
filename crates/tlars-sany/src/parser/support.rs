@@ -2,7 +2,7 @@
 //! `jj2rs/externs.rs`): the Java library subset, `UniqueString`, `Location`, `SanyOutput`,
 //! `JunctionListContext`, and the translated members listed as hand-written there.
 
-#![allow(non_snake_case)]
+#![expect(non_snake_case, reason = "the Java names generated.rs calls these by")]
 
 pub(crate) use super::files::{FileUtil, FilenameToStream, NamedInputStream, ToolIO};
 use super::generated::{
@@ -430,6 +430,7 @@ pub(crate) enum PrintStream {
 }
 
 impl PrintStream {
+    #[expect(clippy::disallowed_macros, reason = "Java's System.out, which only the translated debugging dumps write to")]
     fn write(&mut self, text: &str) {
         match self {
             PrintStream::Stdout => print!("{text}"),
