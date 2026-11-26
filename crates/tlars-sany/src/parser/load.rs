@@ -21,6 +21,7 @@ pub(crate) struct LoadJob {
     pub(crate) interner: Arc<Interner>,
     pub(crate) suppressed_codes: Vec<SanyErrorCode>,
     pub(crate) messages_as_errors: Vec<SanyErrorCode>,
+    pub(crate) host: crate::Host,
 }
 
 /// One `println` by `SimpleSanyOutput`, or one to TLC's `ToolIO.out` or `ToolIO.err`.
@@ -47,6 +48,7 @@ pub(crate) fn console(line: ConsoleLine) {
 pub(crate) fn load_on_this_thread(job: LoadJob, tx: Sender<ConsoleLine>) -> Result<graph::SemanticGraph, SanyFailed> {
     CONSOLE.with(|c| *c.borrow_mut() = Some(tx));
     support::enter(&job.interner);
+    support::set_host(job.host.clone());
     let result = run(&job);
     CONSOLE.with(|c| *c.borrow_mut() = None);
     match result {

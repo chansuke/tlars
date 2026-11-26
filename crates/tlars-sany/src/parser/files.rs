@@ -98,8 +98,7 @@ impl FilenameToStream {
         if let Some(d) = &*slot {
             return d.clone();
         }
-        let base = std::env::temp_dir();
-        let pid = std::process::id();
+        let crate::Host { temp_dir: base, pid, .. } = super::support::host();
         let mut n = 0u32;
         let dir = loop {
             let candidate = base.join(format!("tlc-{pid}-{n}"));
@@ -263,8 +262,7 @@ fn monolith_module(root: &Path, module_name: &str) -> Option<J<NamedInputStream>
 
 /// `Files.createTempDirectory(null)`.
 fn tempdir_for_monolith() -> Option<PathBuf> {
-    let base = std::env::temp_dir();
-    let pid = std::process::id();
+    let crate::Host { temp_dir: base, pid, .. } = super::support::host();
     (0..u32::MAX).map(|n| base.join(format!("tlars-{pid}-{n}"))).find(|d| std::fs::create_dir(d).is_ok())
 }
 

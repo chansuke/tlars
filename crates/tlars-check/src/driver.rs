@@ -110,6 +110,7 @@ fn model_check(session: &Session<'_>) -> Result<Ec, Exit> {
             extra_root_extends: &[],
             suppressed_codes: &session.options.sany_suppressed,
             messages_as_errors: &session.options.sany_messages_as_errors,
+            host: tlars_sany::Host { clock: session.env.clock, temp_dir: session.env.temp_dir.clone(), pid: session.env.pid },
         },
         &mut sany_out,
     );

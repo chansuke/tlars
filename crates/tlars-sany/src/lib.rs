@@ -61,6 +61,17 @@ pub trait SanyOut {
     fn err_line(&mut self, text: &str);
 }
 
+/// What SANY reads from the JVM and the OS: `System.currentTimeMillis()` and where
+/// `Files.createTempDirectory` makes its directories. The caller takes them from its `Env`.
+#[derive(Clone, Debug)]
+pub struct Host {
+    pub clock: tlars_java::time::Clock,
+    /// `java.io.tmpdir`.
+    pub temp_dir: PathBuf,
+    /// Keeps this process's temporary directory names apart from another's.
+    pub pid: u32,
+}
+
 pub struct LoadRequest<'a> {
     /// TLC's `mainFile`: the root module's file name as given, `.tla` optional.
     pub root_file: &'a str,
@@ -81,6 +92,7 @@ pub struct LoadRequest<'a> {
     /// `MP.getSanySuppressedCodes()` / `MP.getSanyMessagesAsErrorCodes()`.
     pub suppressed_codes: &'a [SanyErrorCode],
     pub messages_as_errors: &'a [SanyErrorCode],
+    pub host: Host,
 }
 
 /// SANY failed; its text has already gone to [`SanyOut`]. What `SpecProcessor.processSpec`
@@ -112,6 +124,7 @@ pub fn load(req: LoadRequest<'_>, out: &mut dyn SanyOut) -> Result<graph::Semant
         interner: req.interner.clone(),
         suppressed_codes: req.suppressed_codes.to_vec(),
         messages_as_errors: req.messages_as_errors.to_vec(),
+        host: req.host,
     };
     let (tx, rx) = std::sync::mpsc::channel();
     let worker = std::thread::Builder::new()

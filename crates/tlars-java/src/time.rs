@@ -1,5 +1,6 @@
 //! The `SimpleDateFormat` patterns TLC uses, and nothing more. The caller supplies the
-//! zone offset, so formatting is a pure function (no process time zone).
+//! zone offset, so formatting is a pure function (no process time zone). [`Clock`] is the
+//! one place that reads the system time.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Pattern {
@@ -95,6 +96,59 @@ pub fn format(pattern: Pattern, epoch_millis: i64, utc_offset_minutes: i32) -> S
         Pattern::MetaDir => format!("{yy:02}-{:02}-{:02}-{:02}-{:02}-{:02}.{:03}", c.month, c.day, c.hour, c.minute, c.second, c.millis),
         Pattern::MetaDirSeconds => {
             format!("{yy:02}-{:02}-{:02}-{:02}-{:02}-{:02}", c.month, c.day, c.hour, c.minute, c.second)
+        }
+    }
+}
+
+/// Where `System.currentTimeMillis()` and timed waits get the time.
+#[derive(Clone, Copy, Debug)]
+pub enum Clock {
+    System,
+    Fixed { epoch_millis: i64, utc_offset_minutes: i32 },
+}
+
+impl Clock {
+    /// `System.currentTimeMillis()`.
+    pub fn now_millis(&self) -> i64 {
+        match self {
+            Clock::Fixed { epoch_millis, .. } => *epoch_millis,
+            Clock::System => std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64),
+        }
+    }
+
+    /// When a wait of `timeout` that starts now gives up (`Object.wait(ms)`). A fixed clock
+    /// does not advance, so its waits end only when notified: a hermetic run prints no
+    /// progress report however long it takes.
+    pub fn deadline(&self, timeout: std::time::Duration) -> Deadline {
+        match self {
+            Clock::Fixed { .. } => Deadline::Never,
+            Clock::System => Deadline::At(std::time::Instant::now() + timeout),
+        }
+    }
+}
+
+/// The end of a timed wait, from [`Clock::deadline`].
+pub enum Deadline {
+    /// The wait ends only when it is notified.
+    Never,
+    At(std::time::Instant),
+}
+
+/// What is left of a [`Deadline`].
+pub enum Remaining {
+    Unbounded,
+    For(std::time::Duration),
+    Passed,
+}
+
+impl Deadline {
+    pub fn remaining(&self) -> Remaining {
+        match self {
+            Deadline::Never => Remaining::Unbounded,
+            Deadline::At(at) => match at.checked_duration_since(std::time::Instant::now()) {
+                Some(left) if !left.is_zero() => Remaining::For(left),
+                _ => Remaining::Passed,
+            },
         }
     }
 }
