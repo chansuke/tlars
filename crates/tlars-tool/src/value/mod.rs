@@ -23,6 +23,8 @@ mod function;
 mod golden;
 pub(crate) mod order;
 pub(crate) mod print;
+#[cfg(test)]
+mod properties;
 pub(crate) mod random;
 mod sets;
 pub(crate) mod stream;

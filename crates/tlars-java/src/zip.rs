@@ -413,4 +413,28 @@ mod tests {
             assert_eq!(gunzip(&gzip(&data)), Ok(data), "{size} bytes");
         }
     }
+
+    /// Seeded random payloads of every size class, including runs and lengths past one
+    /// stored block, come back unchanged.
+    #[test]
+    fn random_payloads_round_trip() {
+        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = || {
+            state ^= state >> 12;
+            state ^= state << 25;
+            state ^= state >> 27;
+            state.wrapping_mul(0x2545_F491_4F6C_DD1D)
+        };
+        for seed in 0..64 {
+            let len = match seed % 4 {
+                0 => next() % 16,
+                1 => next() % 1024,
+                2 => 65_535 + next() % 3,
+                _ => next() % 200_000,
+            } as usize;
+            let run = seed % 3 == 0;
+            let data: Vec<u8> = (0..len).map(|i| if run { (i / 97) as u8 } else { next() as u8 }).collect();
+            assert_eq!(gunzip(&gzip(&data)).expect("our own gzip inflates"), data, "seed {seed}, {len} bytes");
+        }
+    }
 }
