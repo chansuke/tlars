@@ -32,6 +32,7 @@ jobs:
       - name: Conformance cases that passed still pass
         run: |
           for target in expressions:assume expressions:init expressions:next expressions:invariant \
-                        standard:assume standard:init standard:next standard:invariant standard:model checker:model; do
+                        standard:assume standard:init standard:next standard:invariant standard:model checker:model \
+                        temporal:model expressions:property; do
             nix develop -c cargo run -q --release -p xtask -- conformance run --check --suite "${target%%:*}" --context "${target##*:}"
           done

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The ten conformance targets of M3's completion condition, with the summary line of each.
+# The conformance targets of the M3 and M4 completion conditions, with the summary line of each.
 # Extra arguments pass through, so `tools/conf-all.sh --check` is the same check CI makes
 # target by target, and the exit status is non-zero when any target fails.
 # Run inside `nix develop` from the repository root.
@@ -8,7 +8,7 @@ set -u
 status=0
 for target in "expressions assume" "expressions init" "expressions next" "expressions invariant" \
               "standard assume" "standard init" "standard next" "standard invariant" \
-              "standard model" "checker model"; do
+              "standard model" "checker model" "temporal model" "expressions property"; do
   suite=${target% *}
   context=${target#* }
   printf '%-22s ' "$target"
