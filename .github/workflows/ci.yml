@@ -40,7 +40,7 @@ jobs:
           nix develop -c cargo run -q -p xtask -- gen-fidelity --check
           nix develop -c cargo run -q -p xtask -- jj2rs emit --check
       - name: Tests
-        run: nix develop -c cargo test --release --workspace
+        run: nix develop -c cargo test --profile ci --workspace
       - name: Conformance cases that passed still pass
         run: |
           for target in expressions:assume expressions:init expressions:next expressions:invariant \
