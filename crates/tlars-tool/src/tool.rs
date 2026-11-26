@@ -307,8 +307,10 @@ impl Tool {
     pub fn implied_action_name(&self, id: CheckId<ImpliedAction>) -> Atom {
         self.implied_actions[id.0 as usize].name
     }
+    /// `!livenessIsTrue()`: only a temporal PROPERTY turns liveness checking on; fairness
+    /// alone is never checked (`Spec.java:358-360`).
     pub fn has_liveness(&self) -> bool {
-        !self.temporal.properties.is_empty() || !self.temporal.fairness.is_empty()
+        !self.temporal.properties.is_empty()
     }
     pub fn temporal(&self) -> &Temporal {
         &self.temporal

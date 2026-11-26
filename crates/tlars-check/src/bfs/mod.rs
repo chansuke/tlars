@@ -226,13 +226,15 @@ impl<'a> ModelChecker<'a> {
     /// `ModelChecker.modelCheckImpl`: assumptions, 2189, `do_init`, 2190/2191, `run_tlc`,
     /// final liveness check, success report, summary (2199, 2194, 2268 on success).
     fn model_check_impl(&mut self) -> Ec {
+        // The `ModelChecker` constructor builds the `LiveCheck`, whose `processLiveness`
+        // reports 2212 before `modelCheck` checks the assumptions.
+        if self.tool.has_liveness() {
+            return self.out.error(Ec::GENERAL, &["tlars does not implement liveness checking yet (M4)"]);
+        }
         let mut locals = WorkerLocals::new(0, self.seed);
         let assumptions = self.tool.ev(&mut locals, self.out).check_assumptions();
         if assumptions != Ec::NO_ERROR {
             return assumptions;
-        }
-        if self.tool.has_liveness() {
-            return self.out.error(Ec::GENERAL, &["tlars does not implement liveness checking yet (M4)"]);
         }
         self.out.message(Ec::TLC_COMPUTING_INIT, &[]);
         let mut result = match self.do_init() {
