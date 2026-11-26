@@ -30,7 +30,7 @@ pub(crate) mod tlc_ext;
 pub(crate) mod tlc_get_set;
 mod tlc_trace;
 
-pub(crate) use naturals::eval_exception;
+pub(crate) use crate::eval::eval_exception;
 
 pub(crate) use java_overrides::{JAVA_OVERRIDES, JavaOverride};
 

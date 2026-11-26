@@ -270,7 +270,7 @@ impl Value {
                     Value::Model(_) => Ok(Ordering::Greater),
                     _ => {
                         let shown = other.ppr(ev)?;
-                        Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["STRING", &shown]))
+                        Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["STRING", &shown]))
                     }
                 };
             }
@@ -286,14 +286,14 @@ impl Value {
                     return Ok(Ordering::Greater);
                 }
                 let (a, b) = (self.ppr(ev)?, other.ppr(ev)?);
-                return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[&a, &b]));
+                return Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[&a, &b]));
             }
             // `AnySet.compareTo` (`AnySet.java:27-31`) always throws, so even `ANY = ANY`
             // is an error. A non-`UserValue` never gets here: `UserValue.compareTo` has
             // already answered it above.
             UserValue::AnySet => {
                 let shown = other.ppr(ev)?;
-                return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["ANY", &shown]));
+                return Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["ANY", &shown]));
             }
             _ => return Err(EvalError::unimplemented("comparison of this special set (M2 unit 3)".into())),
         };
@@ -303,7 +303,7 @@ impl Value {
             Value::Model(_) => Ok(Ordering::Greater),
             _ => {
                 let shown = other.ppr(ev)?;
-                Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[name, &shown]))
+                Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[name, &shown]))
             }
         }
     }
@@ -501,7 +501,7 @@ impl Value {
                         _ => "STRING",
                     };
                     let shown = elem.ppr(ev)?;
-                    Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&shown, set]))
+                    Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&shown, set]))
                 }
                 // `Sequences.member`: a sequence whose elements are all in the range
                 // (`Sequences.java:392-412`).
@@ -512,7 +512,7 @@ impl Value {
                             return m.non_model_member(ev, self);
                         }
                         let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
-                        return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&e, &s]));
+                        return Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&e, &s]));
                     };
                     for e in seq.elems.iter() {
                         if !range.member(ev, e)? {
