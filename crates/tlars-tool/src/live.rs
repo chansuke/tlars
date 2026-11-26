@@ -931,7 +931,7 @@ impl<'t> Ev<'t> {
 
     /// `astToLive(tool, expr, con, level)`.
     fn ast_to_live_at(&mut self, expr: ExprId, c: &Ctx, level: u8) -> EvalResult<L> {
-        let level = if level == CONSTANT { self.level_bound(expr, c) } else { level };
+        let level = if level == CONSTANT { self.level_bound(expr, c)? } else { level };
         match level {
             CONSTANT => match self.eval(expr, c, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR)? {
                 Value::Bool(b) => Ok(arc(Live::Bool(b))),
@@ -990,7 +990,7 @@ impl<'t> Ev<'t> {
                 Resolved::UserOp(d) | Resolved::Binding(Binding::OpDef(d)) => {
                     code = self.opcode(SymbolRef::OpDef(d));
                     let recursive = code.is_none() && graph.op_def(d).recursive;
-                    let expand = code.is_none() && (!recursive || self.level_bound(expr, c) > ACTION);
+                    let expand = code.is_none() && (!recursive || self.level_bound(expr, c)? > ACTION);
                     if expand {
                         let expanded = (|| {
                             let params = graph.op_def(d).params.clone();

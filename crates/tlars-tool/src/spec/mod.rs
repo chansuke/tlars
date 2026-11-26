@@ -650,7 +650,7 @@ fn fold_module(tool: &mut Tool, defns: &mut Defns, graph: &SemanticGraph, m: &Mo
         // where SANY's rule drops an argument the body never uses: `PrintT(ENABLED A)` is
         // constant to SANY, because `PrintT(out) == TRUE` ignores `out`, while `getLevelBound`
         // walks the arguments and finds the ENABLED.
-        if { tool.ev(&mut locals, out).level_bound(body, &Ctx::EMPTY) } != 0 {
+        if { tool.ev(&mut locals, out).level_bound(body, &Ctx::EMPTY) }.map_err(uncaught)? != 0 {
             continue;
         }
         let folded = {
@@ -748,7 +748,7 @@ fn fold_substituted_constant(
             // `getLevelBound(body, Context.Empty)`, not SANY's own level (`:330`), for the same
             // reason as `fold_module`: SANY's rule drops an argument the body never uses, so
             // `PrintT(ENABLED A)` is constant to SANY while `getLevelBound` finds the ENABLED.
-            if { tool.ev(&mut locals, out).level_bound(body, &Ctx::EMPTY) } == 0 {
+            if { tool.ev(&mut locals, out).level_bound(body, &Ctx::EMPTY) }.map_err(uncaught)? == 0 {
                 return Ok(());
             }
             let addendum = match e.kind {
@@ -1108,7 +1108,7 @@ impl ConfigPass {
                 _ => {}
             }
         }
-        let level = tool.ev(&mut locals, out).level_bound(pred, c);
+        let level = tool.ev(&mut locals, out).level_bound(pred, c).map_err(uncaught)?;
         let check = |shown: String| PassCheck {
             name: config_name,
             shown,
@@ -1165,7 +1165,7 @@ impl ConfigPass {
         {
             // `boxArg1.getArgs().length == 0` never holds for `[A]_v`, so the name stays.
             self.implied_actions.push(check(name, box_arg));
-        } else if ev.level_bound(box_arg, c) < 2 {
+        } else if ev.level_bound(box_arg, c).map_err(uncaught)? < 2 {
             let shown = match applied {
                 Some((op, true)) => ev.symbol_name(op),
                 _ => name,
@@ -1308,7 +1308,7 @@ impl ConfigPass {
                 let mut locals = WorkerLocals::new(0, tool.globals.seed);
                 let level = {
                     let mut ev = tool.ev(&mut locals, out);
-                    ev.level_bound(body, c)
+                    ev.level_bound(body, c).map_err(uncaught)?
                 };
                 if level == 1 {
                     self.init_preds.push(Pred { expr: body, ctx: c.clone(), op_def: Some(d), wraps: self.wraps.clone().into() });
@@ -1371,7 +1371,7 @@ impl ConfigPass {
         let mut locals = WorkerLocals::new(0, tool.globals.seed);
         let level = {
             let mut ev = tool.ev(&mut locals, out);
-            ev.level_bound(pred, c)
+            ev.level_bound(pred, c).map_err(uncaught)?
         };
         match level {
             0 | 1 => {
