@@ -2,7 +2,7 @@
 //! (`Integers.Plus` calls `Naturals.Plus`); where they differ there is one function each.
 
 use crate::error::{EvalError, EvalResult};
-use crate::eval::Ev;
+use crate::eval::{Ev, eval_exception};
 use crate::value::{IntervalValue, UserValue, Value};
 use std::sync::Arc;
 use tlars_msg::Ec;
@@ -12,11 +12,6 @@ fn int_of(v: &Value) -> i32 {
         Value::Int(n) => *n,
         _ => unreachable!("modules::apply casts IntValue parameters"),
     }
-}
-
-/// `new EvalException(ec, params)`: the message is `MP.getMessage(ec, params)`.
-pub(crate) fn eval_exception(ev: &Ev<'_>, ec: Ec, params: &[&str]) -> EvalError {
-    EvalError::eval(ec, ev.out().text(ec, params), params.iter().map(|p| p.to_string()).collect())
 }
 
 fn overflow(ev: &Ev<'_>, text: String) -> EvalError {

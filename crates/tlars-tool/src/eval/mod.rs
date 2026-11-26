@@ -196,6 +196,11 @@ pub struct Ev<'t> {
     expansions: u64,
 }
 
+/// `new EvalException(ec, params)`: the message is `MP.getMessage(ec, params)`.
+pub(crate) fn eval_exception(ev: &Ev<'_>, ec: Ec, params: &[&str]) -> EvalError {
+    EvalError::eval(ec, ev.out().text(ec, params), params.iter().map(|p| p.to_string()).collect())
+}
+
 impl<'t> Ev<'t> {
     pub(crate) fn new(tool: &'t Tool, locals: &'t mut WorkerLocals, out: &'t dyn Report) -> Self {
         Ev { tool, locals, out, depth: 0, expansions: 0 }

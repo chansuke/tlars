@@ -31,7 +31,6 @@ const TOOL_UPWARD_EDGES: &[(&str, &str)] = &[
     ("symmetry", "eval"),
     // `value` takes `&mut Ev` as TLC's values take the `Tool`; this one stays (DESIGN.md).
     ("value", "eval"),
-    ("value", "modules"),
     ("value", "spec"),
     ("value", "symmetry"),
 ];
