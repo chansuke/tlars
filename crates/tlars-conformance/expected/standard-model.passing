@@ -31,6 +31,7 @@ tlc/standard/tlc_ext/cache_state_level
 tlc/standard/tlc_ext/counterexample_deadlock
 tlc/standard/tlc_ext/counterexample_init_violation
 tlc/standard/tlc_ext/counterexample_invariant_violation
+tlc/standard/tlc_ext/counterexample_liveness_loop
 tlc/standard/tlc_ext/counterexample_no_violation
 tlc/standard/tlc_ext/defer_bfs_never_runs
 tlc/standard/tlc_ext/eval_def_instance_module

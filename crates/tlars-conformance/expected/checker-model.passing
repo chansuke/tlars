@@ -811,6 +811,7 @@ tlc/checker/view/merged_state_not_explored
 tlc/checker/view/merged_state_skips_invariant
 tlc/checker/view/merges_by_view
 tlc/checker/view/nonenumerable_view
+tlc/checker/view/view_fairness_liveness_warning
 tlc/checker/view/view_flag_initial_violation
 tlc/checker/view/view_flag_prints_view
 tlc/checker/view/view_flag_with_alias
