@@ -16,7 +16,7 @@ version = "0.0.0"
 edition = "2024"
 license = "MIT"
 
-# std only: no [workspace.dependencies] beyond path crates.
+# No [workspace.dependencies] beyond path crates. The binary links mimalloc as its allocator.
 
 # Release code with symbols, for samply/perf (`cargo build --profile profiling`).
 [profile.profiling]

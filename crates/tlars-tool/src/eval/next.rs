@@ -112,9 +112,9 @@ impl<'t> Ev<'t> {
         s1: &mut PartialState,
         sink: &mut dyn NextSink,
     ) -> Flow {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         let ExprNode::OpAppl { op, args, .. } = graph.expr(pred) else { unreachable!() };
-        let (op, args) = (*op, args.clone());
+        let (op, args) = (*op, &**args);
         let mut code = self.opcode(op);
         if code.is_none() {
             // A user-defined operator, unless a cfg override or INSTANCE put a built-in here.
@@ -123,9 +123,15 @@ impl<'t> Ev<'t> {
                     code = self.opcode(tlars_sany::graph::SymbolRef::OpDef(d));
                     if code.is_none() {
                         let body = graph.op_def(d).body.expect("a user definition has a body");
-                        let c1 = self.op_context(d, &args, c, true);
+                        let c1 = self.op_context(d, args, c, true);
                         return self.next_impl(a, body, acts, &c1, s0, s1, sink);
                     }
+                }
+                // `Tool.java:1129-1132`.
+                Resolved::Thm(t) => {
+                    let body = graph.thm(t).body;
+                    let c1 = self.thm_context(t, args, c);
+                    return self.next_impl(a, body, acts, &c1, s0, s1, sink);
                 }
                 Resolved::Binding(Binding::Thunk(t)) => {
                     match t.cached(self, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR) {
@@ -139,7 +145,7 @@ impl<'t> Ev<'t> {
                 other => {
                     // `getNextStatesApplEvalAppl`: an `OpValue` is applied to the arguments,
                     // any other value is the result.
-                    let v = self.apply_resolved(other, op, pred, &args, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                    let v = self.apply_resolved(other, op, pred, args, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
                     return self.next_filter(a, pred, acts, s0, s1, sink, v);
                 }
             }
@@ -147,7 +153,7 @@ impl<'t> Ev<'t> {
         let Some(code) = code else { unreachable!("resolved above") };
         let arg = |i: usize| args[i].expect_expr();
         match code {
-            Builtin::ConjList | Builtin::Land => self.next_conj(a, &args, acts, c, s0, s1, sink),
+            Builtin::ConjList | Builtin::Land => self.next_conj(a, args, acts, c, s0, s1, sink),
             Builtin::DisjList | Builtin::Lor => {
                 for arg in args.iter() {
                     self.next_impl(a, arg.expect_expr(), acts, c, s0, s1, sink)?;
@@ -236,7 +242,7 @@ impl<'t> Ev<'t> {
                 let fval = self.eval(arg(0), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::KEEP_LAZY)?;
                 let fval = match &fval {
                     Value::FcnLambda(l) if l.converted.get().is_none() => {
-                        let c1 = self.fcn_context(l, &args, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
+                        let c1 = self.fcn_context(l, args, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
                         let body = l.body;
                         return self.next_impl(a, body, acts, &c1, s0, s1, sink);
                     }
@@ -255,7 +261,7 @@ impl<'t> Ev<'t> {
                 let bval = fval.apply(self, &argv, EvalControl::CLEAR)?;
                 let Value::Bool(b) = bval else {
                     let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["next states", "boolean", &graph.expr_tlc_text(pred)]);
-                    return Err(EvalError { loc: Some(graph.loc(arg(1))), ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message) }.into());
+                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message).with_loc(Some(graph.loc(arg(1)))).into());
                 };
                 if b { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
             }
@@ -268,9 +274,9 @@ impl<'t> Ev<'t> {
                 self.next_impl(a, arg(0), acts, c, s0, s1, sink)?;
                 self.process_unchanged(a, args[1].expect_expr(), acts, c, s0, s1, sink)
             }
-            Builtin::Eq => self.next_assign(a, pred, &args, acts, c, s0, s1, sink, Assign::Eq),
-            Builtin::In => self.next_assign(a, pred, &args, acts, c, s0, s1, sink, Assign::In),
-            Builtin::Subseteq => self.next_assign(a, pred, &args, acts, c, s0, s1, sink, Assign::Subseteq),
+            Builtin::Eq => self.next_assign(a, pred, args, acts, c, s0, s1, sink, Assign::Eq),
+            Builtin::In => self.next_assign(a, pred, args, acts, c, s0, s1, sink, Assign::In),
+            Builtin::Subseteq => self.next_assign(a, pred, args, acts, c, s0, s1, sink, Assign::Subseteq),
             Builtin::Implies => {
                 let v = self.eval(arg(0), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
                 match v {
@@ -310,14 +316,11 @@ impl<'t> Ev<'t> {
         v: Value,
     ) -> Flow {
         let Value::Bool(b) = v else {
-            let graph = self.tool.graph.clone();
+            let graph = &self.tool().graph;
             let shown = v.to_tlc_string(self)?;
             let message =
                 self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["next states", "boolean", &shown, &graph.expr_tlc_text(pred)]);
-            return Err(EvalError {
-                loc: Some(graph.loc(pred)),
-                ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
-            }
+            return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred)))
             .into());
         };
         if b { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
@@ -338,7 +341,7 @@ impl<'t> Ev<'t> {
         sink: &mut dyn NextSink,
         kind: Assign,
     ) -> Flow {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         let Some(slot) = self.get_primed_var_slot(args[0].expect_expr(), c, false) else {
             // Not an assignment: TLC casts the value to a BoolValue without checking.
             let v = self.eval(pred, c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
@@ -474,14 +477,11 @@ impl<'t> Ev<'t> {
                 ActKind::Conj(_) | ActKind::Pred => {
                     let v = self.eval(item.pred, item.ctx, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
                     let Value::Bool(b) = v else {
-                        let graph = self.tool.graph.clone();
+                        let graph = &self.tool().graph;
                         let shown = v.to_tlc_string(self)?;
                         let text = graph.expr_tlc_text(item.pred);
                         let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["next states", "boolean", &shown, &text]);
-                        return Err(EvalError {
-                            loc: Some(graph.loc(item.pred)),
-                            ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
-                        }
+                        return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(item.pred)))
                         .into());
                     };
                     if !b {
@@ -530,7 +530,7 @@ impl<'t> Ev<'t> {
         s1: &mut PartialState,
         sink: &mut dyn NextSink,
     ) -> Flow {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         if let Some(slot) = self.get_var_slot(expr, c, false) {
             let val0 = s0.get(slot).clone();
             match s1.lookup(slot).cloned() {
@@ -551,7 +551,7 @@ impl<'t> Ev<'t> {
             }
         }
         if let ExprNode::OpAppl { op, args, .. } = graph.expr(expr) {
-            let (op, args) = (*op, args.clone());
+            let (op, args) = (*op, &**args);
             if self.opcode(op) == Some(Builtin::Tuple) {
                 let Some((first, rest)) = args.split_first() else {
                     return self.next_continue(a, acts, s0, s1, sink);
@@ -624,7 +624,7 @@ impl<'t> Ev<'t> {
         s1: &mut PartialState,
         sink: &mut dyn NextSink,
     ) -> Flow {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         let (ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. }) = graph.expr(pred) else {
             unreachable!("only a SubstIn reaches here")
         };

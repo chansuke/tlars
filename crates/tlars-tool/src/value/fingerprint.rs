@@ -141,6 +141,11 @@ fn string_fp(ev: &Ev<'_>, fp: Fp, a: Atom) -> Fp {
     let text = ev.tool().graph().interner().text(a);
     let f = &ev.tool().fp64;
     let fp = f.extend_byte(fp, ValueKind::String as u8);
+    // ASCII is one UTF-16 unit per byte, so the bytes are the units' low bytes.
+    if text.is_ascii() {
+        let fp = f.extend_i32(fp, text.len() as i32);
+        return text.bytes().fold(fp, |fp, b| f.extend_byte(fp, b));
+    }
     let fp = f.extend_i32(fp, text.encode_utf16().count() as i32);
     f.extend_str(fp, &text)
 }

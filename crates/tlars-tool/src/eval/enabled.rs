@@ -46,7 +46,7 @@ impl<'t> Ev<'t> {
 
     /// `enabledImpl`: dispatch on node kind.
     fn enabled_impl(&mut self, pred: ExprId, acts: Acts<'_>, c: &Ctx, s0: StateRef<'_>, s1: &FunState) -> EvalResult<bool> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(pred) {
             ExprNode::OpAppl { .. } => self.enabled_appl(pred, acts, c, s0, s1),
             ExprNode::LetIn { defs, body, .. } => {
@@ -88,9 +88,9 @@ impl<'t> Ev<'t> {
 
     /// `enabledApplImpl` (`Tool.java:3073-3504`).
     fn enabled_appl(&mut self, pred: ExprId, acts: Acts<'_>, c: &Ctx, s0: StateRef<'_>, s1: &FunState) -> EvalResult<bool> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         let ExprNode::OpAppl { op, args, .. } = graph.expr(pred) else { unreachable!() };
-        let (op, args) = (*op, args.clone());
+        let (op, args) = (*op, &**args);
         let mut code = self.opcode(op);
         if code.is_none() {
             // A user-defined operator, unless a cfg override or INSTANCE put a built-in here.
@@ -109,9 +109,15 @@ impl<'t> Ev<'t> {
                     code = self.opcode(SymbolRef::OpDef(d));
                     if code.is_none() {
                         let body = graph.op_def(d).body.expect("a user definition has a body");
-                        let c1 = self.op_context(d, &args, c, true);
+                        let c1 = self.op_context(d, args, c, true);
                         return self.enabled(body, acts, &c1, s0, s1);
                     }
+                }
+                // `Tool.java:3106-3111`.
+                Resolved::Thm(t) => {
+                    let body = graph.thm(t).body;
+                    let c1 = self.thm_context(t, args, c);
+                    return self.enabled(body, acts, &c1, s0, s1);
                 }
                 // Unlike `getNextStatesAppl`, ENABLED never reads a cached `LazyValue`: it
                 // always expands the body (`Tool.java:3115-3118`).
@@ -120,7 +126,7 @@ impl<'t> Ev<'t> {
                     return self.enabled(e, acts, &tc, s0, s1);
                 }
                 other => {
-                    let v = self.apply_resolved(other, op, pred, &args, c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
+                    let v = self.apply_resolved(other, op, pred, args, c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
                     return self.enabled_filter(pred, acts, s0, s1, v);
                 }
             }
@@ -128,12 +134,12 @@ impl<'t> Ev<'t> {
         let Some(code) = code else { unreachable!("resolved above") };
         let arg = |i: usize| args[i].expect_expr();
         let temporal = |ev: &mut Ev<'_>, what: &str| -> EvalError {
-            let graph = ev.tool().graph.clone();
+            let graph = &ev.tool().graph;
             let message = ev.out().text(Ec::TLC_ENABLED_WRONG_FORMULA, &[what, &graph.expr_tlc_text(pred)]);
-            EvalError { loc: Some(graph.loc(pred)), ..EvalError::runtime(Ec::TLC_ENABLED_WRONG_FORMULA, message) }
+            EvalError::runtime(Ec::TLC_ENABLED_WRONG_FORMULA, message).with_loc(Some(graph.loc(pred)))
         };
         let encountered = |ev: &mut Ev<'_>, what: &str| -> EvalError {
-            let graph = ev.tool().graph.clone();
+            let graph = &ev.tool().graph;
             let reason = format!("In computing ENABLED, TLC encountered {what}\n{}", graph.expr_tlc_text(pred));
             EvalError::detailed(reason, Some(graph.loc(pred)))
         };
@@ -221,7 +227,7 @@ impl<'t> Ev<'t> {
                 let fval = self.eval(arg(0), c, s0, StateRef::Fun(s1), EvalControl::ENABLED.with(EvalControl::KEEP_LAZY))?;
                 let fval = match &fval {
                     Value::FcnLambda(l) if l.converted.get().is_none() => {
-                        let c1 = self.fcn_context(l, &args, c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
+                        let c1 = self.fcn_context(l, args, c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
                         let body = l.body;
                         return self.enabled(body, acts, &c1, s0, s1);
                     }
@@ -240,10 +246,7 @@ impl<'t> Ev<'t> {
                 let bval = fval.apply(self, &argv, EvalControl::ENABLED)?;
                 let Value::Bool(b) = bval else {
                     let message = self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["ENABLED", "boolean", &graph.expr_tlc_text(pred)]);
-                    return Err(EvalError {
-                        loc: Some(graph.loc(arg(1))),
-                        ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message)
-                    });
+                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message).with_loc(Some(graph.loc(arg(1)))));
                 };
                 if !b {
                     return Ok(false);
@@ -330,8 +333,8 @@ impl<'t> Ev<'t> {
             Builtin::Cdot => Err(cdot_unsupported(self, pred)),
             Builtin::Unimplemented("~>") => Err(encountered(self, "a temporal formula (a ~> b).")),
             Builtin::Unimplemented("-+->") => Err(encountered(self, "a temporal formula (a -+-> formula).")),
-            Builtin::Subseteq => self.enabled_in(pred, &args, acts, c, s0, s1, true),
-            Builtin::In => self.enabled_in(pred, &args, acts, c, s0, s1, false),
+            Builtin::Subseteq => self.enabled_in(pred, args, acts, c, s0, s1, true),
+            Builtin::In => self.enabled_in(pred, args, acts, c, s0, s1, false),
             Builtin::Nop => self.enabled(arg(0), acts, c, s0, s1),
             // Every other built-in operator is a boolean filter.
             _ => {
@@ -354,10 +357,10 @@ impl<'t> Ev<'t> {
     /// `Assert.fail(TLC_EXPECTED_EXPRESSION_IN_COMPUTING, {"ENABLED", "boolean", bval, pred})`
     /// (`Tool.java:3128-3131`), where `shown` is `bval.toString()`.
     fn enabled_expected_boolean(&mut self, pred: ExprId, shown: &str) -> EvalError {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         let message =
             self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["ENABLED", "boolean", shown, &graph.expr_tlc_text(pred)]);
-        EvalError { loc: Some(graph.loc(pred)), ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message) }
+        EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred)))
     }
 
     /// `x' \in S` and `x' \subseteq S`: bind the primed variable to each element in turn if it
@@ -373,7 +376,7 @@ impl<'t> Ev<'t> {
         s1: &FunState,
         subset: bool,
     ) -> EvalResult<bool> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         let Some(var) = self.get_primed_var(args[0].expect_expr(), c, true) else {
             let v = self.eval(pred, c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
             let Value::Bool(b) = v else { return Err(EvalError::class_cast(v.java_class(), "BoolValue")) };
@@ -458,7 +461,7 @@ impl<'t> Ev<'t> {
     }
 
     fn enabled_unchanged_impl(&mut self, expr: ExprId, acts: Acts<'_>, c: &Ctx, s0: StateRef<'_>, s1: &FunState) -> EvalResult<bool> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         // `getVar(expr, c, true)`: the cutoff keeps the search inside the ENABLED branch.
         if let Some(var) = self.get_var(expr, c, true) {
             let name = self.var_name(var);
@@ -481,7 +484,7 @@ impl<'t> Ev<'t> {
             }
         }
         if let ExprNode::OpAppl { op, args, .. } = graph.expr(expr) {
-            let (op, args) = (*op, args.clone());
+            let (op, args) = (*op, &**args);
             if self.opcode(op) == Some(Builtin::Tuple) {
                 let Some((first, rest)) = args.split_first() else {
                     return self.enabled_continue(acts, s0, s1);

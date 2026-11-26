@@ -364,6 +364,9 @@ impl SemanticGraph {
     pub fn op_def_count(&self) -> usize {
         self.op_defs.len()
     }
+    pub fn op_def_ids(&self) -> impl Iterator<Item = OpDefId> + '_ {
+        (0..self.op_defs.len()).map(|i| OpDefId::new(i as u32))
+    }
     pub fn decl_count(&self) -> usize {
         self.decls.len()
     }

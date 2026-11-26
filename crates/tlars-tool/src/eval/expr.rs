@@ -32,6 +32,9 @@ pub(crate) enum Resolved {
     /// apart from `Undef` is what lets every caller stop as unimplemented instead of
     /// reporting an undefined operator. The level is the override's `minLevel`.
     Unimplemented { min_level: u8 },
+    /// A theorem or assumption name, which `lookup` returns as the `ThmOrAssumpDefNode`
+    /// itself; the evaluator expands its body like a definition's (`Tool.java:2050-2061`).
+    Thm(tlars_sany::graph::ThmId),
 }
 
 impl<'t> Ev<'t> {
@@ -45,7 +48,7 @@ impl<'t> Ev<'t> {
 
     /// `Tool.evalImpl` (`Tool.java:1795-1850`).
     fn eval_impl(&mut self, expr: ExprId, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Value> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(expr) {
             ExprNode::OpAppl { op, args, bound, .. } => self.eval_appl(expr, *op, args, bound.as_deref(), c, s0, s1, control),
             ExprNode::Label { body, .. } => self.eval(*body, c, s0, s1, control),
@@ -111,6 +114,9 @@ impl<'t> Ev<'t> {
                 // `lookup` returns the unimplemented `MethodValue` itself; passing it on as
                 // a value makes the use site report it.
                 Resolved::Var(_) | Resolved::Unimplemented { .. } => Binding::Value(Value::Undef),
+                // TLC binds the `ThmOrAssumpDefNode` itself, which the use site then expands.
+                // No binding carries a theorem, so the use site reports an undefined name.
+                Resolved::Thm(_) => Binding::Value(Value::Undef),
             },
             ExprOrOpArg::Absent => unreachable!("only CASE's OTHER guard is absent"),
         }
@@ -162,13 +168,26 @@ impl<'t> Ev<'t> {
             // definition body without expanding its parameters (`processConfigSpec`'s level
             // check). `lookup` then returns the node itself, which resolves to nothing
             // (`SymbolNodeValueLookupProvider.java:86-118`).
-            SymbolRef::Param(_) | SymbolRef::Thm(_) | SymbolRef::Module(_) => Resolved::Value(Value::Undef),
+            SymbolRef::Param(_) | SymbolRef::Module(_) => Resolved::Value(Value::Undef),
+            SymbolRef::Thm(t) => Resolved::Thm(t),
         }
+    }
+
+    /// `Spec.getOpContext(ThmOrAssumpDefNode, ..)` (`Spec.java:485-496`): the same binding
+    /// of parameters to thunks as a definition's.
+    pub(crate) fn thm_context(&mut self, thm: tlars_sany::graph::ThmId, args: &[ExprOrOpArg], c: &Ctx) -> Ctx {
+        let params = &self.tool().graph.thm(thm).params;
+        let mut c1 = c.clone();
+        for (&p, &arg) in params.iter().zip(args) {
+            let val = self.get_val(arg, c, true);
+            c1 = c1.cons(SymbolRef::Param(p), val);
+        }
+        c1
     }
 
     /// `getOpContext`: bind params to call-by-name thunks over `c`.
     pub(crate) fn op_context(&mut self, def: OpDefId, args: &[ExprOrOpArg], c: &Ctx, cachable: bool) -> Ctx {
-        let params = self.tool().graph.op_def(def).params.clone();
+        let params = &self.tool().graph.op_def(def).params;
         let mut c1 = c.clone();
         for (&p, &arg) in params.iter().zip(args) {
             let val = self.get_val(arg, c, cachable);
@@ -214,7 +233,7 @@ impl<'t> Ev<'t> {
         s1: StateRef<'_>,
         control: EvalControl,
     ) -> EvalResult<Value> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         let mut builtin = self.builtin(op);
         if builtin.is_none() {
             match self.lookup(op, c, s0, control.has(EvalControl::PRIMED)) {
@@ -274,6 +293,11 @@ impl<'t> Ev<'t> {
                 Resolved::Unimplemented { .. } => {
                     let name = self.symbol_name(op);
                     return Err(EvalError::unimplemented(format!("the Java implementation of {name}")));
+                }
+                Resolved::Thm(t) => {
+                    let body = graph.thm(t).body;
+                    let c1 = self.thm_context(t, args, c);
+                    return self.eval(body, &c1, s0, s1, control);
                 }
                 Resolved::Binding(Binding::Value(_)) | Resolved::Value(_) | Resolved::Var(_) => {
                     // Fairness on a sub-action that leaves a subscript variable unassigned
@@ -425,7 +449,7 @@ impl<'t> Ev<'t> {
                     let Value::Bool(b) = v else {
                         // `Assert.fail(TLC_EXPECTED_VALUE, {"boolean", expr}, body, c1)`.
                         let message = self.out().text(Ec::TLC_EXPECTED_VALUE, &["boolean", &text(self, expr)]);
-                        return Err(EvalError { loc: Some(graph.loc(body)), ..EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message) });
+                        return Err(EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message).with_loc(Some(graph.loc(body))));
                     };
                     if b != forall {
                         return Ok(Value::Bool(b));
@@ -468,7 +492,7 @@ impl<'t> Ev<'t> {
                     let bval = self.eval(pred, &c1, s0, s1, control)?;
                     let Value::Bool(b) = bval else {
                         let message = self.out().text(Ec::TLC_EXPECTED_VALUE, &["boolean", &text(self, expr)]);
-                        return Err(EvalError { loc: Some(graph.loc(pred)), ..EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message) });
+                        return Err(EvalError::runtime(Ec::TLC_EXPECTED_VALUE, message).with_loc(Some(graph.loc(pred))));
                     };
                     if b {
                         return Ok(val);
@@ -613,7 +637,7 @@ impl<'t> Ev<'t> {
                 let mut names = Vec::with_capacity(args.len());
                 let mut sets = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
-                    let (name, set) = pair(&graph, arg(i));
+                    let (name, set) = pair(graph, arg(i));
                     names.push(self.field_name(name));
                     sets.push(self.eval(set, c, s0, s1, control)?);
                 }
@@ -637,7 +661,7 @@ impl<'t> Ev<'t> {
                 let mut names = Vec::with_capacity(args.len());
                 let mut vals = Vec::with_capacity(args.len());
                 for i in 0..args.len() {
-                    let (name, value) = pair(&graph, arg(i));
+                    let (name, value) = pair(graph, arg(i));
                     names.push(self.field_name(name));
                     vals.push(self.eval(value, c, s0, s1, control)?);
                 }
@@ -646,11 +670,12 @@ impl<'t> Ev<'t> {
             Builtin::RcdSelect => {
                 let rval = self.eval(arg(0), c, s0, s1, control)?;
                 let sval = Value::Str(self.field_name(arg(1)));
-                let field = sval.to_tlc_string(self)?;
+                // The field is only shown in the errors; a string prints without failing.
                 if matches!(rval, Value::Record(_)) {
                     return match rval.select(self, &sval)? {
                         Some(v) => Ok(v),
                         None => {
+                            let field = sval.to_tlc_string(self)?;
                             let shown = rval.ppr(self)?;
                             let reason = format!("Attempted to select nonexistent field {field} from the record\n{shown}\n{}", text(self, expr));
                             Err(not_boolean(self, reason, expr))
@@ -658,6 +683,7 @@ impl<'t> Ev<'t> {
                     };
                 }
                 let Some(fcn) = rval.to_fcn_rcd(self)? else {
+                    let field = sval.to_tlc_string(self)?;
                     let shown = rval.ppr(self)?;
                     let reason = format!("Attempted to select field {field} from a non-record value {shown}\n{}", text(self, expr));
                     return Err(not_boolean(self, reason, expr));
@@ -722,7 +748,7 @@ impl<'t> Ev<'t> {
             Builtin::Except => {
                 let mut result = self.eval(arg(0), c, s0, s1, control)?;
                 for i in 1..args.len() {
-                    let (lhs_node, rhs_node) = pair(&graph, arg(i));
+                    let (lhs_node, rhs_node) = pair(graph, arg(i));
                     let ExprNode::OpAppl { args: cmpts, .. } = graph.expr(lhs_node) else { unreachable!("an EXCEPT path is $Seq") };
                     let mut lhs = Vec::with_capacity(cmpts.len());
                     for &cmpt in cmpts.iter() {
@@ -843,11 +869,18 @@ impl<'t> Ev<'t> {
     /// `evalImplOpArgKind` (`Tool.java:1884-1892`): an operator argument evaluated as a
     /// value, which TLC wraps in an `OpLambdaValue` carrying the context of the *use* site.
     /// `None` = the argument does not name an operator.
-    pub(crate) fn op_arg_value(&mut self, arg: ExprOrOpArg, c: &Ctx, control: EvalControl) -> EvalResult<Option<OpArgValue>> {
+    pub(crate) fn op_arg_value<'s>(
+        &mut self,
+        arg: ExprOrOpArg,
+        c: &Ctx,
+        s0: StateRef<'s>,
+        s1: StateRef<'s>,
+        control: EvalControl,
+    ) -> EvalResult<Option<OpArgValue<'s>>> {
         let ExprOrOpArg::OpArg(sym) = arg else { return Ok(None) };
         Ok(match self.lookup(sym, c, StateRef::Empty, false) {
             Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
-                Some(OpArgValue::Op { def: d, ctx: c.clone(), control })
+                Some(OpArgValue::Op { def: d, ctx: c.clone(), s0, s1, control })
             }
             Resolved::Binding(Binding::Native(id)) | Resolved::Native(id) => Some(OpArgValue::Native(id)),
             _ => None,
@@ -870,7 +903,7 @@ impl<'t> Ev<'t> {
     /// `Values.ppr(op.toString())` of an operator argument: `<Operator name>` for a
     /// definition, which for a LAMBDA is named `LAMBDA`, and the Java signature for an
     /// override (`OpLambdaValue.java:189-193`, `MethodValue.java:249-252`).
-    pub(crate) fn op_arg_text(&mut self, arg: ExprOrOpArg, op: Option<&OpArgValue>) -> EvalResult<String> {
+    pub(crate) fn op_arg_text(&mut self, arg: ExprOrOpArg, op: Option<&OpArgValue<'_>>) -> EvalResult<String> {
         if let Some(OpArgValue::Native(id)) = op {
             return Ok(format!("<Java Method: {}>", id.op().signature));
         }
@@ -881,40 +914,37 @@ impl<'t> Ev<'t> {
     }
 
     /// `OpLambdaValue.eval(args, control)` (`OpLambdaValue.java:100-119`) and
-    /// `MethodValue.eval(args)`: the body runs in the captured context, and the captured
-    /// control contributes only its Enabled bit.
-    pub(crate) fn apply_operator(&mut self, op: &OpArgValue, args: &[Value], control: EvalControl) -> EvalResult<Value> {
+    /// `MethodValue.eval(args)`: the body runs in the captured context and states, and the
+    /// captured control contributes only its Enabled bit.
+    pub(crate) fn apply_operator(&mut self, op: &OpArgValue<'_>, args: &[Value], control: EvalControl) -> EvalResult<Value> {
         match op {
             OpArgValue::Native(id) => crate::modules::apply(self, *id, args),
-            OpArgValue::Op { def, ctx, control: captured } => {
+            OpArgValue::Op { def, ctx, s0, s1, control: captured } => {
                 let def = *def;
-                let params = self.tool().graph.op_def(def).params.clone();
+                let params = &self.tool().graph.op_def(def).params;
                 let body = self.tool().graph.op_def(def).body.expect("a definition has a body");
                 let mut c1 = ctx.clone();
                 for (&p, v) in params.iter().zip(args) {
                     c1 = c1.cons(SymbolRef::Param(p), Binding::Value(v.clone()));
                 }
                 let control = if captured.has(EvalControl::ENABLED) { control.with(EvalControl::ENABLED) } else { control };
-                self.eval(body, &c1, StateRef::Empty, StateRef::Empty, control)
+                self.eval(body, &c1, *s0, *s1, control)
             }
         }
     }
 
     /// `BuiltInOPs.getOpCode(name)` for a built-in operator; `None` for everything else
     /// (user definitions, and built-ins such as TRUE that TLC binds as values).
+    #[inline]
     fn builtin(&self, op: SymbolRef) -> Option<Builtin> {
         let SymbolRef::OpDef(d) = op else { return None };
-        let def = self.tool().graph.op_def(d);
-        if def.kind != OpDefKind::BuiltIn {
-            return None;
-        }
-        Builtin::of(&self.tool().graph.interner().text(def.name))
+        self.tool().builtins[d.index()]
     }
 
     /// `Tool.contexts` (`Tool.java:4080-4110`): every domain is evaluated first; then the
     /// bindings run like an odometer with the first variable fastest.
     pub(crate) fn contexts(&mut self, bound: &BoundSymbols, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Contexts> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         let mut vars = Vec::new();
         for list in bound.lists.iter() {
             let set = self.eval(list.domain, c, s0, s1, control)?;
@@ -1034,7 +1064,7 @@ impl<'t> Ev<'t> {
                 let f = Value::FcnLambda(fcn.clone()).ppr(self)?;
                 let a = arg.ppr(self)?;
                 let at = args[0].expect_expr();
-                let graph = self.tool().graph.clone();
+                let graph = &self.tool().graph;
                 let reason = format!(
                     "In applying the function\n{f},\nthe first argument is:\n{a}which is not in its domain.\n{}",
                     graph.expr_tlc_text(at)
@@ -1089,7 +1119,7 @@ impl<'t> Ev<'t> {
     /// `Spec.getVar(expr, c, cutoff)` (`SymbolNodeValueLookupProvider.java:29-84`): the state
     /// variable `expr` denotes, if any.
     pub(crate) fn get_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<tlars_sany::graph::DeclId> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(expr) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
                 let c1 = self.subst_context(substs, c);
@@ -1115,7 +1145,7 @@ impl<'t> Ev<'t> {
 
     /// `Spec.getPrimedVar` (`Spec.java:138-205`): the variable `expr` primes, if any.
     pub(crate) fn get_primed_var(&mut self, expr: ExprId, c: &Ctx, cutoff: bool) -> Option<tlars_sany::graph::DeclId> {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(expr) {
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
                 let c1 = self.subst_context(substs, c);
@@ -1159,7 +1189,7 @@ impl<'t> Ev<'t> {
     /// The context `getVar` / `getLevelBound` build for a LET: every 0-arity definition
     /// becomes a thunk over the context so far.
     pub(crate) fn let_context(&mut self, defs: &[OpDefId], c: &Ctx) -> Ctx {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         let mut c1 = c.clone();
         for &d in defs {
             let def = graph.op_def(d);
@@ -1194,7 +1224,7 @@ impl<'t> Ev<'t> {
     /// uses to split SPECIFICATION into initial predicate, next-state relation and temporal
     /// formulas.
     pub(crate) fn level_bound(&mut self, expr: ExprId, c: &Ctx) -> u8 {
-        let graph = self.tool().graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(expr) {
             ExprNode::OpAppl { op, args, bound, .. } => {
                 if let Some(code) = self.opcode(*op) {
@@ -1287,9 +1317,10 @@ fn is_variable(tool: &crate::tool::Tool, d: tlars_sany::graph::DeclId) -> bool {
 }
 
 /// What an operator argument of a Java module resolves to: `OpLambdaValue` for a definition,
-/// `MethodValue` for another module's override.
-pub(crate) enum OpArgValue {
-    Op { def: OpDefId, ctx: Ctx, control: EvalControl },
+/// `MethodValue` for another module's override. An `OpLambdaValue` keeps the states it was
+/// built in (`Tool.java:1888-1892`), so a test that reads a variable reads the caller's.
+pub(crate) enum OpArgValue<'s> {
+    Op { def: OpDefId, ctx: Ctx, s0: StateRef<'s>, s1: StateRef<'s>, control: EvalControl },
     Native(crate::modules::NativeId),
 }
 
@@ -1462,6 +1493,18 @@ const BUILT_IN_OPS: &[&str] = &[
 ];
 
 impl Builtin {
+    /// [`Tool::builtins`](crate::tool::Tool): the opcode of each definition SANY marks
+    /// built-in, by name; `None` for every other definition.
+    pub(crate) fn table(graph: &tlars_sany::graph::SemanticGraph) -> Box<[Option<Builtin>]> {
+        graph
+            .op_def_ids()
+            .map(|d| {
+                let def = graph.op_def(d);
+                if def.kind == OpDefKind::BuiltIn { Builtin::of(&graph.interner().text(def.name)) } else { None }
+            })
+            .collect()
+    }
+
     fn of(name: &str) -> Option<Builtin> {
         Some(match name {
             "$ConjList" => Builtin::ConjList,

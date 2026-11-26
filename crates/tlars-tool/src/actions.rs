@@ -76,17 +76,17 @@ fn not_an_op_def(op: SymbolRef) -> crate::error::EvalError {
         SymbolRef::Module(_) => "ModuleNode",
     };
     let message = tlars_java::class_cast(&format!("tla2sany.semantic.{from}"), "tla2sany.semantic.OpDefNode");
-    crate::error::EvalError {
+    crate::error::EvalError::from(crate::error::EvalErrorData {
         ec: tlars_msg::Ec::GENERAL,
         message,
         loc: None,
         kind: crate::error::EvalErrorKind::Jvm { class: "java.lang.ClassCastException" },
         params: Vec::new(),
-    }
+    })
 }
 
 fn split(ev: &mut Ev<'_>, pred: ExprId, c: &Ctx, name: Option<OpDefId>, out: &mut Vec<Action>, is_init: bool) -> EvalResult<()> {
-    let graph = ev.tool().graph.clone();
+    let graph = &ev.tool().graph;
     match graph.expr(pred) {
         ExprNode::OpAppl { .. } => split_appl(ev, pred, c, name, out, is_init),
         ExprNode::LetIn { body, .. } | ExprNode::Label { body, .. } => split(ev, *body, c, name, out, is_init),
@@ -104,9 +104,9 @@ fn split(ev: &mut Ev<'_>, pred: ExprId, c: &Ctx, name: Option<OpDefId>, out: &mu
 }
 
 fn split_appl(ev: &mut Ev<'_>, pred: ExprId, c: &Ctx, name: Option<OpDefId>, out: &mut Vec<Action>, is_init: bool) -> EvalResult<()> {
-    let graph = ev.tool().graph.clone();
+    let graph = &ev.tool().graph;
     let ExprNode::OpAppl { op, args, .. } = graph.expr(pred) else { unreachable!() };
-    let (op, args) = (*op, args.clone());
+    let (op, args) = (*op, &**args);
     let mut code = ev.opcode(op);
     if code.is_none() {
         if let Resolved::UserOp(d) | Resolved::Binding(Binding::OpDef(d)) = ev.lookup(op, c, StateRef::Empty, false) {

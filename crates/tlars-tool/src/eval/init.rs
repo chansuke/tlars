@@ -44,7 +44,7 @@ impl<'t> Ev<'t> {
     }
 
     fn init_impl_inner(&mut self, pred: ExprId, acts: Acts<'_>, c: &Ctx, ps: &mut PartialState, sink: &mut dyn InitSink) -> Flow {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         match graph.expr(pred) {
             ExprNode::OpAppl { .. } => self.init_appl(pred, acts, c, ps, sink),
             ExprNode::LetIn { body, .. } | ExprNode::Label { body, .. } => self.init_impl(*body, acts, c, ps, sink),
@@ -62,9 +62,9 @@ impl<'t> Ev<'t> {
 
     /// `getInitStatesAppl` (`Tool.java:570-884`).
     fn init_appl(&mut self, pred: ExprId, acts: Acts<'_>, c: &Ctx, ps: &mut PartialState, sink: &mut dyn InitSink) -> Flow {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         let ExprNode::OpAppl { op, args, .. } = graph.expr(pred) else { unreachable!() };
-        let (op, args) = (*op, args.clone());
+        let (op, args) = (*op, &**args);
         let mut code = self.opcode(op);
         if code.is_none() {
             match self.lookup(op, c, StateRef::Partial(ps), false) {
@@ -72,9 +72,15 @@ impl<'t> Ev<'t> {
                     code = self.opcode(tlars_sany::graph::SymbolRef::OpDef(d));
                     if code.is_none() {
                         let body = graph.op_def(d).body.expect("a user definition has a body");
-                        let c1 = self.op_context(d, &args, c, true);
+                        let c1 = self.op_context(d, args, c, true);
                         return self.init_impl(body, acts, &c1, ps, sink);
                     }
+                }
+                // `Tool.java:603-609`.
+                Resolved::Thm(t) => {
+                    let body = graph.thm(t).body;
+                    let c1 = self.thm_context(t, args, c);
+                    return self.init_impl(body, acts, &c1, ps, sink);
                 }
                 Resolved::Binding(Binding::Thunk(t)) => {
                     match t.cached(self, StateRef::Partial(ps), StateRef::Null, EvalControl::CLEAR) {
@@ -86,7 +92,7 @@ impl<'t> Ev<'t> {
                     }
                 }
                 other => {
-                    let v = self.apply_resolved(other, op, pred, &args, c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
+                    let v = self.apply_resolved(other, op, pred, args, c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
                     return self.init_filter(pred, acts, ps, sink, v);
                 }
             }
@@ -189,7 +195,7 @@ impl<'t> Ev<'t> {
                 let fval = eval(self, arg(0), c, ps)?;
                 let fval = match &fval {
                     Value::FcnLambda(l) if l.converted.get().is_none() => {
-                        let c1 = self.fcn_context(l, &args, c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
+                        let c1 = self.fcn_context(l, args, c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
                         let body = l.body;
                         return self.init_impl(body, acts, &c1, ps, sink);
                     }
@@ -208,17 +214,14 @@ impl<'t> Ev<'t> {
                 let bval = fval.apply(self, &argv, EvalControl::INIT)?;
                 let Value::Bool(b) = bval else {
                     let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["initial states", "boolean", &graph.expr_tlc_text(pred)]);
-                    return Err(EvalError {
-                        loc: Some(graph.loc(arg(1))),
-                        ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message)
-                    }
+                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message).with_loc(Some(graph.loc(arg(1))))
                     .into());
                 };
                 if b { self.init_continue(acts, ps, sink) } else { Ok(()) }
             }
-            Builtin::Eq => self.init_assign(pred, &args, acts, c, ps, sink, Assign::Eq),
-            Builtin::In => self.init_assign(pred, &args, acts, c, ps, sink, Assign::In),
-            Builtin::Subseteq => self.init_assign(pred, &args, acts, c, ps, sink, Assign::Subseteq),
+            Builtin::Eq => self.init_assign(pred, args, acts, c, ps, sink, Assign::Eq),
+            Builtin::In => self.init_assign(pred, args, acts, c, ps, sink, Assign::In),
+            Builtin::Subseteq => self.init_assign(pred, args, acts, c, ps, sink, Assign::Subseteq),
             Builtin::Implies => {
                 let v = eval(self, arg(0), c, ps)?;
                 match v {
@@ -254,14 +257,11 @@ impl<'t> Ev<'t> {
     /// The `opcode == 0` tail of `getInitStatesAppl`: the value must be a boolean.
     fn init_filter(&mut self, pred: ExprId, acts: Acts<'_>, ps: &mut PartialState, sink: &mut dyn InitSink, v: Value) -> Flow {
         let Value::Bool(b) = v else {
-            let graph = self.tool.graph.clone();
+            let graph = &self.tool().graph;
             let shown = v.to_tlc_string(self)?;
             let message =
                 self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["initial states", "boolean", &shown, &graph.expr_tlc_text(pred)]);
-            return Err(EvalError {
-                loc: Some(graph.loc(pred)),
-                ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
-            }
+            return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred)))
             .into());
         };
         if b { self.init_continue(acts, ps, sink) } else { Ok(()) }
@@ -279,7 +279,7 @@ impl<'t> Ev<'t> {
         sink: &mut dyn InitSink,
         kind: Assign,
     ) -> Flow {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         let Some(slot) = self.get_var_slot(args[0].expect_expr(), c, false) else {
             // Not an assignment: TLC casts the value to a BoolValue without checking.
             let v = self.eval(pred, c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
@@ -374,14 +374,11 @@ impl<'t> Ev<'t> {
             while let Acts::Cons(item) = acts {
                 let v = self.eval(item.pred, item.ctx, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
                 let Value::Bool(b) = v else {
-                    let graph = self.tool.graph.clone();
+                    let graph = &self.tool().graph;
                     let shown = v.to_tlc_string(self)?;
                     let text = graph.expr_tlc_text(item.pred);
                     let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["initial states", "boolean", &shown, &text]);
-                    return Err(EvalError {
-                        loc: Some(graph.loc(item.pred)),
-                        ..EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
-                    }
+                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(item.pred)))
                     .into());
                 };
                 if !b {

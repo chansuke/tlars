@@ -184,7 +184,7 @@ fn select_seq_impl(
     // `MethodValue.eval` receives its arguments already evaluated, so a failure in
     // evaluating them is outside its catch; everything from the method body on is inside it.
     let sval = ev.eval(args[0].expect_expr(), c, s0, s1, control)?;
-    let test = ev.op_arg_value(args[1], c, control)?;
+    let test = ev.op_arg_value(args[1], c, s0, s1, control)?;
     let kept = select_seq_body(ev, args, c, &sval, test.as_ref());
     kept.map_err(|e| super::wrap_method(ev, "Sequences", "SelectSeq", e))
 }
@@ -194,7 +194,7 @@ fn select_seq_body(
     args: &[ExprOrOpArg],
     c: &Ctx,
     sval: &Value,
-    test: Option<&crate::eval::expr::OpArgValue>,
+    test: Option<&crate::eval::expr::OpArgValue<'_>>,
 ) -> EvalResult<Value> {
     let Some(seq) = sval.to_tuple(ev)? else {
         let shown = sval.ppr(ev)?;

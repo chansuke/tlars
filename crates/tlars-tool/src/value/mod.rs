@@ -31,7 +31,7 @@ pub(crate) use function::{Except, empty_rcd, warn};
 pub(crate) use sets::{lazy_cap, lazy_cup, lazy_diff, set_of_fcns, set_of_rcds, set_of_tuples, subset};
 
 use crate::ctx::Ctx;
-use crate::error::{EvalError, EvalResult};
+use crate::error::{EvalError, EvalErrorData, EvalResult};
 use crate::eval::{EvalControl, Ev};
 use crate::state::StateRef;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -368,6 +368,31 @@ impl Value {
     /// `Value.getSource()`. The inline variants (Bool, Int, String, ModelValue, Interval,
     /// Undef, the special constants) carry no source; TLC never sets one on them either,
     /// except on the interval a `DOMAIN <<..>>` returns.
+    /// Java's `a == b` on two values: the same object. Only the shared classes can be; a
+    /// scalar is a fresh copy here, which an identity test treats as a different object.
+    pub(crate) fn same_object(&self, other: &Value) -> bool {
+        fn same<T>(a: &Arc<T>, b: &Arc<T>) -> bool {
+            Arc::ptr_eq(a, b)
+        }
+        match (self, other) {
+            (Value::Tuple(a), Value::Tuple(b)) => same(a, b),
+            (Value::Record(a), Value::Record(b)) => same(a, b),
+            (Value::FcnRcd(a), Value::FcnRcd(b)) => same(a, b),
+            (Value::SetEnum(a), Value::SetEnum(b)) => same(a, b),
+            (Value::Subset(a), Value::Subset(b)) => same(a, b),
+            (Value::KSubset(a), Value::KSubset(b)) => same(a, b),
+            (Value::SetOfFcns(a), Value::SetOfFcns(b)) => same(a, b),
+            (Value::SetOfRcds(a), Value::SetOfRcds(b)) => same(a, b),
+            (Value::SetOfTuples(a), Value::SetOfTuples(b)) => same(a, b),
+            (Value::Union(a), Value::Union(b)) => same(a, b),
+            (Value::SetCup(a), Value::SetCup(b)) | (Value::SetCap(a), Value::SetCap(b)) | (Value::SetDiff(a), Value::SetDiff(b)) => same(a, b),
+            (Value::SetPred(a), Value::SetPred(b)) => same(a, b),
+            (Value::FcnLambda(a), Value::FcnLambda(b)) => same(a, b),
+            (Value::User(a), Value::User(b)) => same(a, b),
+            _ => false,
+        }
+    }
+
     pub(crate) fn source(&self) -> Option<ExprId> {
         match self {
             Value::Tuple(v) => v.source.get(),
@@ -416,6 +441,7 @@ impl Value {
     /// FingerprintException.getNewHead(this, e); } else { throw e; } }` that every method of
     /// every value class carries. The head of the chain is the outermost value, as
     /// `prependNewHead` builds it.
+    #[inline]
     pub(crate) fn fp<T>(&self, r: EvalResult<T>) -> EvalResult<T> {
         let Err(e) = r else { return r };
         let Some(source) = self.source() else { return Err(e) };
@@ -428,7 +454,9 @@ impl Value {
             }
             _ => vec![source],
         };
-        Err(EvalError { kind: crate::error::EvalErrorKind::Fingerprint { sources }, ..e })
+        let mut e = e;
+        e.kind = crate::error::EvalErrorKind::Fingerprint { sources };
+        Err(e)
     }
 
     pub(crate) fn kind(&self) -> ValueKind {
@@ -852,38 +880,26 @@ impl Value {
             Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Interval(_) => Ok(None),
             Value::Model(mv) => Ok(perm.get(*mv)?.map(Value::Model)),
             Value::SetEnum(set) => {
-                let elems = set.snapshot().to_vec();
-                let (vals, changed) = permute_all(ev, perm, &elems)?;
-                Ok(changed.then(|| Value::SetEnum(set_enum_arc(vals, false))))
+                Ok(permute_all(ev, perm, set.snapshot())?.map(|vals| Value::SetEnum(set_enum_arc(vals, false))))
             }
             Value::Record(r) => {
                 let (names, values) = order::record_normalized(ev, r)?;
-                let (names, values) = (names.to_vec(), values.to_vec());
-                let (vals, changed) = permute_all(ev, perm, &values)?;
-                Ok(changed.then(|| Value::Record(Value::record_arc(names, vals, true))))
+                Ok(permute_all(ev, perm, values)?.map(|vals| Value::Record(Value::record_arc(names.to_vec(), vals, true))))
             }
-            Value::Tuple(t) => {
-                let elems = t.elems.to_vec();
-                let (vals, changed) = permute_all(ev, perm, &elems)?;
-                Ok(changed.then(|| Value::tuple(vals)))
-            }
+            Value::Tuple(t) => Ok(permute_all(ev, perm, &t.elems)?.map(Value::tuple)),
             Value::FcnRcd(fcn) => {
                 let (domain, values) = fcn.normalize(ev)?;
-                let (domain, values) = (domain.map(<[Value]>::to_vec), values.to_vec());
-                let interval = fcn.interval();
-                let (vals, vchanged) = permute_all(ev, perm, &values)?;
-                match (domain, interval) {
-                    (Some(domain), _) => {
-                        let (dom, dchanged) = permute_all(ev, perm, &domain)?;
-                        if dchanged {
+                let vals = permute_all(ev, perm, values)?;
+                match (domain, fcn.interval()) {
+                    (Some(domain), _) => match (permute_all(ev, perm, domain)?, vals) {
+                        (Some(dom), vals) => {
+                            let vals = vals.unwrap_or_else(|| values.to_vec());
                             Ok(Some(Value::FcnRcd(Value::fcn_rcd_arc(dom, vals, false))))
-                        } else if vchanged {
-                            Ok(Some(Value::FcnRcd(Value::fcn_rcd_arc(domain, vals, true))))
-                        } else {
-                            Ok(None)
                         }
-                    }
-                    (None, Some(iv)) => Ok(vchanged.then(|| Value::FcnRcd(Value::fcn_rcd_interval_arc(iv, vals)))),
+                        (None, Some(vals)) => Ok(Some(Value::FcnRcd(Value::fcn_rcd_arc(domain.to_vec(), vals, true)))),
+                        (None, None) => Ok(None),
+                    },
+                    (None, Some(iv)) => Ok(vals.map(|vals| Value::FcnRcd(Value::fcn_rcd_interval_arc(iv, vals)))),
                     (None, None) => unreachable!("a function record has an explicit or an interval domain"),
                 }
             }
@@ -915,21 +931,24 @@ impl Value {
     }
 }
 
-/// One `for` loop of `permute`: the permuted elements and whether any of them is a new
-/// object, which is TLC's `changed`.
-fn permute_all(ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm, values: &[Value]) -> EvalResult<(Vec<Value>, bool)> {
-    let mut out = Vec::with_capacity(values.len());
-    let mut changed = false;
-    for v in values {
-        match v.permute(ev, perm)? {
-            Some(p) => {
-                changed = true;
-                out.push(p);
+/// One `for` loop of `permute`: the permuted elements, or `None` when none of them is a
+/// new object, which is TLC's `!changed`. The copy is only made once an element changes.
+fn permute_all(ev: &mut Ev<'_>, perm: &crate::symmetry::MvPerm, values: &[Value]) -> EvalResult<Option<Vec<Value>>> {
+    let mut out: Option<Vec<Value>> = None;
+    for (i, v) in values.iter().enumerate() {
+        match (v.permute(ev, perm)?, &mut out) {
+            (Some(p), Some(out)) => out.push(p),
+            (Some(p), None) => {
+                let mut vals = Vec::with_capacity(values.len());
+                vals.extend_from_slice(&values[..i]);
+                vals.push(p);
+                out = Some(vals);
             }
-            None => out.push(v.clone()),
+            (None, Some(out)) => out.push(v.clone()),
+            (None, None) => {}
         }
     }
-    Ok((out, changed))
+    Ok(out)
 }
 
 /// `new SetEnumValue(vals, isNorm)` as an `Arc`.
@@ -979,13 +998,13 @@ impl ValueVec {
                 // not an `Assert.TLCRuntimeException`, so no `CallStackTool` catch freezes
                 // the nested-expression stack (`ValueVec.java:90-93`).
                 let bound = self.bound;
-                return Err(EvalError {
+                return Err(EvalError::from(EvalErrorData {
                     ec: tlars_msg::Ec::GENERAL,
                     message: format!("Attempted to construct a set with too many elements (>{bound})."),
                     loc: None,
                     kind: crate::error::EvalErrorKind::Jvm { class: "util.WrongInvocationException" },
                     params: Vec::new(),
-                });
+                }));
             }
             let doubled = (self.capacity as i64 * 2).min(i64::from(i32::MAX) - 8);
             self.capacity = doubled.max(self.elems.len() as i64 + 1).min(self.bound as i64) as usize;

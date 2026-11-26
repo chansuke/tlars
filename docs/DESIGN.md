@@ -187,7 +187,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 ## Tradeoffs accepted
 
 - 約 10k 行 (TokenManager を含めて約 15k 行) の生成コードを受け入れる。引き換えに、構文と字句のエラー文が作り方の時点で一致する。
-- `Arc` の cons list と動的 lookup のコストを受け入れる。引き換えに、遅延評価とエラーの出るタイミングが TLC と同じになる。速度は M3.5 で計測し、許容できなければ同じ evaluator 内で arena 化する。
+- `Arc` の cons list と動的 lookup のコストを受け入れる。引き換えに、遅延評価とエラーの出るタイミングが TLC と同じになる。速度は M3.5 で計測し、許容できなければ同じ evaluator 内で arena 化する。M3.5 では基準を満たしたので arena 化していない。
 - 約 21 の値 variant と受け手側の型からの dispatch を受け入れる。引き換えに、印字、列挙順、エラー文が正確になる。
 - v1 では `-workers N` で違反が出たとき、TLC と同程度に非決定的になることを受け入れる。成功時の数は一致する。M6 で `-workers 1` と完全に一致させる。
 - FPSet、queue、trace、liveness graph は M6 まで in-memory で持つ。disk 版は同じ型の背後に後から差し込む。
@@ -264,6 +264,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
   - 実装結果 (2026-11-18): 転写した SANY の前段 (読み込み、意味解析、レベル検査) は、tlaplus/Examples の全 433 モジュールをそれぞれ根の仕様として動かしたとき TLC と一致した (終了コード、エラーと警告の文言を含むログ、ToolIO の出力、intern 列、`ExternalModuleTable` の dump、全演算子定義のレベル)。433 件のうち 151 件は TLC でもエラーで終わる仕様である。比較対象は `tools/golden/SemanticGolden.java` の出力で、仕様ごとに JVM を起動する。リンターと PlusCal の翻訳検証も有効にして一致した (PlusCal を含む仕様では翻訳器が実際に動き、その出力も一致する)。`tlars_sany::load` が返すグラフの全モジュールの演算子定義と名前、レベル、コンソール出力も、同じ golden と一致する。
 - 転写したコードは Java のオブジェクトモデル (`Rc<RefCell<_>>` と `JResult`) のまま動くので遅い可能性がある。パースは全 433 モジュールで約 2 秒 (release、TLC は JVM 起動込みで約 2 秒) なので、今は問題にしていない。`SyntaxTreeNode.parent` は `Rc` の循環参照になり、`setParent` を呼ぶと木がリークする。Generator に渡すときに読み替えるか、`Weak` にする。
 - `Arc` トラフィックが JIT 済み TLC に対し許容できるか。M3.5 で計測。
+  - 計測結果 (2026-11-26): 1 worker で TLC の 2.55 倍 (幾何平均、7 モデル) で、M3.5 の基準を満たした。残る差の多くは cons list の lookup と参照計数である (docs/M3.5.md)。
 - stack overflow の深さは `-Xss2m` の frame サイズ依存で一致させられない見込み。
 
 ## Phasing
@@ -274,7 +275,7 @@ crate の境界は、TLC 自身が既にインターフェースとして使っ�
 | M1 | jj2rs (parser + TokenManager)、Generator、level、SANY の出力文 | syntax/modules/errors 約 1.8k 件。Hashtable 順と intern 順をここで検証する。パーサー、読み込み、意味解析、レベル検査、リンター、PlusCal の翻訳検証、`load` は完了 (Examples 全 433 モジュールで TLC と一致) |
 | M2 | 全値クラス (order/fp/print/enumerate)、定数評価 | expressions 984 件 × 5 context |
 | M3 | 1 worker の BFS、SpecProcessor、action 分割、trace 再生、ALIAS/VIEW/SYMMETRY | checker と standard |
-| M3.5 | **性能ゲート** (新設、judge の指摘による) | 大きめの spec (Paxos 等) で TLC との速度比を計測。許容できなければ表現を見直す |
+| M3.5 | **性能ゲート** (新設、judge の指摘による) | 大きめの spec (Paxos 等) で TLC との速度比を計測。許容できなければ表現を見直す。幾何平均 3 倍以内、各ケース 5 倍以内を基準とし、1 worker で幾何平均 2.55 倍、最悪 2.88 倍で満たした (docs/M3.5.md) |
 | M4 | liveness (`LiveSpec`、graph、`SetOfStates`、SCC、lasso) | temporal 873 件 (`-lncheck final`) |
 | M5 | CLI parity (simulate/dfid/continue/difftrace/dump/dumpTrace/TE spec/coverage) | cli 194 件と生成された 54k 件 |
 | M6 | in-order commit の並列化 (`SeenOracle` を差し替え)、決定性 sweep、disk FPSet/queue/trace、checkpoint | 全コーパスを 1/2/8 worker で一致させる |

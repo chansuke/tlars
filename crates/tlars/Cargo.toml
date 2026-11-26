@@ -9,4 +9,5 @@ name = "tlars"
 path = "src/main.rs"
 
 [dependencies]
+mimalloc = { version = "0.1.52", default-features = false }
 tlars-check = { path = "../tlars-check" }

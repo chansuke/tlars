@@ -95,7 +95,7 @@ impl State {
         State { values: values.into(), level: INIT_LEVEL, uid: None }
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot { values: self.values.iter().map(|v| Some(v.clone())).collect(), fun: None }
+        Snapshot { values: SnapValues::Full(self.values.clone()), fun: None }
     }
 }
 
@@ -149,7 +149,7 @@ impl PartialState {
         Some(State { values: self.slots.iter().map(|v| v.clone().expect("all assigned")).collect(), level: self.level, uid: None })
     }
     pub(crate) fn snapshot(&self) -> Snapshot {
-        Snapshot { values: self.slots.clone(), fun: None }
+        Snapshot { values: SnapValues::Slots(self.slots.clone()), fun: None }
     }
     /// `TLCState.copy()`.
     pub fn copy(&self) -> PartialState {
@@ -248,7 +248,7 @@ impl StateRef<'_> {
     pub(crate) fn snapshot(&self, vars: &VarTable) -> Option<Snapshot> {
         match self {
             StateRef::Null => None,
-            StateRef::Empty => Some(Snapshot { values: Box::new([]), fun: None }),
+            StateRef::Empty => Some(Snapshot { values: SnapValues::Slots(Box::new([])), fun: None }),
             StateRef::Full(s) => Some(s.snapshot()),
             StateRef::Partial(p) => Some(p.snapshot()),
             // `TLCStateFun.copy()` returns `this` (`TLCStateFun.java:66-71`), so the cache
@@ -257,7 +257,7 @@ impl StateRef<'_> {
             // thunks (`getLetContext`, `getOpContext(.., true)`), so this is reached.
             StateRef::Fun(f) => {
                 let values = vars.names.iter().map(|&n| f.lookup(n).cloned()).collect();
-                Some(Snapshot { values, fun: f.cell.clone() })
+                Some(Snapshot { values: SnapValues::Slots(values), fun: f.cell.clone() })
             }
         }
     }
@@ -266,9 +266,31 @@ impl StateRef<'_> {
 /// Copy of the assigned part of a state, for `LazyValue` cache guards (`TLCState.isSubset`).
 pub(crate) struct Snapshot {
     /// The value of each `vars[]` slot, as `isSubset` reads it out of the cached state.
-    values: Box<[Option<Value>]>,
+    values: SnapValues,
     /// The cached `TLCStateFun`, for `isSubset`'s `s1 == s2` fast path.
     fun: Option<Arc<FunCell>>,
+}
+
+/// A complete state's values are immutable, so its copy shares them instead of copying
+/// each one, which `TLCStateMut.copy()` would.
+enum SnapValues {
+    Slots(Box<[Option<Value>]>),
+    Full(Arc<[Value]>),
+}
+
+impl SnapValues {
+    fn len(&self) -> usize {
+        match self {
+            SnapValues::Slots(v) => v.len(),
+            SnapValues::Full(v) => v.len(),
+        }
+    }
+    fn get(&self, i: usize) -> Option<&Value> {
+        match self {
+            SnapValues::Slots(v) => v[i].as_ref(),
+            SnapValues::Full(v) => Some(&v[i]),
+        }
+    }
 }
 
 impl Snapshot {
@@ -283,13 +305,22 @@ impl Snapshot {
         {
             return true;
         }
+        // Sharing the very values of `s1` makes every slot below the same object, which
+        // answers yes without an `equals`; this only skips the loop.
+        if let (SnapValues::Full(cached), StateRef::Full(s)) = (&self.values, s1)
+            && Arc::ptr_eq(cached, &s.values)
+        {
+            return true;
+        }
         for i in 0..self.values.len() {
-            let Some(val2) = self.values[i].clone() else { continue };
+            let Some(val2) = self.values.get(i) else { continue };
             let name = ev.tool().vars().names[i];
-            let val1 = s1.get(name, Some(VarSlot(i as u16))).cloned();
-            let equal = match val1 {
+            // `Objects.equals(val1, val2)`, which answers yes for the same object without
+            // calling `equals`. A cached state shares the values of every variable the step
+            // left alone, so this is the common case.
+            let equal = match s1.get(name, Some(VarSlot(i as u16))) {
                 None => false,
-                Some(val1) => matches!(val1.tlc_equals(ev, &val2), Ok(true)),
+                Some(val1) => val1.same_object(val2) || matches!(val1.tlc_equals(ev, val2), Ok(true)),
             };
             if !equal {
                 return false;
@@ -300,6 +331,6 @@ impl Snapshot {
 
     /// An empty snapshot stands for `TLCState.Empty`, which every state is a subset of.
     pub(crate) fn is_empty(&self) -> bool {
-        self.values.is_empty()
+        self.values.len() == 0
     }
 }

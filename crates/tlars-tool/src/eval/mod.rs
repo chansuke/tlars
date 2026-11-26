@@ -21,7 +21,7 @@ pub use alias::Aliased;
 
 use crate::actions::ActionId;
 use crate::effects::Effects;
-use crate::error::{EvalError, EvalResult, Flow};
+use crate::error::{EvalError, EvalErrorData, EvalResult, Flow};
 use crate::ctx::Ctx;
 use crate::fp64::Fp;
 use crate::state::{PartialState, State};
@@ -466,7 +466,7 @@ impl<'t> Ev<'t> {
         if self.tool.possible.is_empty() {
             return Ok(());
         }
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         for i in 0..self.tool.possible.len() {
             let (name, expr) = {
                 let check = &self.tool.possible[i];
@@ -476,14 +476,14 @@ impl<'t> Ev<'t> {
             // register, rebuilt as `new FcnRcdValue(domain, values, false)`.
             let counts = match self.possible_counts() {
                 Ok(counts) => counts,
-                Err(e) => return Err((Ec::GENERAL, vec![e.message])),
+                Err(e) => return Err((Ec::GENERAL, vec![e.into_data().message])),
             };
             if counts.iter().any(|(n, c)| *n == name && *c != 0) {
                 continue;
             }
             // `PrintT(counts) /\ FALSE`.
             if let Err(e) = crate::modules::tlc::print_t(self, &[possible_record(counts)]) {
-                return Err((Ec::GENERAL, vec![e.message]));
+                return Err((Ec::GENERAL, vec![e.into_data().message]));
             }
             let shown = graph.expr_tlc_text(expr);
             let name = graph.interner().text(name).to_string();
@@ -507,7 +507,7 @@ impl<'t> Ev<'t> {
             (Some(v), Some(d)) => Ctx::EMPTY.cons(tlars_sany::graph::SymbolRef::OpDef(d), crate::ctx::Binding::Value(v)),
             _ => Ctx::EMPTY,
         };
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         for i in 0..self.tool.postconditions.len() {
             // `isValid(pc.pred, ctxt)` evaluates in `ctxt`, not in the Action's own context,
             // which `getPostConditionSpecs` leaves empty anyway.
@@ -524,7 +524,7 @@ impl<'t> Ev<'t> {
                     let what = "a java.lang.Error raised while a POSTCONDITION is evaluated (M3)";
                     return Err((Ec::GENERAL, vec![format!("tlars does not implement {what} yet")]));
                 }
-                Err(e) => return Err((Ec::TLC_POSTCONDITION_EVALUATION_ERROR, vec![name, shown, e.message])),
+                Err(e) => return Err((Ec::TLC_POSTCONDITION_EVALUATION_ERROR, vec![name, shown, e.into_data().message])),
             }
         }
         Ok(())
@@ -565,7 +565,7 @@ impl<'t> Ev<'t> {
                 let graph = &self.tool.graph;
                 let loc = graph.loc(expr);
                 let message = self.out.text(Ec::TLC_EXPECTED_VALUE, &["boolean", &graph.expr_tlc_text(expr)]);
-                Err(EvalError { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime, params: Vec::new() })
+                Err(EvalError::from(EvalErrorData { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime, params: Vec::new() }))
             }
         }
     }
@@ -708,7 +708,7 @@ impl<'t> Ev<'t> {
     /// `Action.getLocation(name)`: the action's parameters, as bound by splitting, then the
     /// predicate's location.
     pub(crate) fn labelled(&mut self, name: &str, pred: ExprId, op_def: Option<tlars_sany::graph::OpDefId>, ctx: &crate::ctx::Ctx) -> String {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         let params = op_def.map(|d| graph.op_def(d).params.clone()).unwrap_or_default();
         let mut shown = Vec::new();
         for &p in params.iter() {
@@ -761,7 +761,7 @@ impl<'t> Ev<'t> {
     /// `Tool.checkAssumptions` (`Tool.java:3645-3663`): the root module's assumptions in
     /// order; the first false one is 2104, the first that fails to evaluate 2105.
     pub fn check_assumptions(&mut self) -> Ec {
-        let graph = self.tool.graph.clone();
+        let graph = &self.tool().graph;
         for a in graph.module(graph.root()).assumptions.iter() {
             if a.is_axiom {
                 continue;
@@ -797,7 +797,7 @@ impl<'t> Ev<'t> {
                 let graph = &self.tool.graph;
                 let loc = graph.loc(expr);
                 let message = self.out.text(Ec::TLC_EXPECTED_VALUE, &["boolean", &graph.expr_tlc_text(expr)]);
-                Err(EvalError { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime, params: Vec::new() })
+                Err(EvalError::from(EvalErrorData { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime, params: Vec::new() }))
             }
         }
     }
@@ -857,7 +857,7 @@ impl<'t> Ev<'t> {
     /// What the JVM's `StackOverflowError` becomes. It is an `Error`, so the `catch
     /// (Exception)` blocks TLC evaluates under (assumptions, invariants) let it through.
     fn stack_overflow(&self) -> EvalError {
-        EvalError { ec: Ec::SYSTEM_STACK_OVERFLOW, message: String::new(), loc: None, kind: crate::error::EvalErrorKind::StackOverflow, params: Vec::new() }
+        EvalError::from(EvalErrorData { ec: Ec::SYSTEM_STACK_OVERFLOW, message: String::new(), loc: None, kind: crate::error::EvalErrorKind::StackOverflow, params: Vec::new() })
     }
 }
 
