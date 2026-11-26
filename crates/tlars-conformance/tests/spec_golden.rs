@@ -94,7 +94,13 @@ fn materialize(case: &str, dir: &Path) -> (Vec<String>, Vec<(String, String)>) {
 /// The flag is `EvalError::unimplemented` reported out of band, as the corpus harness reads
 /// it: a spec's own `Print` could otherwise imitate the text.
 fn run_tlars(case: &str) -> (i32, String, bool) {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("spec_golden").join(case);
+    run_tlars_in(case, "spec_golden")
+}
+
+/// [`run_tlars`] with its scratch directory under `CARGO_TARGET_TMPDIR/<scratch>/<case>`, so
+/// runs of one case on several threads do not share files.
+fn run_tlars_in(case: &str, scratch: &str) -> (i32, String, bool) {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(scratch).join(case);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).expect("clear scratch");
     }
@@ -160,4 +166,39 @@ fn spec_runs_match_tlc() {
     let unrecorded: Vec<&String> = fixtures.iter().filter(|f| !cases.contains(f)).collect();
     assert!(unrecorded.is_empty(), "fixtures with no recording; run tools/golden/spec_golden.sh: {unrecorded:?}");
     assert!(failures.is_empty(), "{} mismatches:\n{}", failures.len(), failures.join("\n"));
+}
+
+/// DESIGN.md decision 10: every Java static lives in a per-run `Session`, so runs that share a
+/// process do not see each other. Each fixture runs once alone, then again on two threads at
+/// the same time that go through the fixtures in opposite orders; all three runs must agree.
+#[test]
+fn runs_in_one_process_do_not_share_state() {
+    let mut cases: Vec<String> = std::fs::read_dir(specs_dir())
+        .expect("specs directory")
+        .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+        .collect();
+    cases.sort();
+    let alone: Vec<_> = cases.iter().map(|c| run_tlars_in(c, "isolation-alone")).collect();
+    let (forward, backward) = std::thread::scope(|scope| {
+        let forward = scope.spawn(|| cases.iter().map(|c| run_tlars_in(c, "isolation-forward")).collect::<Vec<_>>());
+        let backward = scope.spawn(|| {
+            let mut runs: Vec<_> = cases.iter().rev().map(|c| run_tlars_in(c, "isolation-backward")).collect();
+            runs.reverse();
+            runs
+        });
+        (forward.join().expect("forward runs"), backward.join().expect("backward runs"))
+    });
+    let mut differ = Vec::new();
+    for (i, case) in cases.iter().enumerate() {
+        if alone[i] != forward[i] || alone[i] != backward[i] {
+            differ.push(format!("{case}\n  alone:\n{}\n  forward:\n{}\n  backward:\n{}", alone[i].1, forward[i].1, backward[i].1));
+        }
+    }
+    assert!(
+        differ.is_empty(),
+        "{} fixtures depend on what else ran in the process. Move the state into `Session` (tlars-check) \
+         or reset it in `support::enter` (tlars-sany):\n{}",
+        differ.len(),
+        differ.join("\n")
+    );
 }
