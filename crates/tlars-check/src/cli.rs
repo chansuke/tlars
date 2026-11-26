@@ -147,9 +147,7 @@ const MAX_FP_BITS: i32 = 30;
 
 /// Java's `ArrayIndexOutOfBoundsException` text for `args[index]`.
 fn out_of_bounds(index: usize, len: usize) -> CliExit {
-    CliExit::Crash {
-        exception: format!("java.lang.ArrayIndexOutOfBoundsException: Index {index} out of bounds for length {len}"),
-    }
+    CliExit::Crash { exception: format!("java.lang.ArrayIndexOutOfBoundsException: Index {index} out of bounds for length {len}") }
 }
 
 /// `TLAConstants.Files.TLA_EXTENSION` / `CONFIG_EXTENSION` stripping.
@@ -274,9 +272,10 @@ pub(crate) fn parse(args: &[String], cores: usize) -> Result<Options, CliExit> {
                     for part in args[i].split(',') {
                         if let Some(num) = part.strip_prefix("num=") {
                             // `Long.parseLong(arg.replace("num=", ""))`: a bad number crashes TLC.
-                            sim.num = Some(parse_long(&part.replace("num=", "")).map_err(|e| CliExit::Crash {
-                                exception: format!("java.lang.NumberFormatException: {}", e.message()),
-                            })?);
+                            sim.num =
+                                Some(parse_long(&part.replace("num=", "")).map_err(|e| CliExit::Crash {
+                                    exception: format!("java.lang.NumberFormatException: {}", e.message()),
+                                })?);
                             let _ = num;
                         } else if part.starts_with("file=") {
                             sim.file = Some(part.replace("file=", ""));
@@ -341,10 +340,7 @@ pub(crate) fn parse(args: &[String], cores: usize) -> Result<Options, CliExit> {
             "-invlevel" => {
                 let level = unchecked_arg!();
                 if parse_int(level).is_err() {
-                    return Err(CliExit::usage(
-                        format!("Error: An integer for -invlevel required. But encountered {level}"),
-                        o.tool_mode,
-                    ));
+                    return Err(CliExit::usage(format!("Error: An integer for -invlevel required. But encountered {level}"), o.tool_mode));
                 }
                 o.extras.invariants.push(RuntimeInvariant {
                     modules: vec!["TLC".into(), "Naturals".into()],
@@ -447,8 +443,7 @@ pub(crate) fn parse(args: &[String], cores: usize) -> Result<Options, CliExit> {
                     return Err(CliExit::usage("Error: A format and a file name for dumping traces required.", o.tool_mode));
                 }
                 let fmt = &args[i];
-                let Some(&(_, module, operator, constant)) =
-                    DUMP_TRACE_FORMATS.iter().find(|(flag, ..)| flag.eq_ignore_ascii_case(fmt))
+                let Some(&(_, module, operator, constant)) = DUMP_TRACE_FORMATS.iter().find(|(flag, ..)| flag.eq_ignore_ascii_case(fmt))
                 else {
                     return Err(CliExit::usage(format!("Error: Unknown format {fmt} given to -dumpTrace."), o.tool_mode));
                 };
@@ -512,21 +507,20 @@ pub(crate) fn parse(args: &[String], cores: usize) -> Result<Options, CliExit> {
             }
             "-seed" => {
                 let v = next_arg!("Error: seed required.");
-                o.seed = Some(parse_long(v).map_err(|_| {
-                    CliExit::usage(format!("Error: An integer for seed required. But encountered {v}"), o.tool_mode)
-                })?);
+                o.seed = Some(
+                    parse_long(v)
+                        .map_err(|_| CliExit::usage(format!("Error: An integer for seed required. But encountered {v}"), o.tool_mode))?,
+                );
             }
             "-aril" => {
                 let v = next_arg!("Error: aril required.");
-                o.aril = parse_long(v).map_err(|_| {
-                    CliExit::usage(format!("Error: An integer for aril required. But encountered {v}"), o.tool_mode)
-                })?;
+                o.aril = parse_long(v)
+                    .map_err(|_| CliExit::usage(format!("Error: An integer for aril required. But encountered {v}"), o.tool_mode))?;
             }
             "-maxSetSize" => {
                 let v = next_arg!("Error: maxSetSize required.");
-                let bound = parse_int(v).map_err(|_| {
-                    CliExit::usage(format!("Error: An integer for maxSetSize required. But encountered {v}"), o.tool_mode)
-                })?;
+                let bound = parse_int(v)
+                    .map_err(|_| CliExit::usage(format!("Error: An integer for maxSetSize required. But encountered {v}"), o.tool_mode))?;
                 if bound < 1 {
                     return Err(CliExit::usage(
                         format!("Error: Value in interval [0, {}] for maxSetSize required. But encountered {v}", i32::MAX),
@@ -551,9 +545,8 @@ pub(crate) fn parse(args: &[String], cores: usize) -> Result<Options, CliExit> {
                 let num = if v.trim().to_lowercase() == "auto" {
                     i32::try_from(cores).unwrap_or(i32::MAX)
                 } else {
-                    parse_int(v).map_err(|_| {
-                        CliExit::usage(format!("Error: worker number or 'auto' required. But encountered {v}"), o.tool_mode)
-                    })?
+                    parse_int(v)
+                        .map_err(|_| CliExit::usage(format!("Error: worker number or 'auto' required. But encountered {v}"), o.tool_mode))?
                 };
                 if num < 1 {
                     return Err(CliExit::usage("Error: at least one worker required.", o.tool_mode));
@@ -572,9 +565,8 @@ pub(crate) fn parse(args: &[String], cores: usize) -> Result<Options, CliExit> {
             }
             "-fp" => {
                 let v = next_arg!("Error: expect an integer for -fp option.");
-                let index = parse_int(v).map_err(|_| {
-                    CliExit::usage(format!("Error: A number for -fp is required. But encountered {v}"), o.tool_mode)
-                })?;
+                let index = parse_int(v)
+                    .map_err(|_| CliExit::usage(format!("Error: A number for -fp is required. But encountered {v}"), o.tool_mode))?;
                 if index < 0 || index as usize > MAX_FP_INDEX {
                     return Err(CliExit::usage(
                         format!("Error: The number for -fp must be between 0 and {MAX_FP_INDEX} (inclusive)."),
@@ -645,8 +637,7 @@ pub(crate) fn parse(args: &[String], cores: usize) -> Result<Options, CliExit> {
     }
     // SANY codes are enum constants in a `HashSet`, whose order follows identity hash
     // codes: TLC's own order is not reproducible. Names are listed in argument order.
-    let sany_overlap: Vec<&str> =
-        o.sany_suppressed.iter().filter(|c| o.sany_messages_as_errors.contains(c)).map(|c| c.name).collect();
+    let sany_overlap: Vec<&str> = o.sany_suppressed.iter().filter(|c| o.sany_messages_as_errors.contains(c)).map(|c| c.name).collect();
     if !sany_overlap.is_empty() {
         return Err(CliExit::usage(
             format!("Error: The following codes were set to both -suppressMessages and -messagesAsErrors: [{}]", sany_overlap.join(", ")),
@@ -659,8 +650,7 @@ pub(crate) fn parse(args: &[String], cores: usize) -> Result<Options, CliExit> {
     let Some(spec) = main_file else {
         return Err(CliExit::usage("Error: Missing input TLA+ module.", o.tool_mode));
     };
-    o.generate_te_spec = force_te_spec
-        || (o.generate_te_spec && !o.tool_mode && !o.continue_after_violation && !is_te_spec_file(&spec));
+    o.generate_te_spec = force_te_spec || (o.generate_te_spec && !o.tool_mode && !o.continue_after_violation && !is_te_spec_file(&spec));
     // The trace spec's binary trace (`_TLCTrace!_TLCTraceSilent` postcondition) needs the
     // run's start time for its file name, so the session adds it.
     o.spec = spec;

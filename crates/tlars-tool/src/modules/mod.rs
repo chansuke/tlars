@@ -17,6 +17,7 @@ mod any_set;
 mod bags;
 mod file;
 mod finite_sets;
+#[rustfmt::skip]
 mod java_overrides;
 mod json;
 mod naturals;
@@ -26,8 +27,8 @@ mod sequences;
 pub(crate) mod tlc;
 mod tlc_eval;
 pub(crate) mod tlc_ext;
-mod tlc_trace;
 pub(crate) mod tlc_get_set;
+mod tlc_trace;
 
 pub(crate) use naturals::eval_exception;
 
@@ -35,7 +36,7 @@ pub(crate) use java_overrides::{JAVA_OVERRIDES, JavaOverride};
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use crate::value::Value;
 use tlars_sany::graph::ExprOrOpArg;
@@ -47,8 +48,7 @@ pub(crate) type StrictFn = fn(&mut Ev<'_>, &[Value]) -> EvalResult<Value>;
 /// `@Evaluation`-style: receives unevaluated arguments (TLCGet, Assert, ...). `Ok(None)` is
 /// the Java method returning `null`, which makes `EvaluatingValue.eval` fall back to the
 /// operator's own TLA+ definition (`EvaluatingValue.java:84-88`).
-pub(crate) type LazyFn =
-    fn(&mut Ev<'_>, &[ExprOrOpArg], &Ctx, StateRef<'_>, StateRef<'_>, EvalControl) -> EvalResult<Option<Value>>;
+pub(crate) type LazyFn = fn(&mut Ev<'_>, &[ExprOrOpArg], &Ctx, StateRef<'_>, StateRef<'_>, EvalControl) -> EvalResult<Option<Value>>;
 
 #[derive(Clone, Copy)]
 pub(crate) enum NativeImpl {
@@ -285,7 +285,7 @@ fn wrap(ev: &Ev<'_>, op: &NativeOp, e: EvalError) -> EvalError {
 
 #[cfg(test)]
 mod tests {
-    use super::{JAVA_OVERRIDES, REGISTRY, java_overrides::OverrideKind, java_override};
+    use super::{JAVA_OVERRIDES, REGISTRY, java_override, java_overrides::OverrideKind};
 
     /// Every native stands for a Java override TLC really has, with the same `minLevel` and,
     /// where TLC wraps the method in a `MethodValue`, the same parameter count. A native for

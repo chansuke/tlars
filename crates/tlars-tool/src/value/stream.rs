@@ -607,9 +607,8 @@ mod tests {
         let tuple = Value::tuple;
         let s = |t: &str| Value::Str(ev.tool().graph().interner().intern(t));
         let atom = |t: &str| ev.tool().graph().interner().intern(t);
-        let record = |names: &[&str], values: Vec<Value>| {
-            Value::Record(Value::record_arc(names.iter().map(|n| atom(n)).collect(), values, false))
-        };
+        let record =
+            |names: &[&str], values: Vec<Value>| Value::Record(Value::record_arc(names.iter().map(|n| atom(n)).collect(), values, false));
         let interval = |lo, hi| Value::Interval(IntervalValue { lo, hi });
         let fcn = |domain, values, is_norm| Value::FcnRcd(Value::fcn_rcd_arc(domain, values, is_norm));
         let fcn_interval = |lo, hi, values| Value::FcnRcd(Value::fcn_rcd_interval_arc(IntervalValue { lo, hi }, values));
@@ -665,8 +664,6 @@ mod tests {
     }
 
     /// `ValueStreamGolden.STRINGS`, in the same order.
-    const GOLDEN_STRINGS: [&str; 14] = [
-        "", "x", "abc", "aa", "\u{100}A", "\u{0}A", "\u{80}\u{ff}", "\u{ff80}\u{ffff}", "bb", "zz", "q", "field",
-        "name", "other",
-    ];
+    const GOLDEN_STRINGS: [&str; 14] =
+        ["", "x", "abc", "aa", "\u{100}A", "\u{0}A", "\u{80}\u{ff}", "\u{ff80}\u{ffff}", "bb", "zz", "q", "field", "name", "other"];
 }

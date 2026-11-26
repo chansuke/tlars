@@ -10,13 +10,15 @@
 #![allow(dead_code, unused_variables)]
 
 pub mod cfg;
+#[rustfmt::skip]
 mod error_codes;
-pub mod graph;
 mod fidelity;
+pub mod graph;
 mod intern;
 mod parser;
 mod pcal;
 mod semantic;
+#[rustfmt::skip]
 mod standard_modules;
 
 pub use intern::{Atom, Interner, JavaClass};

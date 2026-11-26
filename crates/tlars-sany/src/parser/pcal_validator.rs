@@ -143,9 +143,7 @@ fn validate_lines(specification_text: &[String]) -> JResult<Vec<ValidationResult
         if let Err(e) = parsed {
             // `catch (ParseAlgorithmException | RemoveNameConflictsException e)`.
             match &e {
-                JThrow::UnrecoverableException(x)
-                    if x.jread(|o| o.is_ParseAlgorithmException() || o.is_RemoveNameConflictsException()) =>
-                {
+                JThrow::UnrecoverableException(x) if x.jread(|o| o.is_ParseAlgorithmException() || o.is_RemoveNameConflictsException()) => {
                     report_unrecoverable(e)?;
                 }
                 _ => return Err(e),

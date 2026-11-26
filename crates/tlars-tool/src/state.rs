@@ -131,13 +131,8 @@ impl PartialState {
     }
     /// `TLCStateMut.getUnassigned()`, in the order it prints them: sorted by variable name.
     pub(crate) fn unassigned(&self, vars: &VarTable, interner: &tlars_sany::Interner) -> Vec<String> {
-        let mut names: Vec<String> = self
-            .slots
-            .iter()
-            .enumerate()
-            .filter(|(_, v)| v.is_none())
-            .map(|(i, _)| interner.text(vars.names[i]).to_string())
-            .collect();
+        let mut names: Vec<String> =
+            self.slots.iter().enumerate().filter(|(_, v)| v.is_none()).map(|(i, _)| interner.text(vars.names[i]).to_string()).collect();
         names.sort();
         names
     }

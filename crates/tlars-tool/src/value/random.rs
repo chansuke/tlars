@@ -316,9 +316,7 @@ pub(crate) fn get_random_subset(ev: &mut Ev<'_>, set: &Value, k: i32) -> EvalRes
         // indexed, and their own `elements(int)` overrides never run.
         _ => match set.to_set_enum(ev)? {
             Some(s) => random_subset_of_set_enum(ev, &s, k),
-            None => Err(EvalError::unimplemented(
-                "TLC's NullPointerException from an Enumerable that does not convert to a set".into(),
-            )),
+            None => Err(EvalError::unimplemented("TLC's NullPointerException from an Enumerable that does not convert to a set".into())),
         },
     }
 }
@@ -358,9 +356,9 @@ fn random_subset_of_product(ev: &mut Ev<'_>, set: &Value, k: i32) -> EvalResult<
         for i in (0..product.sets.len()).rev() {
             weights[i] = total;
             let size = i128::from(super::order::normalized(ev, &product.sets[i])?.len() as i64);
-            total = total.checked_mul(size).ok_or_else(|| {
-                EvalError::unimplemented("a set of functions, records or tuples with more than 2^127 elements".into())
-            })?;
+            total = total
+                .checked_mul(size)
+                .ok_or_else(|| EvalError::unimplemented("a set of functions, records or tuples with more than 2^127 elements".into()))?;
         }
         let mut e = BigEnumerator::new(ev, k, total);
         while e.has_next() {

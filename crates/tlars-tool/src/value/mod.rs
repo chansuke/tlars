@@ -32,7 +32,7 @@ pub(crate) use sets::{lazy_cap, lazy_cup, lazy_diff, set_of_fcns, set_of_rcds, s
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalErrorData, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -385,7 +385,9 @@ impl Value {
             (Value::SetOfRcds(a), Value::SetOfRcds(b)) => same(a, b),
             (Value::SetOfTuples(a), Value::SetOfTuples(b)) => same(a, b),
             (Value::Union(a), Value::Union(b)) => same(a, b),
-            (Value::SetCup(a), Value::SetCup(b)) | (Value::SetCap(a), Value::SetCap(b)) | (Value::SetDiff(a), Value::SetDiff(b)) => same(a, b),
+            (Value::SetCup(a), Value::SetCup(b)) | (Value::SetCap(a), Value::SetCap(b)) | (Value::SetDiff(a), Value::SetDiff(b)) => {
+                same(a, b)
+            }
             (Value::SetPred(a), Value::SetPred(b)) => same(a, b),
             (Value::FcnLambda(a), Value::FcnLambda(b)) => same(a, b),
             (Value::User(a), Value::User(b)) => same(a, b),
@@ -879,9 +881,7 @@ impl Value {
             // The classes a permutation cannot touch return `this`.
             Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Interval(_) => Ok(None),
             Value::Model(mv) => Ok(perm.get(*mv)?.map(Value::Model)),
-            Value::SetEnum(set) => {
-                Ok(permute_all(ev, perm, set.snapshot())?.map(|vals| Value::SetEnum(set_enum_arc(vals, false))))
-            }
+            Value::SetEnum(set) => Ok(permute_all(ev, perm, set.snapshot())?.map(|vals| Value::SetEnum(set_enum_arc(vals, false)))),
             Value::Record(r) => {
                 let (names, values) = order::record_normalized(ev, r)?;
                 Ok(permute_all(ev, perm, values)?.map(|vals| Value::Record(Value::record_arc(names.to_vec(), vals, true))))

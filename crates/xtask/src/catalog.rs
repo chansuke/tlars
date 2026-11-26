@@ -57,11 +57,8 @@ fn parse_codes(src: &str) -> Result<Vec<(String, i64)>, String> {
         let value = match expr.split_once('+') {
             Some((base, inc)) => {
                 let base = base.trim();
-                let base_value = codes
-                    .iter()
-                    .find(|(n, _)| n == base)
-                    .map(|(_, v)| *v)
-                    .ok_or_else(|| format!("EC.java: unknown base {base}"))?;
+                let base_value =
+                    codes.iter().find(|(n, _)| n == base).map(|(_, v)| *v).ok_or_else(|| format!("EC.java: unknown base {base}"))?;
                 base_value + inc.trim().parse::<i64>().map_err(|e| format!("EC.java: {line}: {e}"))?
             }
             None => expr.parse::<i64>().map_err(|e| format!("EC.java: {line}: {e}"))?,
@@ -279,10 +276,9 @@ pub(crate) fn render(cat: &Catalog) -> Result<String, String> {
     for (name, t) in &cat.templates {
         match t {
             TemplateSrc::Static(s) => o.push_str(&format!("            Ec::{name} => Template::Static({s:?}),\n")),
-            TemplateSrc::Computed => o.push_str(&format!(
-                "            Ec::{name} => Template::Computed(crate::computed::{}),\n",
-                name.to_ascii_lowercase()
-            )),
+            TemplateSrc::Computed => {
+                o.push_str(&format!("            Ec::{name} => Template::Computed(crate::computed::{}),\n", name.to_ascii_lowercase()))
+            }
         }
     }
     o.push_str("            _ => Template::Default,\n        }\n    }\n}\n");
@@ -291,11 +287,7 @@ pub(crate) fn render(cat: &Catalog) -> Result<String, String> {
 
 /// Names whose template must be hand-written in `computed.rs`.
 pub(crate) fn computed_names(cat: &Catalog) -> Vec<&str> {
-    cat.templates
-        .iter()
-        .filter(|(_, t)| matches!(t, TemplateSrc::Computed))
-        .map(|(n, _)| n.as_str())
-        .collect()
+    cat.templates.iter().filter(|(_, t)| matches!(t, TemplateSrc::Computed)).map(|(n, _)| n.as_str()).collect()
 }
 
 /// SANY's `ErrorCode` enum (`tla2sany/semantic/ErrorCode.java`): standard value, name and

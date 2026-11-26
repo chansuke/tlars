@@ -18,8 +18,7 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::atomic::{AtomicU32, AtomicU64};
 use tlars_msg::{Ec, Report};
 use tlars_tool::{
-    ActionId, CheckId, Ev, EvalError, Flow, Halt, ImpliedAction, Invariant, PartialState, State, StateInfo, StateRef, Tool,
-    WorkerLocals,
+    ActionId, CheckId, Ev, EvalError, Flow, Halt, ImpliedAction, Invariant, PartialState, State, StateInfo, StateRef, Tool, WorkerLocals,
 };
 
 /// `ModelChecker.modelCheck` (`ModelChecker.java:133-352`), with `TLC.process`'s `RunMode`
@@ -761,14 +760,7 @@ impl<'a> ModelChecker<'a> {
     /// `checkPostConditionWithCounterExample` is a no-op without one (`Tool.java:3671-3679`).
     /// The rebuild regenerates states, so anything the initial predicate or the next-state
     /// relation prints is printed again.
-    pub(crate) fn post_condition_trace(
-        &self,
-        ev: &mut Ev<'_>,
-        cur: &Queued,
-        succ: Option<Succ<'_>>,
-        written: bool,
-        is_console: bool,
-    ) {
+    pub(crate) fn post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool, is_console: bool) {
         let Some(trace) = self.rebuild_post_condition_trace(ev, cur, succ, written) else { return };
         // The ALIAS over each action of the trace, before the trace is wrapped in a
         // `CounterExample` (`Worker.java:666-674`). It is the `Context.Empty` overload, so
@@ -815,13 +807,7 @@ impl<'a> ModelChecker<'a> {
     /// and `tool.getState` do, so anything the initial predicate or the next-state relation
     /// prints is printed again. `None` is the `ArrayIndexOutOfBoundsException` an incomplete
     /// successor raises, which leaves `doPostCondition` before the ALIAS pass.
-    fn rebuild_post_condition_trace(
-        &self,
-        ev: &mut Ev<'_>,
-        cur: &Queued,
-        succ: Option<Succ<'_>>,
-        written: bool,
-    ) -> Option<Vec<StateInfo>> {
+    fn rebuild_post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool) -> Option<Vec<StateInfo>> {
         let fps = self.traces.fingerprints_to(cur.ptr);
         let prefix_of_cur = |ev: &mut Ev<'_>| -> Option<Vec<StateInfo>> {
             // `tlc.getTraceInfo(curState)` followed by `tool.getState(curState, last)`.
@@ -961,14 +947,8 @@ impl<'a> ModelChecker<'a> {
                 // (`ConcurrentTLCTrace.java:208-212`), so `TLCExt!Trace` is the empty tuple
                 // for both states, and `s2` answers a prime even where it is incomplete.
                 Some(succ) => {
-                    let line = TraceLine {
-                        label: ev.state_label(&step),
-                        fp: None,
-                        next: succ.state_ref(),
-                        trace: &[],
-                        prev: None,
-                        number: 1,
-                    };
+                    let line =
+                        TraceLine { label: ev.state_label(&step), fp: None, next: succ.state_ref(), trace: &[], prev: None, number: 1 };
                     self.print_line(ev, &PartialState::from_state(&cur.state), line)?;
                 }
             }

@@ -41,12 +41,7 @@ impl<K: Eq, V> Default for Hashtable<K, V> {
 
 impl<K: Eq, V> Hashtable<K, V> {
     pub fn new() -> Self {
-        Hashtable {
-            buckets: vec![None; INITIAL_CAPACITY],
-            entries: Vec::new(),
-            count: 0,
-            threshold: threshold_for(INITIAL_CAPACITY),
-        }
+        Hashtable { buckets: vec![None; INITIAL_CAPACITY], entries: Vec::new(), count: 0, threshold: threshold_for(INITIAL_CAPACITY) }
     }
 
     /// `new Hashtable<>(initialCapacity)`; a capacity of 0 becomes 1.

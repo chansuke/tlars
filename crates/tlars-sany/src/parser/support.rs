@@ -4,10 +4,11 @@
 
 #![allow(non_snake_case)]
 
-use super::generated::{
-    self, Debug, Errors, ParseUnit, SpecObj, TLAtoPCalMapping, trans, LevelConstants, ParamAndPosition, SemanticNodeObj, SimpleCharStream, TLAplusParser, TLAplusParserConstants,
-};
 pub(crate) use super::files::{FileUtil, FilenameToStream, NamedInputStream, ToolIO};
+use super::generated::{
+    self, Debug, Errors, LevelConstants, ParamAndPosition, ParseUnit, SemanticNodeObj, SimpleCharStream, SpecObj, TLAplusParser,
+    TLAplusParserConstants, TLAtoPCalMapping, trans,
+};
 use super::java::*;
 use crate::{Atom, Interner};
 use std::cell::RefCell;

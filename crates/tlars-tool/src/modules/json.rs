@@ -304,9 +304,7 @@ pub(crate) fn deserialize(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
 fn parse_failure(failure: parse::Failure) -> EvalError {
     match failure {
         parse::Failure::Thrown(message) => io_exception(message),
-        parse::Failure::UnpairedSurrogate => {
-            EvalError::unimplemented("a JSON string escaping one half of a surrogate pair".into())
-        }
+        parse::Failure::UnpairedSurrogate => EvalError::unimplemented("a JSON string escaping one half of a surrogate pair".into()),
     }
 }
 
@@ -365,7 +363,6 @@ fn read_file(ev: &mut Ev<'_>, path: &Value) -> EvalResult<String> {
     }
 }
 
-
 /// `new File(path).getParent()` (`UnixFileSystem.normalize` then `File.getParent`):
 /// repeated separators collapse and a trailing one goes, and a path with no separator left
 /// has no parent at all, which is why `JsonSerialize("out.json", ...)` creates no directory.
@@ -404,9 +401,7 @@ fn get_value(ev: &mut Ev<'_>, node: &Node) -> EvalResult<Value> {
         // it, so `2.0` and `1e2` are refused along with anything too large.
         Node::Number(literal) => match tlars_java::parse_int(literal) {
             Ok(n) => Ok(Value::Int(n)),
-            Err(_) => {
-                Err(io_exception(format!("Cannot convert value: expected a 32-bit integer JSON number, but found {literal}")))
-            }
+            Err(_) => Err(io_exception(format!("Cannot convert value: expected a 32-bit integer JSON number, but found {literal}"))),
         },
         Node::Bool(b) => Ok(Value::Bool(*b)),
         Node::Str(s) => Ok(Value::Str(ev.tool().graph().interner().intern(s))),

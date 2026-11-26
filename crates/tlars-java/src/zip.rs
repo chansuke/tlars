@@ -104,8 +104,7 @@ pub fn gunzip(bytes: &[u8]) -> Result<Vec<u8>, GzipError> {
     let flags = header[3];
     let mut pos = 10;
     if flags & FEXTRA != 0 {
-        let len = u16::from(*bytes.get(pos + 1).ok_or_else(GzipError::eof)?) << 8
-            | u16::from(*bytes.get(pos).ok_or_else(GzipError::eof)?);
+        let len = u16::from(*bytes.get(pos + 1).ok_or_else(GzipError::eof)?) << 8 | u16::from(*bytes.get(pos).ok_or_else(GzipError::eof)?);
         pos += 2 + usize::from(len);
     }
     if flags & FNAME != 0 {
@@ -115,8 +114,7 @@ pub fn gunzip(bytes: &[u8]) -> Result<Vec<u8>, GzipError> {
         pos = skip_zero_terminated(bytes, pos)?;
     }
     if flags & FHCRC != 0 {
-        let want = u16::from(*bytes.get(pos + 1).ok_or_else(GzipError::eof)?) << 8
-            | u16::from(*bytes.get(pos).ok_or_else(GzipError::eof)?);
+        let want = u16::from(*bytes.get(pos + 1).ok_or_else(GzipError::eof)?) << 8 | u16::from(*bytes.get(pos).ok_or_else(GzipError::eof)?);
         if want != (crc32(&bytes[..pos]) & 0xffff) as u16 {
             return Err(GzipError::zip("Corrupt GZIP header"));
         }
@@ -360,18 +358,14 @@ fn repeat_length(lengths: &mut [u8], at: usize, repeat: usize, value: u8) -> Res
 
 /// The literal, length and distance codes of one compressed block.
 fn block(bits: &mut Bits<'_>, out: &mut Vec<u8>, lengths: &Huffman, distances: &Huffman) -> Result<(), GzipError> {
-    const LENGTH_BASE: [u16; 29] = [
-        3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227,
-        258,
-    ];
-    const LENGTH_EXTRA: [u32; 29] =
-        [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+    const LENGTH_BASE: [u16; 29] =
+        [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+    const LENGTH_EXTRA: [u32; 29] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
     const DISTANCE_BASE: [u16; 30] = [
-        1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097,
-        6145, 8193, 12289, 16385, 24577,
+        1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289,
+        16385, 24577,
     ];
-    const DISTANCE_EXTRA: [u32; 30] =
-        [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+    const DISTANCE_EXTRA: [u32; 30] = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
     loop {
         let symbol = lengths.decode(bits, "invalid literal/length code")?;
         match symbol {

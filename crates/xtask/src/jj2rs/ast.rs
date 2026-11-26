@@ -47,21 +47,54 @@ pub(crate) struct ClassHeader {
 #[derive(Clone, Debug)]
 pub(crate) enum Stmt {
     /// `T a, b[] = ...;`: each variable carries its own extra array dimensions.
-    Local { ty: Type, vars: Vec<Var> },
+    Local {
+        ty: Type,
+        vars: Vec<Var>,
+    },
     Expr(Expr),
-    If { cond: Expr, then: Box<Stmt>, els: Option<Box<Stmt>> },
-    While { cond: Expr, body: Box<Stmt> },
-    DoWhile { body: Box<Stmt>, cond: Expr },
-    For { init: Vec<Stmt>, cond: Option<Expr>, update: Vec<Expr>, body: Box<Stmt> },
+    If {
+        cond: Expr,
+        then: Box<Stmt>,
+        els: Option<Box<Stmt>>,
+    },
+    While {
+        cond: Expr,
+        body: Box<Stmt>,
+    },
+    DoWhile {
+        body: Box<Stmt>,
+        cond: Expr,
+    },
+    For {
+        init: Vec<Stmt>,
+        cond: Option<Expr>,
+        update: Vec<Expr>,
+        body: Box<Stmt>,
+    },
     /// `for (T x : array)`.
-    ForEach { ty: Type, name: String, iter: Expr, body: Box<Stmt> },
-    Switch { scrutinee: Expr, arms: Vec<SwitchArm> },
-    Labeled { label: String, body: Box<Stmt> },
+    ForEach {
+        ty: Type,
+        name: String,
+        iter: Expr,
+        body: Box<Stmt>,
+    },
+    Switch {
+        scrutinee: Expr,
+        arms: Vec<SwitchArm>,
+    },
+    Labeled {
+        label: String,
+        body: Box<Stmt>,
+    },
     Break(Option<String>),
     Continue(Option<String>),
     Return(Option<Expr>),
     Throw(Expr),
-    Try { body: Vec<Stmt>, catches: Vec<(Type, String, Vec<Stmt>)>, finally: Option<Vec<Stmt>> },
+    Try {
+        body: Vec<Stmt>,
+        catches: Vec<(Type, String, Vec<Stmt>)>,
+        finally: Option<Vec<Stmt>>,
+    },
     Block(Vec<Stmt>),
     Empty,
     /// Read past, never emitted (try-with-resources).
@@ -94,10 +127,21 @@ pub(crate) enum Expr {
     This,
     Field(Box<Expr>, String),
     Index(Box<Expr>, Box<Expr>),
-    Call { target: Option<Box<Expr>>, name: String, args: Vec<Expr> },
-    New { ty: Type, args: Vec<Expr> },
+    Call {
+        target: Option<Box<Expr>>,
+        name: String,
+        args: Vec<Expr>,
+    },
+    New {
+        ty: Type,
+        args: Vec<Expr>,
+    },
     /// `new T[a][b][]...`: the given lengths, outermost first, or an initializer.
-    NewArray { ty: Type, lens: Vec<Expr>, init: Option<Vec<Expr>> },
+    NewArray {
+        ty: Type,
+        lens: Vec<Expr>,
+        init: Option<Vec<Expr>>,
+    },
     ArrayLit(Vec<Expr>),
     Cast(Type, Box<Expr>),
     Unary(&'static str, Box<Expr>),

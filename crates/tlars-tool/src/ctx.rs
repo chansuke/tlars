@@ -3,8 +3,8 @@
 //! `Ctx` is an `Arc` cons list because closures (`SetPredValue`, `FcnLambdaValue`,
 //! `OpLambdaValue`) capture it and can travel to other workers inside a state.
 
-use crate::eval::{EvalControl, Ev};
 use crate::error::EvalResult;
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use crate::value::Value;
 use std::sync::{Arc, Mutex};

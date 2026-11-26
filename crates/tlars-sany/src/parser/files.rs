@@ -314,11 +314,7 @@ impl FileUtil {
     }
 
     /// `FileUtil.createNamedInputStream(name, resolver, rootFileNis)`.
-    pub(crate) fn createNamedInputStream_3(
-        name: JStr,
-        resolver: J<FilenameToStream>,
-        root: J<NamedInputStream>,
-    ) -> J<NamedInputStream> {
+    pub(crate) fn createNamedInputStream_3(name: JStr, resolver: J<FilenameToStream>, root: J<NamedInputStream>) -> J<NamedInputStream> {
         let name = strip_newline(name.as_str()).to_string();
         let stem = if name.to_lowercase().ends_with(TLA_EXTENSION) { &name[..name.len() - TLA_EXTENSION.len()] } else { &name };
         let source_file_name = format!("{stem}{TLA_EXTENSION}");
@@ -351,10 +347,7 @@ impl FileUtil {
                 None => J::null(),
             };
         }
-        tool_println(
-            true,
-            format!("File does not exist: {} while looking in these directories: {}", file.path.display(), r.full_path()),
-        );
+        tool_println(true, format!("File does not exist: {} while looking in these directories: {}", file.path.display(), r.full_path()));
         J::null()
     }
 

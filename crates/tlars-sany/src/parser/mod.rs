@@ -13,12 +13,12 @@ mod cfg_parse;
 mod driver;
 mod files;
 mod freeze;
+#[rustfmt::skip]
 mod generated;
 mod java;
 mod load;
 mod pcal_validator;
 mod support;
-
 
 pub(crate) use cfg_parse::parse_cfg;
 pub(crate) use load::{ConsoleLine, LoadJob, load_on_this_thread};

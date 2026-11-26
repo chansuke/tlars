@@ -87,18 +87,12 @@ pub fn format(pattern: Pattern, epoch_millis: i64, utc_offset_minutes: i32) -> S
     let c = civil(epoch_millis, utc_offset_minutes);
     let yy = c.year.rem_euclid(100);
     match pattern {
-        Pattern::Timestamp => format!(
-            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-            c.year, c.month, c.day, c.hour, c.minute, c.second
-        ),
+        Pattern::Timestamp => format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", c.year, c.month, c.day, c.hour, c.minute, c.second),
         Pattern::DayHour => format!("{}d {:02}h", c.day_of_year, c.hour),
         Pattern::HourMinute => format!("{:02}h {:02}min", c.hour, c.minute),
         Pattern::MinuteSecond => format!("{:02}min {:02}s", c.minute, c.second),
         Pattern::Second => format!("{:02}s", c.second),
-        Pattern::MetaDir => format!(
-            "{yy:02}-{:02}-{:02}-{:02}-{:02}-{:02}.{:03}",
-            c.month, c.day, c.hour, c.minute, c.second, c.millis
-        ),
+        Pattern::MetaDir => format!("{yy:02}-{:02}-{:02}-{:02}-{:02}-{:02}.{:03}", c.month, c.day, c.hour, c.minute, c.second, c.millis),
         Pattern::MetaDirSeconds => {
             format!("{yy:02}-{:02}-{:02}-{:02}-{:02}-{:02}", c.month, c.day, c.hour, c.minute, c.second)
         }

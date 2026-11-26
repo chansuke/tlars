@@ -7,19 +7,18 @@ use std::sync::LazyLock;
 
 /// JavaScript's `\w`, `\d` and `\b` are ASCII (spelled out below); its `\s` is Unicode, as
 /// Rust's is.
-static MARKER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"@!@!@(?:STARTMSG ([0-9]+):([0-9]+)|ENDMSG [0-9]+) @!@!@").expect("regex"));
+static MARKER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"@!@!@(?:STARTMSG ([0-9]+):([0-9]+)|ENDMSG [0-9]+) @!@!@").expect("regex"));
 static VOLATILE_LINE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(Parsing file |Semantic processing of module |Linting of module )").expect("regex"));
 static STACK_FRAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s+at [0-9A-Za-z_.$<>]+\(.*\)$").expect("regex"));
 static TIMESTAMP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}").expect("regex"));
 static BUILD_VERSION: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?-u:\b)Version [0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{6}(?-u:\b)").expect("regex"));
-static DURATION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?-u:\b)(in) ([0-9]+h )?([0-9]+min )?[0-9]+(s|ms)(?-u:\b)").expect("regex"));
+static DURATION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?-u:\b)(in) ([0-9]+h )?([0-9]+min )?[0-9]+(s|ms)(?-u:\b)").expect("regex"));
 static OBJECT_IDENTITY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?-u:\b)([0-9A-Za-z_.$]+)@[0-9a-f]{5,8}(?-u:\b)").expect("regex"));
-static GENERATED_NAME: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?-u:\b)(__DebuggerExpr__|__DebuggerModule__|_PossibleModule_|neg_prop_)[0-9]+").expect("regex")
-});
+static GENERATED_NAME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?-u:\b)(__DebuggerExpr__|__DebuggerModule__|_PossibleModule_|neg_prop_)[0-9]+").expect("regex"));
 static INSTALL_FIELD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"install \|->\s+"[^"]*""#).expect("regex"));
 
 const VOLATILE_CODES: &[u32] = &[2185, 2186, 2187, 2188, 2189, 2200, 2219, 2220, 2262, 2271, 2401];
@@ -62,8 +61,7 @@ pub fn normalize(output: &str, directory: &str, keeps_state_space: bool) -> Stri
     let close = |kept: &mut Vec<Option<String>>, open: &mut Vec<Open>| {
         let Some(m) = open.pop() else { return };
         let dropped = VOLATILE_CODES.contains(&m.code) || (!keeps_state_space && STATE_SPACE_CODES.contains(&m.code));
-        let body: Vec<String> =
-            m.lines.iter().filter(|l| !STACK_FRAME.is_match(l)).map(|l| clean_line(l, &directories)).collect();
+        let body: Vec<String> = m.lines.iter().filter(|l| !STACK_FRAME.is_match(l)).map(|l| clean_line(l, &directories)).collect();
         let body = body.join("\n");
         let body = INSTALL_FIELD.replace_all(&body, r#"install |-> "<install>""#);
         kept[m.slot] = if dropped { None } else { Some(format!("{}:{} {}", m.code, m.severity, body.trim_end())) };

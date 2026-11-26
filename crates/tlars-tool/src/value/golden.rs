@@ -58,10 +58,8 @@ impl Fixture {
         .expect("the fixture module builds a tool");
         // `ModelValue.make` in creation order, which is the index the value stream writes and
         // the slot `ModelValue.mvs[i]` reads back.
-        let model_values = model_values
-            .iter()
-            .map(|(_, name)| tool.add_model_value(interner.intern(name), name).expect("a model value"))
-            .collect();
+        let model_values =
+            model_values.iter().map(|(_, name)| tool.add_model_value(interner.intern(name), name).expect("a model value")).collect();
         Fixture { tool, model_values }
     }
 

@@ -36,10 +36,7 @@ impl Locale {
     /// variable, then `LANG`, the first that is set and not empty; `C` when none is.
     pub fn from_environment(var: impl Fn(&str) -> Option<String>) -> Locale {
         let pick = |category: &str| {
-            ["LC_ALL", category, "LANG"]
-                .iter()
-                .find_map(|name| var(name).filter(|v| !v.is_empty()))
-                .unwrap_or_else(|| "C".to_string())
+            ["LC_ALL", category, "LANG"].iter().find_map(|name| var(name).filter(|v| !v.is_empty())).unwrap_or_else(|| "C".to_string())
         };
         Locale { ctype: pick("LC_CTYPE"), messages: pick("LC_MESSAGES") }
     }
@@ -88,8 +85,7 @@ mod linux {
     }
 
     fn build(locale: &Locale) -> usize {
-        let (Ok(ctype), Ok(messages)) = (CString::new(locale.ctype.as_str()), CString::new(locale.messages.as_str()))
-        else {
+        let (Ok(ctype), Ok(messages)) = (CString::new(locale.ctype.as_str()), CString::new(locale.messages.as_str())) else {
             return 0;
         };
         // SAFETY: both names are nul-terminated. The first call gets a null base, which asks

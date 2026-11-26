@@ -331,7 +331,13 @@ impl Value {
             (Value::Str(_), _) => mismatch(ev, "string"),
             (Value::Interval(a), Value::Interval(b)) => {
                 let (sa, sb) = (a.size(ev)?, b.size(ev)?);
-                Ok(if sa != sb { sa.cmp(&sb) } else if sa == 0 { Ordering::Equal } else { a.lo.cmp(&b.lo) })
+                Ok(if sa != sb {
+                    sa.cmp(&sb)
+                } else if sa == 0 {
+                    Ordering::Equal
+                } else {
+                    a.lo.cmp(&b.lo)
+                })
             }
             (Value::Interval(a), _) => Value::SetEnum(a.to_set_enum_arc()).tlc_compare(ev, other),
             (Value::SetEnum(a), _) => {
@@ -622,7 +628,10 @@ impl Value {
                         return m.non_model_member(ev, self);
                     }
                     let (e, p) = (elem.to_tlc_string(ev)?, self.ppr(ev)?);
-                    return Err(EvalError::detailed(format!("Attempted to check if non-record\n{e}\nis in the set of records:\n{p}"), None));
+                    return Err(EvalError::detailed(
+                        format!("Attempted to check if non-record\n{e}\nis in the set of records:\n{p}"),
+                        None,
+                    ));
                 };
                 let (names, values) = record_normalized(ev, &rcd)?;
                 let (names, values) = (names.to_vec(), values.to_vec());
@@ -750,7 +759,10 @@ impl Value {
             Value::Union(u) => {
                 if !u.set.is_enumerable() {
                     let shown = self.ppr(ev)?;
-                    return Err(EvalError::detailed(format!("Attempted to check if the nonenumerable set:\n{shown}\nis a finite set."), None));
+                    return Err(EvalError::detailed(
+                        format!("Attempted to check if the nonenumerable set:\n{shown}\nis a finite set."),
+                        None,
+                    ));
                 }
                 let mut elems = u.set.elements(ev, EnumOrder::Native)?.expect("an enumerable value enumerates");
                 while let Some(v) = elems.next(ev)? {
@@ -764,7 +776,9 @@ impl Value {
                 if !p.inner.is_finite(ev)? {
                     let shown = p.inner.ppr(ev)?;
                     return Err(EvalError::detailed(
-                        format!("Attempted to check if expression of form {{x \\in S : p(x)}} is a finite set, but cannot check if S:\n{shown}\nis finite."),
+                        format!(
+                            "Attempted to check if expression of form {{x \\in S : p(x)}} is a finite set, but cannot check if S:\n{shown}\nis finite."
+                        ),
                         None,
                     ));
                 }

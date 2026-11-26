@@ -90,9 +90,8 @@ pub(crate) fn generate(tlc: &Path) -> Result<String, String> {
             Ok((c.clone(), crate::catalog::strip_comments(&src)))
         })
         .collect::<Result<_, String>>()?;
-    let source = |class: &str| -> Result<&String, String> {
-        sources.get(class).ok_or_else(|| format!("tlc2/module/{class}.java is missing"))
-    };
+    let source =
+        |class: &str| -> Result<&String, String> { sources.get(class).ok_or_else(|| format!("tlc2/module/{class}.java is missing")) };
 
     let built_in = built_in_classes(source("BuiltInModuleHelper")?)?;
     let indexed = indexed_classes(source("TLCBuiltInOverrides")?)?;
@@ -131,9 +130,7 @@ pub(crate) fn generate(tlc: &Path) -> Result<String, String> {
             match m.annotation {
                 Some(a) => {
                     if !indexed.contains(class) {
-                        return Err(format!(
-                            "{java} carries an override annotation but {class} is not in TLCBuiltInOverrides.get()"
-                        ));
+                        return Err(format!("{java} carries an override annotation but {class} is not in TLCBuiltInOverrides.get()"));
                     }
                     let o = Override { min_level: a.min_level, kind: a.kind, java, params: m.params };
                     insert(&a.module, &a.definition, o)?;
@@ -222,9 +219,7 @@ fn indexed_classes(src: &str) -> Result<Vec<String>, String> {
     body.split(',')
         .map(|t| {
             let t = t.trim();
-            t.strip_suffix(".class")
-                .map(str::to_string)
-                .ok_or_else(|| format!("TLCBuiltInOverrides.java: unexpected array element {t}"))
+            t.strip_suffix(".class").map(str::to_string).ok_or_else(|| format!("TLCBuiltInOverrides.java: unexpected array element {t}"))
         })
         .collect()
 }
@@ -388,11 +383,8 @@ fn split_top_level(args: &str) -> Vec<&str> {
 
 /// A Java string literal's value. Only the escapes TLC's module sources use are accepted.
 fn java_string(literal: &str) -> Result<String, String> {
-    let body = literal
-        .trim()
-        .strip_prefix('"')
-        .and_then(|s| s.strip_suffix('"'))
-        .ok_or_else(|| format!("{literal} is not a string literal"))?;
+    let body =
+        literal.trim().strip_prefix('"').and_then(|s| s.strip_suffix('"')).ok_or_else(|| format!("{literal} is not a string literal"))?;
     let mut out = String::with_capacity(body.len());
     let mut chars = body.chars();
     while let Some(c) = chars.next() {

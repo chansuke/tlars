@@ -5,7 +5,7 @@
 
 use super::expr::{Builtin, Resolved};
 use super::next::{ActItem, ActKind, Acts};
-use super::{EvalControl, Ev, InitSink};
+use super::{Ev, EvalControl, InitSink};
 use crate::ctx::{Binding, Ctx};
 use crate::error::{EvalError, Flow};
 use crate::state::{PartialState, StateRef};
@@ -82,15 +82,13 @@ impl<'t> Ev<'t> {
                     let c1 = self.thm_context(t, args, c);
                     return self.init_impl(body, acts, &c1, ps, sink);
                 }
-                Resolved::Binding(Binding::Thunk(t)) => {
-                    match t.cached(self, StateRef::Partial(ps), StateRef::Null, EvalControl::CLEAR) {
-                        None => {
-                            let (e, tc) = (t.expr, t.ctx.clone());
-                            return self.init_impl(e, acts, &tc, ps, sink);
-                        }
-                        Some(v) => return self.init_filter(pred, acts, ps, sink, v),
+                Resolved::Binding(Binding::Thunk(t)) => match t.cached(self, StateRef::Partial(ps), StateRef::Null, EvalControl::CLEAR) {
+                    None => {
+                        let (e, tc) = (t.expr, t.ctx.clone());
+                        return self.init_impl(e, acts, &tc, ps, sink);
                     }
-                }
+                    Some(v) => return self.init_filter(pred, acts, ps, sink, v),
+                },
                 other => {
                     let v = self.apply_resolved(other, op, pred, args, c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
                     return self.init_filter(pred, acts, ps, sink, v);
@@ -99,9 +97,8 @@ impl<'t> Ev<'t> {
         }
         let Some(code) = code else { unreachable!("resolved above") };
         let arg = |i: usize| args[i].expect_expr();
-        let eval = |ev: &mut Self, e: ExprId, c: &Ctx, ps: &PartialState| {
-            ev.eval(e, c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)
-        };
+        let eval =
+            |ev: &mut Self, e: ExprId, c: &Ctx, ps: &PartialState| ev.eval(e, c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT);
         match code {
             Builtin::DisjList | Builtin::Lor => {
                 for a in args.iter() {
@@ -213,9 +210,12 @@ impl<'t> Ev<'t> {
                 let argv = eval(self, arg(1), c, ps)?;
                 let bval = fval.apply(self, &argv, EvalControl::INIT)?;
                 let Value::Bool(b) = bval else {
-                    let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["initial states", "boolean", &graph.expr_tlc_text(pred)]);
-                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message).with_loc(Some(graph.loc(arg(1))))
-                    .into());
+                    let message = self
+                        .out
+                        .text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["initial states", "boolean", &graph.expr_tlc_text(pred)]);
+                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message)
+                        .with_loc(Some(graph.loc(arg(1))))
+                        .into());
                 };
                 if b { self.init_continue(acts, ps, sink) } else { Ok(()) }
             }
@@ -261,8 +261,7 @@ impl<'t> Ev<'t> {
             let shown = v.to_tlc_string(self)?;
             let message =
                 self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["initial states", "boolean", &shown, &graph.expr_tlc_text(pred)]);
-            return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred)))
-            .into());
+            return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred))).into());
         };
         if b { self.init_continue(acts, ps, sink) } else { Ok(()) }
     }
@@ -290,11 +289,7 @@ impl<'t> Ev<'t> {
             return self.init_continue(acts, ps, sink);
         };
         let rval = self.eval(args[1].expect_expr(), c, StateRef::Partial(ps), StateRef::Empty, EvalControl::INIT)?;
-        let rval = if kind == Assign::Subseteq {
-            self.set_source(args[1].expect_expr(), crate::value::subset(rval))
-        } else {
-            rval
-        };
+        let rval = if kind == Assign::Subseteq { self.set_source(args[1].expect_expr(), crate::value::subset(rval)) } else { rval };
         let bound = ps.lookup(slot).cloned();
         match (kind, bound) {
             (Assign::Eq, None) => {
@@ -304,14 +299,16 @@ impl<'t> Ev<'t> {
                 r
             }
             (Assign::Eq, Some(lval)) => {
-                if lval.tlc_equals(self, &rval)? { self.init_continue(acts, ps, sink) } else { Ok(()) }
+                if lval.tlc_equals(self, &rval)? {
+                    self.init_continue(acts, ps, sink)
+                } else {
+                    Ok(())
+                }
             }
             (_, None) => {
                 if !rval.is_enumerable() {
-                    let reason = format!(
-                        "In computing initial states, the right side of \\IN is not enumerable.\n{}",
-                        graph.expr_tlc_text(pred)
-                    );
+                    let reason =
+                        format!("In computing initial states, the right side of \\IN is not enumerable.\n{}", graph.expr_tlc_text(pred));
                     return Err(EvalError::detailed(reason, Some(graph.loc(pred))).into());
                 }
                 let mut elems = rval.elements(self, crate::value::enumerate::EnumOrder::Native)?.expect("an enumerable value enumerates");
@@ -324,7 +321,11 @@ impl<'t> Ev<'t> {
                 Ok(())
             }
             (_, Some(lval)) => {
-                if rval.member(self, &lval)? { self.init_continue(acts, ps, sink) } else { Ok(()) }
+                if rval.member(self, &lval)? {
+                    self.init_continue(acts, ps, sink)
+                } else {
+                    Ok(())
+                }
             }
         }
     }
@@ -378,8 +379,9 @@ impl<'t> Ev<'t> {
                     let shown = v.to_tlc_string(self)?;
                     let text = graph.expr_tlc_text(item.pred);
                     let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["initial states", "boolean", &shown, &text]);
-                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(item.pred)))
-                    .into());
+                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
+                        .with_loc(Some(graph.loc(item.pred)))
+                        .into());
                 };
                 if !b {
                     return Ok(());
