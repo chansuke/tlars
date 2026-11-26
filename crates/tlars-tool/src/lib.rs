@@ -15,7 +15,6 @@ mod fp64;
 #[rustfmt::skip]
 mod fp64_polys;
 mod globals;
-#[expect(dead_code, unused_variables, reason = "M4: the liveness formula side is a stub")]
 mod live;
 mod modules;
 mod spec;
@@ -30,11 +29,11 @@ pub use error::{EvalError, EvalErrorData, EvalErrorKind, EvalResult, Flow, Halt}
 pub use eval::{Aliased, CallStack, Ev, EvalControl, InitSink, NextSink, StateInfo, WorkerLocals};
 pub use fp64::{Fp, FpKey};
 pub use globals::{LnCheck, TlcGlobals};
-pub use live::{CheckBits, LiveSpec, Pem, Solution, Tableau};
-pub use modules::tlc_ext::{CounterExampleStep, counter_example_of};
+pub use live::{LiveSpec, Pem, Solution, Tableau, TableauNode};
+pub use modules::tlc_ext::{CounterExampleStep, counter_example_lasso, counter_example_of};
 pub use spec::{CliSpecExtras, PostCondition, RuntimeInvariant, SpecError, ToolInput, TraceConstraint, build_tool};
 pub use state::{PartialState, State, StateRef, TraceStep, TraceUid, VarSlot};
-pub use tool::{CheckId, ImpliedAction, ImpliedInit, Invariant, Temporal, Tool};
+pub use tool::{CheckId, ImpliedAction, ImpliedInit, Invariant, Temporal, TemporalCheck, Tool};
 pub use value::Value;
 
 // Values, contexts and states cross worker threads through the shared queue; the tool is

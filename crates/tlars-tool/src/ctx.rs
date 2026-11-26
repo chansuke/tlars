@@ -125,6 +125,10 @@ pub(crate) struct Thunk {
     pub(crate) ctx: Ctx,
     pub(crate) cachable: bool,
     cache: Mutex<Option<Arc<ThunkCache>>>,
+    /// `getLevelBound(expr, ctx)`, which depends on nothing else, kept once computed. A
+    /// chain of thunks that each name the one before (an argument `n + 1` passed down a
+    /// recursion) is otherwise walked again at every depth.
+    pub(crate) level_bound: std::sync::OnceLock<u8>,
 }
 
 struct ThunkCache {
@@ -138,7 +142,7 @@ struct ThunkCache {
 
 impl Thunk {
     pub(crate) fn new(expr: ExprId, ctx: Ctx, cachable: bool) -> Arc<Thunk> {
-        Arc::new(Thunk { expr, ctx, cachable, cache: Mutex::new(None) })
+        Arc::new(Thunk { expr, ctx, cachable, cache: Mutex::new(None), level_bound: std::sync::OnceLock::new() })
     }
     /// `getCachedValue` (`LazyValue.java:162-174`): hit only if s0 ⊆ cached s0, s1 ⊆ cached s1
     /// and the controls are semantically equivalent.

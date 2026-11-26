@@ -43,6 +43,7 @@ tlc/checker/actions/spec_unnamed_inline_action
 tlc/checker/actions/state_argument_not_expanded
 tlc/checker/actions/state_argument_one_of_two
 tlc/checker/actions/tuple_pattern_parameter
+tlc/checker/alias/action_property_trace
 tlc/checker/alias/alias_not_on_success
 tlc/checker/alias/alias_view_together
 tlc/checker/alias/alias_with_trace_operator
@@ -61,6 +62,7 @@ tlc/checker/alias/format_field
 tlc/checker/alias/format_not_string
 tlc/checker/alias/function_alias_int_keys
 tlc/checker/alias/function_alias_string_keys
+tlc/checker/alias/implied_init_violation
 tlc/checker/alias/initial_violation
 tlc/checker/alias/initial_violation_eval_error
 tlc/checker/alias/next_action_name_in_alias
@@ -250,6 +252,8 @@ tlc/checker/errors/error_action_with_parameter
 tlc/checker/errors/error_apply_outside_domain
 tlc/checker/errors/error_choose_none
 tlc/checker/errors/error_in_action_constraint_trace
+tlc/checker/errors/error_in_implied_action_trace
+tlc/checker/errors/error_in_implied_init
 tlc/checker/errors/error_incomparable_guard
 tlc/checker/errors/error_nonboolean_next
 tlc/checker/errors/error_prints_last_good_state_constraint
@@ -431,6 +435,13 @@ tlc/checker/invariants/enabled_allowed
 tlc/checker/invariants/error_on_initial
 tlc/checker/invariants/error_on_successor
 tlc/checker/invariants/first_pass_order_print
+tlc/checker/invariants/implied_action_checked_on_seen_successor
+tlc/checker/invariants/implied_action_eval_error
+tlc/checker/invariants/implied_action_not_boolean
+tlc/checker/invariants/implied_action_order_after_invariant
+tlc/checker/invariants/implied_action_property_violated
+tlc/checker/invariants/implied_init_after_invariant
+tlc/checker/invariants/implied_init_violated
 tlc/checker/invariants/initial_duplicate_not_rechecked
 tlc/checker/invariants/initial_violation
 tlc/checker/invariants/initial_violation_counts
@@ -462,6 +473,7 @@ tlc/checker/next/case_guard_nonbool
 tlc/checker/next/case_no_true_guard
 tlc/checker/next/case_no_true_guard_later
 tlc/checker/next/case_other
+tlc/checker/next/cdot_in_action_property
 tlc/checker/next/cdot_nested_conjunct
 tlc/checker/next/cdot_rejected
 tlc/checker/next/eq_assigns
@@ -799,6 +811,7 @@ tlc/checker/view/merged_state_not_explored
 tlc/checker/view/merged_state_skips_invariant
 tlc/checker/view/merges_by_view
 tlc/checker/view/nonenumerable_view
+tlc/checker/view/view_fairness_liveness_warning
 tlc/checker/view/view_flag_initial_violation
 tlc/checker/view/view_flag_prints_view
 tlc/checker/view/view_flag_with_alias

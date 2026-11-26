@@ -240,8 +240,7 @@ pub(crate) fn wrap_evaluating(ev: &Ev<'_>, module: &str, tla_name: &str, e: Eval
         return e;
     }
     let signature = NativeId::of_module(module, tla_name).expect("a registered native").op().signature;
-    let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[signature, &e.message]);
-    EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message)
+    override_failed(ev, signature, &e.message)
 }
 
 /// [`wrap`] for an override tlars registers as `Lazy` because the Java method takes an
@@ -260,8 +259,7 @@ pub(crate) fn apply(ev: &mut Ev<'_>, id: NativeId, args: &[Value]) -> EvalResult
             // `MethodHandle.invoke`'s own `asType` cast, whose message is shorter than the
             // `ClassCastException` of a cast written in Java.
             let cause = format!("Cannot cast tlc2.value.impl.{} to tlc2.value.impl.{to}", arg.java_class());
-            let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[op.signature, &cause]);
-            return Err(EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message));
+            return Err(override_failed(ev, op.signature, &cause));
         }
     }
     match op.imp {
@@ -279,8 +277,14 @@ fn wrap(ev: &Ev<'_>, op: &NativeOp, e: EvalError) -> EvalError {
     if matches!(e.kind, Eval | Unimplemented | StackOverflow) {
         return e;
     }
-    let message = ev.out().text(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, &[op.signature, &e.message]);
-    EvalError::runtime(tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, message)
+    override_failed(ev, op.signature, &e.message)
+}
+
+/// `Assert.fail(TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE, new String[] { method, cause })`,
+/// which keeps both parameters for `printTLCRuntimeException`.
+fn override_failed(ev: &Ev<'_>, signature: &str, cause: &str) -> EvalError {
+    let ec = tlars_msg::Ec::TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE;
+    EvalError::runtime(ec, ev.out().text(ec, &[signature, cause])).with_params(vec![signature.to_string(), cause.to_string()])
 }
 
 #[cfg(test)]

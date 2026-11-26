@@ -330,7 +330,7 @@ impl SanyOut for SanyLines<'_, '_> {
 }
 
 /// `convertRuntimeToHumanReadable` (`TLC.java:1603-1620`): `SimpleDateFormat` in UTC.
-fn human_readable_runtime(runtime: i64) -> String {
+pub(crate) fn human_readable_runtime(runtime: i64) -> String {
     const DAY: i64 = 86_400_000;
     let hours = |r: i64| (r / 3_600_000).rem_euclid(24);
     let minutes = |r: i64| (r / 60_000).rem_euclid(60);

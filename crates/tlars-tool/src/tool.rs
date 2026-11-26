@@ -42,7 +42,12 @@ impl<K> CheckId<K> {
 
 /// An INVARIANT / implied property / constraint: its cfg name, expression and context.
 pub(crate) struct NamedCheck {
+    /// The `Action`'s name: the cfg name, which `TLCGet("spec")` reports.
     pub(crate) name: Atom,
+    /// The name a violation message prints. For a check the cfg names directly it is that
+    /// name; for one a PROPERTY conjunct yields it is whatever `processConfigProps` passed
+    /// down, often the conjunct's `toString()`, its location.
+    pub(crate) shown: Arc<str>,
     pub(crate) expr: ExprId,
     pub(crate) ctx: Ctx,
     /// The definition the cfg named, when there was one. `TLCGet("spec")` reports a
@@ -99,7 +104,21 @@ pub(crate) type TlcCaches = std::sync::Mutex<std::collections::BTreeMap<ExprId, 
 /// Temporal part handed to the liveness checker (`Liveness.parseLiveness` input).
 pub struct Temporal {
     pub fairness: Box<[(ExprId, Ctx)]>,
-    pub properties: Box<[(Atom, ExprId, Ctx)]>,
+    /// `getImpliedTemporals()`: the PROPERTY conjuncts of temporal level, in cfg order.
+    pub properties: Box<[TemporalCheck]>,
+    /// The cfg's SPECIFICATION and the location of its definition, which
+    /// `printStutteringCounterExampleWarning` names; `None` when the cfg has none.
+    pub spec: Option<(String, String)>,
+}
+
+/// One implied temporal formula. Its `Action` is named after the cfg PROPERTY it came from,
+/// which is what `findViolatedProperties` reports (`getNameOfDefault`).
+pub struct TemporalCheck {
+    pub name: Atom,
+    /// `impliedTemporalNames`, which TLC records but does not print.
+    pub shown: Arc<str>,
+    pub expr: ExprId,
+    pub ctx: Ctx,
 }
 
 pub struct Tool {
@@ -221,6 +240,11 @@ impl Tool {
     }
     /// `Spec.getCounterExampleDef()`'s `OpDefNode`: the definition a counterexample is bound
     /// to, if `TLCExt!CounterExample`'s Java override is the one under that name.
+    /// Whether `TLCExt!CounterExample` appears in the spec, so that a POSTCONDITION is
+    /// evaluated with a counterexample bound.
+    pub fn uses_counter_example(&self) -> bool {
+        self.counter_example != CounterExampleDef::Absent
+    }
     pub(crate) fn counter_example_def(&self) -> Option<OpDefId> {
         match self.counter_example {
             CounterExampleDef::Evaluating(d) => Some(d),
@@ -301,14 +325,19 @@ impl Tool {
     pub fn implied_actions(&self) -> impl Iterator<Item = CheckId<ImpliedAction>> + use<> {
         (0..self.implied_actions.len() as u32).map(|i| CheckId(i, PhantomData))
     }
-    pub fn invariant_name(&self, id: CheckId<Invariant>) -> Atom {
-        self.invariants[id.0 as usize].name
+    pub fn invariant_name(&self, id: CheckId<Invariant>) -> &str {
+        &self.invariants[id.0 as usize].shown
     }
-    pub fn implied_action_name(&self, id: CheckId<ImpliedAction>) -> Atom {
-        self.implied_actions[id.0 as usize].name
+    pub fn implied_init_name(&self, id: CheckId<ImpliedInit>) -> &str {
+        &self.implied_inits[id.0 as usize].shown
     }
+    pub fn implied_action_name(&self, id: CheckId<ImpliedAction>) -> &str {
+        &self.implied_actions[id.0 as usize].shown
+    }
+    /// `!livenessIsTrue()`: only a temporal PROPERTY turns liveness checking on; fairness
+    /// alone is never checked (`Spec.java:358-360`).
     pub fn has_liveness(&self) -> bool {
-        !self.temporal.properties.is_empty() || !self.temporal.fairness.is_empty()
+        !self.temporal.properties.is_empty()
     }
     pub fn temporal(&self) -> &Temporal {
         &self.temporal

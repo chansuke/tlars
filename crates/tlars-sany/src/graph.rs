@@ -310,6 +310,9 @@ pub struct SemanticGraph {
     exprs: Vec<ExprNode>,
     /// Level checker output, indexed by `ExprId` / `OpDefId`.
     expr_levels: Vec<Level>,
+    /// `LevelNode.getLevelParams()`: the parameters whose arguments can raise the level,
+    /// which `Specs.getLevel` looks up in a context.
+    expr_level_params: Vec<Box<[SymbolRef]>>,
     op_levels: Vec<Level>,
     /// `SyntaxTreeNode.getHumanReadableImage()` for the arguments of each definition body
     /// that is an operator application: the subtree's token images concatenated, with no
@@ -332,14 +335,28 @@ pub(crate) struct GraphParts {
     pub(crate) thms: Vec<ThmOrAssumpDefNode>,
     pub(crate) exprs: Vec<ExprNode>,
     pub(crate) expr_levels: Vec<Level>,
+    pub(crate) expr_level_params: Vec<Box<[SymbolRef]>>,
     pub(crate) op_levels: Vec<Level>,
     pub(crate) body_arg_images: BTreeMap<ExprId, Arc<str>>,
 }
 
 impl SemanticGraph {
     pub(crate) fn from_parts(parts: GraphParts, root: ModuleId, interner: Arc<Interner>) -> SemanticGraph {
-        let GraphParts { modules, op_defs, decls, params, thms, exprs, expr_levels, op_levels, body_arg_images } = parts;
-        SemanticGraph { modules, op_defs, decls, params, thms, exprs, expr_levels, op_levels, body_arg_images, root, interner }
+        let GraphParts { modules, op_defs, decls, params, thms, exprs, expr_levels, expr_level_params, op_levels, body_arg_images } = parts;
+        SemanticGraph {
+            modules,
+            op_defs,
+            decls,
+            params,
+            thms,
+            exprs,
+            expr_levels,
+            expr_level_params,
+            op_levels,
+            body_arg_images,
+            root,
+            interner,
+        }
     }
 
     pub fn root(&self) -> ModuleId {
@@ -421,6 +438,10 @@ impl SemanticGraph {
     }
     pub fn level(&self, id: ExprId) -> Level {
         self.expr_levels[id.index()]
+    }
+    /// `LevelNode.getLevelParams()` of an expression, in no particular order.
+    pub fn level_params(&self, id: ExprId) -> &[SymbolRef] {
+        &self.expr_level_params[id.index()]
     }
     pub fn op_level(&self, id: OpDefId) -> Level {
         self.op_levels[id.index()]

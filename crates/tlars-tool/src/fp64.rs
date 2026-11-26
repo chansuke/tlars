@@ -30,6 +30,11 @@ impl Fp {
     pub fn raw(self) -> u64 {
         self.0
     }
+    /// A fingerprint read back from where it was stored as its raw bits, such as the
+    /// liveness behaviour graph, which keeps them as TLC's `long`s.
+    pub fn from_raw(raw: u64) -> Fp {
+        Fp(raw)
+    }
     /// `FP64.Zero`, which `IValue.initialize()` fingerprints against: the result is thrown
     /// away, the point being the `convertAndCache` a lazy value runs on the way.
     pub(crate) fn zero() -> Fp {

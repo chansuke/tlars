@@ -164,6 +164,9 @@ pub(crate) struct ModelChecker<'a> {
     /// `ModelChecker.oldNumOfGenStates` / `oldFPSetSize`.
     old_generated: AtomicU64,
     old_distinct: AtomicU64,
+    /// `printedLivenessErrorStack`: a worker has re-run a failed liveness step to print
+    /// its nested expressions, and every later failure is dropped.
+    pub(crate) printed_liveness_error_stack: std::sync::atomic::AtomicBool,
 }
 
 impl<'a> ModelChecker<'a> {
@@ -193,6 +196,7 @@ impl<'a> ModelChecker<'a> {
             clock: session.env.clock,
             old_generated: AtomicU64::new(0),
             old_distinct: AtomicU64::new(0),
+            printed_liveness_error_stack: std::sync::atomic::AtomicBool::new(false),
         };
         // `AbstractChecker`'s constructor ends in `createConfig()` (`:150`), which reads
         // `TLCGetSet.MODE` and builds a `RecordValue`: both classes initialise here, ahead of
@@ -224,13 +228,33 @@ impl<'a> ModelChecker<'a> {
     /// `ModelChecker.modelCheckImpl`: assumptions, 2189, `do_init`, 2190/2191, `run_tlc`,
     /// final liveness check, success report, summary (2199, 2194, 2268 on success).
     fn model_check_impl(&mut self) -> Ec {
+        // The `ModelChecker` constructor builds the `LiveCheck`, whose `processLiveness`
+        // reports 2212 before `modelCheck` checks the assumptions.
+        if self.tool.has_liveness() {
+            // `AbstractChecker`'s constructor warns before it builds the `LiveCheck`.
+            if self.tool.has_symmetry()
+                && let Err(w) = self.out.warning(Ec::TLC_FEATURE_UNSUPPORTED_LIVENESS_SYMMETRY, &[])
+            {
+                return print_process_failure(self.out, &EvalError::runtime(w.ec, w.message));
+            }
+            let mut locals = WorkerLocals::new(0, self.seed);
+            match self.tool.ev(&mut locals, self.out).live_spec() {
+                Err(e) => return print_process_failure(self.out, &e),
+                Ok(spec) => {
+                    let spec = spec.unwrap_or(tlars_tool::LiveSpec { solutions: Box::new([]) });
+                    self.live = Some(LiveCheck::new(spec));
+                }
+            }
+            // `if (this.checkLiveness && liveCheck.getNumChecker() == 0)`, ahead of the
+            // assumptions and outside the `try` that prints the summary.
+            if self.live.as_ref().is_some_and(|l| l.num_checkers() == 0) {
+                return self.out.error(Ec::TLC_LIVE_FORMULA_TAUTOLOGY, &[]);
+            }
+        }
         let mut locals = WorkerLocals::new(0, self.seed);
         let assumptions = self.tool.ev(&mut locals, self.out).check_assumptions();
         if assumptions != Ec::NO_ERROR {
             return assumptions;
-        }
-        if self.tool.has_liveness() {
-            return self.out.error(Ec::GENERAL, &["tlars does not implement liveness checking yet (M4)"]);
         }
         self.out.message(Ec::TLC_COMPUTING_INIT, &[]);
         let mut result = match self.do_init() {
@@ -304,6 +328,35 @@ impl<'a> ModelChecker<'a> {
             return result;
         }
         let errored = self.err.first.lock().expect("error slot").is_some();
+        if !errored && let Some(live) = &self.live {
+            // The progress line before the final liveness check (`ModelChecker.java:270-278`).
+            self.out.message(
+                Ec::TLC_PROGRESS_STATS,
+                &[
+                    &self.traces.level().to_string(),
+                    &tlars_java::decimal_format_grouped(self.states_generated() as i64),
+                    &tlars_java::decimal_format_grouped(self.fpset.size() as i64),
+                    &tlars_java::decimal_format_grouped(self.queue.len() as i64),
+                ],
+            );
+            let mut ev = self.tool.ev(&mut locals, self.out);
+            match live.final_check(&mut ev, &self.clock) {
+                crate::liveness::CheckOutcome::Done(Ec::NO_ERROR) => {}
+                crate::liveness::CheckOutcome::Done(ec) => {
+                    self.print_summary(false);
+                    return ec;
+                }
+                // `check0` prints the cause and calls `System.exit(1)`, which no recording
+                // shows yet.
+                crate::liveness::CheckOutcome::Failed(e) => {
+                    let e = match e.kind {
+                        tlars_tool::EvalErrorKind::Unimplemented => e,
+                        _ => EvalError::unimplemented(format!("the exit after a liveness check that failed with: {} (M4)", e.message)),
+                    };
+                    return self.out.error(Ec::GENERAL, &[&e.message]);
+                }
+            }
+        }
         if !errored {
             // `result = tool.checkPostCondition()` before 2193: a failing postcondition is
             // the run's result and `reportSuccess` is skipped (`ModelChecker.java:287-295`).
@@ -493,7 +546,7 @@ impl<'a> ModelChecker<'a> {
     fn check_invariants(&self, ev: &mut Ev<'_>, cur: &Queued, succ: &State, written: bool) -> Flow {
         for id in self.tool.invariants() {
             let name = self.tool.invariant_name(id);
-            let name = ev.tool().graph().interner().text(name).to_string();
+            let name = name.to_string();
             match ev.check_invariant(id, succ) {
                 Ok(true) => {}
                 Ok(false) => {
@@ -536,7 +589,7 @@ impl<'a> ModelChecker<'a> {
     fn check_implied_actions(&self, ev: &mut Ev<'_>, cur: &Queued, succ: &State, written: bool) -> Flow {
         for id in self.tool.implied_actions() {
             let name = self.tool.implied_action_name(id);
-            let name = ev.tool().graph().interner().text(name).to_string();
+            let name = name.to_string();
             match ev.check_implied_action(id, &cur.state, succ) {
                 Ok(true) => {}
                 Ok(false) => {
@@ -1175,6 +1228,10 @@ impl InitSink<'_, '_> {
                 let mut written = state.clone();
                 written.set_uid(ptr.to_uid());
                 mc.queue.enqueue(Queued { state: written, fp, ptr, level: 1 });
+                // `liveCheck.addInitState(tool, curState, fp)`, once the state is queued.
+                if let Some(live) = &mc.live {
+                    live.add_init_state(ev, &state, fp)?;
+                }
             }
         }
         if seen && !self.force_checks {
@@ -1182,7 +1239,7 @@ impl InitSink<'_, '_> {
         }
         for id in mc.tool.invariants() {
             let name = mc.tool.invariant_name(id);
-            let name = ev.tool().graph().interner().text(name).to_string();
+            let name = name.to_string();
             if !ev.check_invariant(id, &state)? {
                 let shown = ev.print_initial_violation(&state)?;
                 mc.out.error(Ec::TLC_INVARIANT_VIOLATED_INITIAL, &[&name, &shown]);
@@ -1197,7 +1254,8 @@ impl InitSink<'_, '_> {
         for id in mc.tool.implied_inits() {
             if !ev.check_implied_init(id, &state)? {
                 let shown = ev.print_initial_violation(&state)?;
-                mc.out.error(Ec::TLC_PROPERTY_VIOLATED_INITIAL, &["", &shown]);
+                let name = mc.tool.implied_init_name(id).to_string();
+                mc.out.error(Ec::TLC_PROPERTY_VIOLATED_INITIAL, &[&name, &shown]);
                 self.result = Ec::TLC_PROPERTY_VIOLATED_INITIAL;
                 self.stopped = true;
                 return Err(Halt::Stop);
@@ -1299,6 +1357,27 @@ fn init_error_code(e: &EvalError) -> Ec {
     match e.kind {
         EvalErrorKind::Runtime => e.ec,
         _ => Ec::GENERAL,
+    }
+}
+
+/// `TLC.process`'s `catch (Throwable)` (`TLC.java:1420-1444`) for what the `ModelChecker`
+/// constructor throws, such as a temporal formula `processLiveness` cannot handle. An
+/// `Assert.TLCRuntimeException` prints its own code (`printTLCRuntimeException`), with its
+/// parameters when it has them and its message otherwise; anything else is `EC.GENERAL`.
+fn print_process_failure(out: &dyn Report, e: &EvalError) -> Ec {
+    use tlars_tool::EvalErrorKind;
+    match &e.kind {
+        EvalErrorKind::Runtime if !e.params.is_empty() => {
+            let params: Vec<&str> = e.params.iter().map(String::as_str).collect();
+            out.runtime_exception(e.ec, &params)
+        }
+        EvalErrorKind::Runtime => out.error(e.ec, &[&e.message]),
+        EvalErrorKind::StackOverflow => out.error(Ec::SYSTEM_STACK_OVERFLOW, &[]),
+        EvalErrorKind::Unimplemented => out.error(Ec::GENERAL, &[&e.message]),
+        _ => {
+            let body = tlars_msg::unexpected_exception(java_class(e), &e.message);
+            out.error(Ec::GENERAL, &[&body])
+        }
     }
 }
 

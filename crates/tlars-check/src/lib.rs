@@ -12,7 +12,6 @@ mod cli;
 mod dfid;
 mod driver;
 mod fpset;
-#[expect(dead_code, unused_variables, reason = "M4: the liveness graph is a stub")]
 mod liveness;
 #[expect(dead_code, unused_variables, reason = "M4: lasso traces (2122 Back to state) are a stub")]
 mod print;

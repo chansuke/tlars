@@ -104,7 +104,7 @@ impl<'t> Ev<'t> {
 
     /// `getVal`: an expression argument is passed by name, an operator argument as what it
     /// names.
-    fn get_val(&mut self, arg: ExprOrOpArg, c: &Ctx, cachable: bool) -> Binding {
+    pub(crate) fn get_val(&mut self, arg: ExprOrOpArg, c: &Ctx, cachable: bool) -> Binding {
         match arg {
             ExprOrOpArg::Expr(e) => Binding::Thunk(Thunk::new(e, c.clone(), cachable)),
             ExprOrOpArg::OpArg(sym) => match self.lookup(sym, c, StateRef::Empty, false) {
@@ -812,9 +812,9 @@ impl<'t> Ev<'t> {
                         format!("Attempted to evaluate an expression of form {form}, but A was not a boolean.\n{}", text(self, expr));
                     return Err(not_boolean(self, reason, expr));
                 };
-                // `<A>_e` is false and `[A]_e` true as soon as A settles it.
-                if b == angle {
-                    return Ok(Value::Bool(angle));
+                // `<A>_e` is false as soon as A is, and `[A]_e` true as soon as A is.
+                if b != angle {
+                    return Ok(Value::Bool(b));
                 }
                 let v0 = self.eval(arg(1), c, s0, StateRef::Empty, control)?;
                 let v1 = self.eval(arg(1), c, s1, StateRef::Null, control.set_primed_if_enabled())?;
@@ -828,9 +828,16 @@ impl<'t> Ev<'t> {
             }
             Builtin::Nop => self.eval(arg(0), c, s0, s1, control),
             Builtin::Cdot => Err(super::enabled::cdot_unsupported(self, expr)),
-            Builtin::Box | Builtin::TemporalExists | Builtin::TemporalForall => {
-                Err(EvalError::unimplemented("a temporal operator outside PROPERTY (M4)".into()))
-            }
+            // `Assert.fail(EC.TLC_ENCOUNTERED_FORMULA_IN_PREDICATE, {what, expr}, expr, c)`
+            // (`Tool.java:2810-2848`): a temporal formula outside PROPERTY.
+            Builtin::Box => Err(encountered_temporal(self, expr, "[]A")),
+            Builtin::TemporalExists => Err(encountered_temporal(self, expr, "\\EE")),
+            Builtin::TemporalForall => Err(encountered_temporal(self, expr, "\\AA")),
+            Builtin::Unimplemented("$SF") => Err(encountered_temporal(self, expr, "SF")),
+            Builtin::Unimplemented("$WF") => Err(encountered_temporal(self, expr, "WF")),
+            Builtin::Unimplemented("~>") => Err(encountered_temporal(self, expr, "a ~> b")),
+            Builtin::Unimplemented("-+->") => Err(encountered_temporal(self, expr, "a -+-> formula")),
+            Builtin::Unimplemented("<>") => Err(encountered_temporal(self, expr, "<>A")),
             Builtin::Unimplemented(name) => Err(EvalError::unimplemented(format!("the operator {name} (M2 unit 4)"))),
         }
     }
@@ -1250,24 +1257,24 @@ impl<'t> Ev<'t> {
     /// `SymbolNodeValueLookupProvider.getLevelBound` (`:158-280`): the conservative level TLC
     /// uses to split SPECIFICATION into initial predicate, next-state relation and temporal
     /// formulas.
-    pub(crate) fn level_bound(&mut self, expr: ExprId, c: &Ctx) -> u8 {
+    pub(crate) fn level_bound(&mut self, expr: ExprId, c: &Ctx) -> EvalResult<u8> {
         let graph = &self.tool().graph;
         match graph.expr(expr) {
             ExprNode::OpAppl { op, args, bound, .. } => {
                 if let Some(code) = self.opcode(*op) {
                     if code.is_temporal() {
-                        return 3;
+                        return Ok(3);
                     }
                     if code.is_action() {
-                        return 2;
+                        return Ok(2);
                     }
                     if code == Builtin::Enabled {
-                        return 1;
+                        return Ok(1);
                     }
                 }
                 let mut level = 0;
                 for b in bound.iter().flat_map(|b| b.lists.iter()) {
-                    level = level.max(self.level_bound(b.domain, c));
+                    level = level.max(self.level_bound(b.domain, c)?);
                 }
                 // A recursive function's own name is bound, so its body is not walked again.
                 let c = match (self.opcode(*op), bound.as_deref()) {
@@ -1276,27 +1283,44 @@ impl<'t> Ev<'t> {
                 };
                 for a in args.iter() {
                     if let ExprOrOpArg::Expr(e) = *a {
-                        level = level.max(self.level_bound(e, &c));
+                        level = level.max(self.level_bound(e, &c)?);
                     }
                 }
                 if self.opcode(*op).is_some() {
-                    return level;
+                    return Ok(level);
                 }
                 // A user-defined operator: a variable is level 1, a definition contributes
                 // its body's level, a thunk its expression's.
                 if matches!(op, SymbolRef::Decl(d) if self.tool().vars.slot_of(graph.decl(*d).name).is_some()) {
-                    return 1;
+                    return Ok(1);
                 }
                 match self.lookup(*op, &c, StateRef::Empty, false) {
                     Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
                         let c1 = c.cons(*op, Binding::Value(Value::Int(1)));
-                        if let Some(body) = graph.op_def(d).body {
-                            level = level.max(self.level_bound(body, &c1));
-                        }
+                        // A built-in operator substituted for a constant operator has no body,
+                        // and TLC walks it all the same (`getLevelBound(opDef.getBody(), ..)`).
+                        let Some(body) = graph.op_def(d).body else {
+                            return Err(EvalError::from(crate::error::EvalErrorData {
+                                ec: Ec::GENERAL,
+                                message: tlars_java::null_method_call("tla2sany.semantic.SemanticNode.getKind()", "<parameter1>"),
+                                loc: None,
+                                kind: crate::error::EvalErrorKind::Jvm { class: "java.lang.NullPointerException" },
+                                params: Vec::new(),
+                            }));
+                        };
+                        level = level.max(self.level_bound(body, &c1)?);
                     }
                     Resolved::Binding(Binding::Thunk(t)) => {
-                        let (e, tc) = (t.expr, t.ctx.clone());
-                        level = level.max(self.level_bound(e, &tc));
+                        let bound = match t.level_bound.get() {
+                            Some(&l) => l,
+                            None => {
+                                let (e, tc) = (t.expr, t.ctx.clone());
+                                let l = self.level_bound(e, &tc)?;
+                                let _ = t.level_bound.set(l);
+                                l
+                            }
+                        };
+                        level = level.max(bound);
                     }
                     // A Java override contributes its declared `minLevel`, which is how
                     // `TLCGet` stays out of constant folding (`:270-276`). An override tlars
@@ -1308,18 +1332,18 @@ impl<'t> Ev<'t> {
                     Resolved::Unimplemented { min_level } => level = level.max(min_level),
                     _ => {}
                 }
-                level
+                Ok(level)
             }
             ExprNode::LetIn { defs, body, .. } => {
                 let mut level = 0;
                 let mut c1 = c.clone();
                 for &d in defs.iter() {
                     if let Some(b) = graph.op_def(d).body {
-                        level = level.max(self.level_bound(b, &c1));
+                        level = level.max(self.level_bound(b, &c1)?);
                     }
                     c1 = c1.cons(SymbolRef::OpDef(d), Binding::Value(Value::Int(1)));
                 }
-                level.max(self.level_bound(*body, &c1))
+                Ok(level.max(self.level_bound(*body, &c1)?))
             }
             ExprNode::SubstIn { substs, body, .. } | ExprNode::APSubstIn { substs, body, .. } => {
                 let mut c1 = c.clone();
@@ -1330,9 +1354,19 @@ impl<'t> Ev<'t> {
                 self.level_bound(*body, &c1)
             }
             ExprNode::Label { body, .. } => self.level_bound(*body, c),
-            _ => 0,
+            _ => Ok(0),
         }
     }
+}
+
+/// `TLC_ENCOUNTERED_FORMULA_IN_PREDICATE` for the temporal operator `what` at `expr`.
+fn encountered_temporal(ev: &Ev<'_>, expr: ExprId, what: &str) -> EvalError {
+    let graph = &ev.tool().graph;
+    let params = [what, &graph.expr_tlc_text(expr)];
+    let message = ev.out().text(Ec::TLC_ENCOUNTERED_FORMULA_IN_PREDICATE, &params);
+    EvalError::runtime(Ec::TLC_ENCOUNTERED_FORMULA_IN_PREDICATE, message)
+        .with_loc(Some(graph.loc(expr)))
+        .with_params(params.iter().map(|p| p.to_string()).collect())
 }
 
 /// `opNode.getKind() == VariableDeclKind`.

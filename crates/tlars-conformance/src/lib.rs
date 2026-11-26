@@ -120,8 +120,8 @@ impl Case {
         self.metadata.flags.iter().any(|f| f == "exit-only")
     }
 
-    /// The later milestone a case needs, if any: CLI modes and options of M5, liveness
-    /// (`PROPERTY`) of M4, more than one worker of M6. These cases are recorded but not run.
+    /// The later milestone a case needs, if any: CLI modes and options of M5, more than one
+    /// worker of M6. These cases are recorded but not run.
     pub fn deferred_to(&self) -> Option<&'static str> {
         const M5_ARGS: &[&str] = &[
             "-simulate",
@@ -140,10 +140,6 @@ impl Case {
         let args = &self.metadata.args;
         if args.iter().any(|a| M5_ARGS.contains(&a.as_str())) {
             return Some("M5");
-        }
-        let config = self.metadata.config.as_deref().unwrap_or("");
-        if config.lines().any(|l| matches!(l.split_whitespace().next(), Some("PROPERTY" | "PROPERTIES"))) {
-            return Some("M4");
         }
         if args.windows(2).any(|w| w[0] == "-workers" && w[1] != "1") {
             return Some("M6");

@@ -36,6 +36,18 @@ pub(crate) fn cdot_unsupported(ev: &mut Ev<'_>, pred: ExprId) -> EvalError {
 }
 
 impl<'t> Ev<'t> {
+    /// `Tool.enabled(pred, c, s0, s1, subscript, CHANGED)` (`:2965-2970`): `pred` with the
+    /// item `subscript' # subscript` waiting behind it, as `ENABLED <<A>>_e` is checked.
+    pub(crate) fn enabled_changed(&mut self, pred: ExprId, c: &Ctx, s0: StateRef<'_>, subscript: ExprId) -> EvalResult<bool> {
+        let item = ActItem { pred: subscript, ctx: c, kind: ActKind::Changed, next: Acts::Empty };
+        self.enabled(pred, Acts::Cons(&item), c, s0, &FunState::EMPTY)
+    }
+
+    /// `Tool.enabled(pred, c, s0, TLCStateFun.Empty)`, with nothing waiting behind it.
+    pub(crate) fn enabled_plain(&mut self, pred: ExprId, c: &Ctx, s0: StateRef<'_>) -> EvalResult<bool> {
+        self.enabled(pred, Acts::Empty, c, s0, &FunState::EMPTY)
+    }
+
     /// `Tool.enabled(pred, acts, c, s0, s1)` (`:2977-3036`): `true` where TLC returns a state.
     pub(crate) fn enabled(&mut self, pred: ExprId, acts: Acts<'_>, c: &Ctx, s0: StateRef<'_>, s1: &FunState) -> EvalResult<bool> {
         self.enter(pred)?;

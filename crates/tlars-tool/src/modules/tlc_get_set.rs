@@ -252,7 +252,7 @@ fn bound_parameters(ev: &Ev<'_>, op_def: Option<OpDefId>, ctx: &Ctx) -> Vec<(Ato
 /// `init2Value` / `action2Value` (`TLCGetSet.java:552-576`) without `-coverage`: the action's
 /// own record, whose location is the predicate's.
 pub(crate) fn action_value(ev: &mut Ev<'_>, a: &Action) -> EvalResult<Value> {
-    let loc = ev.tool().graph().loc(a.pred);
+    let loc = ev.tool().graph().loc(a.located_at());
     let (name, op_def, ctx) = (a.name, a.op_def, a.ctx.clone());
     action_record(ev, name, loc, op_def, &ctx)
 }
@@ -305,7 +305,7 @@ pub(crate) fn unknown_action_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
 }
 
 /// `TLCGet("spec")` (`TLCGetSet.java:320-377`). PROPERTY fills `impliedinits`,
-/// `impliedactions` and `impliedtemporals`, which stay empty until M4.
+/// `impliedactions` and `impliedtemporals`.
 fn spec_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
     // `processConfigPossible` appends the `_Track` wrappers of the generated module to
     // `modelConstraints` and `actionConstraints` (`SpecProcessor.java:1864-1883`), so they
@@ -342,13 +342,19 @@ fn spec_value(ev: &mut Ev<'_>) -> EvalResult<Value> {
     let implied_inits = set(implied_inits?);
     let implied_actions = ev.tool().implied_actions.iter().map(|c| check_value(ev, c)).collect::<EvalResult<Vec<_>>>();
     let implied_actions = set(implied_actions?);
-    // `getImpliedTemporals()`, which only a cfg PROPERTY fills. Its `Action`s have to be in
-    // the record, so there is nothing to answer here until M4 implements them; a placeholder
-    // would leak an `UndefValue` into the set.
-    if !ev.tool().temporal().properties.is_empty() {
-        return Err(EvalError::unimplemented("TLCGet(\"spec\").impliedtemporals of a PROPERTY (M4)".into()));
-    }
-    let implied_temporals = set(Vec::new());
+    // `getImpliedTemporals()`, which only a cfg PROPERTY fills; `property2Value` like the
+    // other PROPERTY checks.
+    let implied_temporals = (0..ev.tool().temporal().properties.len())
+        .map(|i| {
+            let (name, expr, ctx) = {
+                let t = &ev.tool().temporal().properties[i];
+                (t.name, t.expr, t.ctx.clone())
+            };
+            let loc = ev.tool().graph().loc(expr);
+            action_record(ev, Some(name), loc, None, &ctx)
+        })
+        .collect::<EvalResult<Vec<_>>>();
+    let implied_temporals = set(implied_temporals?);
     let variables = ev.tool().vars().decls.iter().map(|&d| variable_value(ev, d)).collect::<EvalResult<Vec<_>>>();
     let variables = set(variables?);
     let action_constraints = ev.tool().action_constraints.iter().map(|c| constraint_value(ev, c)).collect::<EvalResult<Vec<_>>>();
