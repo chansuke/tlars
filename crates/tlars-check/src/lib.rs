@@ -152,6 +152,42 @@ impl Clock {
             Clock::System => std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64),
         }
     }
+
+    /// When a wait of `timeout` that starts now gives up (`Object.wait(ms)`). A fixed clock
+    /// does not advance, so its waits end only when notified: a hermetic run prints no
+    /// progress report however long it takes.
+    fn deadline(&self, timeout: std::time::Duration) -> Deadline {
+        match self {
+            Clock::Fixed { .. } => Deadline::Never,
+            Clock::System => Deadline::At(std::time::Instant::now() + timeout),
+        }
+    }
+}
+
+/// The end of a timed wait, from [`Clock::deadline`].
+pub(crate) enum Deadline {
+    /// The wait ends only when it is notified.
+    Never,
+    At(std::time::Instant),
+}
+
+/// What is left of a [`Deadline`].
+pub(crate) enum Remaining {
+    Unbounded,
+    For(std::time::Duration),
+    Passed,
+}
+
+impl Deadline {
+    pub(crate) fn remaining(&self) -> Remaining {
+        match self {
+            Deadline::Never => Remaining::Unbounded,
+            Deadline::At(at) => match at.checked_duration_since(std::time::Instant::now()) {
+                Some(left) if !left.is_zero() => Remaining::For(left),
+                _ => Remaining::Passed,
+            },
+        }
+    }
 }
 
 impl Entropy {
