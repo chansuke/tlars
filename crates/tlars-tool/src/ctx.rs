@@ -167,7 +167,7 @@ impl Thunk {
 fn covers(ev: &mut Ev<'_>, cached: &Option<crate::state::Snapshot>, s: &StateRef<'_>) -> bool {
     match cached {
         None => true,
-        Some(snap) => snap.is_empty() || snap.covers(ev, s),
+        Some(snap) => snap.is_empty() || snap.covers(ev.tool().vars(), s, |a, b| matches!(a.tlc_equals(ev, b), Ok(true))),
     }
 }
 
