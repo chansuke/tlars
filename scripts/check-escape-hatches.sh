@@ -23,6 +23,7 @@ esac
 rules=(
   $'comment\t*\t(^|[^A-Za-z])(TODO|FIXME|HACK|XXX)([^A-Za-z]|$)\tFix it in this change. Unfinished TLC behaviour is todo!("M<n>: <what>") in code (milestones: docs/DESIGN.md); otherwise describe what the code does now as a fact.'
   $'comment\t*\t[Ww]ork-?around|[Ff]or now|[Qq]uick fix|[Bb]and-?aid|[Tt]emporary (fix|hack|patch)\tDo not explain away a workaround. Find the cause and fix it; if TLC itself behaves this way, cite the TLC source line the code reproduces.'
+  $'code\t*.rs\t(todo|unimplemented)!\\((\\)|"("|[^MT"]|M[^0-9]|T([^L]|L([^C]|C[^:]))))\tSay what is missing and where it lands: todo!("M5: <TLC behaviour>") with the milestone from docs/DESIGN.md, or todo!("TLC: <class.method>"). Inside the evaluator, return EvalError::unimplemented(..) instead.'
   $'code\t*.rs\t#\\[ignore\\]\tGive the reason: #[ignore = "why it does not run by default"]. A test that fails is fixed, not ignored.'
   $'code\t*.rs\t\\.unwrap\\(\\)\tSay why it cannot fail with .expect("..."), as TLC\'s Java exceptions are named (expect("ArrayIndexOutOfBoundsException")), or return the error.'
 )
