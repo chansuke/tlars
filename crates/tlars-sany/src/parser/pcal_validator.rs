@@ -11,6 +11,7 @@ use super::java::*;
 use super::support::{ArrayList, JavaVector};
 
 /// `Validator.ValidationResult`.
+#[expect(dead_code, reason = "Validator.ValidationResult whole; SANY's validator never returns NoTlaChecksumsExist")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ValidationResult {
     NoPlusCalExists,
@@ -143,9 +144,7 @@ fn validate_lines(specification_text: &[String]) -> JResult<Vec<ValidationResult
         if let Err(e) = parsed {
             // `catch (ParseAlgorithmException | RemoveNameConflictsException e)`.
             match &e {
-                JThrow::UnrecoverableException(x)
-                    if x.jread(|o| o.is_ParseAlgorithmException() || o.is_RemoveNameConflictsException()) =>
-                {
+                JThrow::UnrecoverableException(x) if x.jread(|o| o.is_ParseAlgorithmException() || o.is_RemoveNameConflictsException()) => {
                     report_unrecoverable(e)?;
                 }
                 _ => return Err(e),

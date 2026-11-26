@@ -4,6 +4,7 @@
 use crate::trace::TracePtr;
 use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex};
+use tlars_java::time::{Deadline, Remaining};
 use tlars_tool::{Fp, State};
 
 /// A state waiting for expansion: TLC's `TLCState` with `uid`/`workerId`/`level`.
@@ -56,10 +57,10 @@ impl StateQueue {
             if inner.finished {
                 return None;
             }
-            if !inner.suspend_requested {
-                if let Some(s) = inner.fifo.pop_front() {
-                    return Some(s);
-                }
+            if !inner.suspend_requested
+                && let Some(s) = inner.fifo.pop_front()
+            {
+                return Some(s);
             }
             // Every worker idle with an empty queue means the search is over.
             inner.waiting += 1;
@@ -78,6 +79,7 @@ impl StateQueue {
         }
     }
     /// `suspendAll`: park workers for periodic work (liveness, checkpoint, FPSet growth).
+    #[expect(dead_code, reason = "M4/M6: liveness and checkpoints park the workers")]
     pub(crate) fn suspend_all(&self) -> bool {
         let mut inner = self.inner.lock().expect("queue");
         if inner.finished {
@@ -90,6 +92,7 @@ impl StateQueue {
         }
         !inner.finished
     }
+    #[expect(dead_code, reason = "M4/M6: liveness and checkpoints park the workers")]
     pub(crate) fn resume_all(&self) {
         let mut inner = self.inner.lock().expect("queue");
         inner.suspend_requested = false;
@@ -109,22 +112,45 @@ impl StateQueue {
     }
     /// `AbstractChecker.done`, which the main thread waits on (`this.wait(ms)`). `true` once
     /// the search is over; `false` when the wait timed out first.
-    pub(crate) fn wait_finished(&self, timeout: std::time::Duration) -> bool {
-        let deadline = std::time::Instant::now() + timeout;
+    pub(crate) fn wait_finished(&self, deadline: &Deadline) -> bool {
         let mut inner = self.inner.lock().expect("queue");
         // A wakeup can be spurious or for parked workers, so the wait is resumed until the
         // search is over or the deadline passes.
         while !inner.finished {
-            let now = std::time::Instant::now();
-            if now >= deadline {
-                return false;
-            }
-            let (guard, _) = self.idle.wait_timeout(inner, deadline - now).expect("queue");
-            inner = guard;
+            inner = match deadline.remaining() {
+                Remaining::Passed => return false,
+                Remaining::Unbounded => self.idle.wait(inner).expect("queue"),
+                Remaining::For(left) => self.idle.wait_timeout(inner, left).expect("queue").0,
+            };
         }
         true
     }
     pub(crate) fn is_finished(&self) -> bool {
         self.inner.lock().expect("queue").finished
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StateQueue;
+    use crate::Clock;
+    use std::time::Duration;
+
+    /// A hermetic run's output must not depend on how long it took, so under a fixed clock
+    /// the main thread's progress wait lasts until the search ends, however short it is.
+    #[test]
+    fn a_fixed_clock_wait_lasts_until_the_search_ends() {
+        let queue = StateQueue::new(1);
+        let clock = Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 };
+        std::thread::scope(|scope| {
+            scope.spawn(|| queue.finish_all());
+            assert!(queue.wait_finished(&clock.deadline(Duration::ZERO)));
+        });
+    }
+
+    #[test]
+    fn a_system_clock_wait_gives_up_at_its_deadline() {
+        let queue = StateQueue::new(1);
+        assert!(!queue.wait_finished(&Clock::System.deadline(Duration::ZERO)));
     }
 }

@@ -6,7 +6,7 @@
 //! each state of the trace.
 
 use crate::error::{EvalError, EvalErrorKind, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::fp64::Fp;
 use crate::state::{PartialState, State, StateRef};
 use crate::value::Value;
@@ -98,7 +98,8 @@ impl Ev<'_> {
                 };
                 // `toState()` is inside the `try`, so a normalisation it runs can fail and
                 // be caught like any other failure of the ALIAS.
-                let aliased = self.eval(body, &ctx, StateRef::Partial(current), successor, EvalControl::CLEAR).and_then(|v| self.alias_record(&v));
+                let aliased =
+                    self.eval(body, &ctx, StateRef::Partial(current), successor, EvalControl::CLEAR).and_then(|v| self.alias_record(&v));
                 match aliased {
                     Ok(Some(record)) => return Ok(Aliased { original: current.copy(), record: Some(record) }),
                     // `toState()` returned null: not a record, so TLC prints the state.
@@ -191,9 +192,7 @@ impl Ev<'_> {
             let Some(value) = s.lookup(self.tool.vars.slot(i)) else {
                 // A record field holding a Java null, which every read of it then treats as
                 // its own kind of value.
-                return Err(EvalError::unimplemented(
-                    "TLCExt!Trace over a successor the next-state relation left incomplete (M3)".into(),
-                ));
+                return Err(EvalError::unimplemented("TLCExt!Trace over a successor the next-state relation left incomplete (M3)".into()));
             };
             names.push(self.tool.vars.names[i]);
             values.push(value.clone());
@@ -334,9 +333,7 @@ fn java_format(format: &str, key: &str, value: &str) -> EvalResult<String> {
                 }
             },
             _ => {
-                return Err(EvalError::unimplemented(
-                    "a _format field with a conversion other than %s (M3)".into(),
-                ));
+                return Err(EvalError::unimplemented("a _format field with a conversion other than %s (M3)".into()));
             }
         }
     }

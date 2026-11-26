@@ -106,13 +106,25 @@ impl EvalError {
     /// `(T) v` on a value of another class, as TLC's value classes cast without checking.
     pub(crate) fn class_cast(from: &str, to: &str) -> EvalError {
         let message = tlars_java::class_cast(&format!("tlc2.value.impl.{from}"), &format!("tlc2.value.impl.{to}"));
-        EvalError::from(EvalErrorData { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ClassCastException" }, params: Vec::new() })
+        EvalError::from(EvalErrorData {
+            ec: Ec::GENERAL,
+            message,
+            loc: None,
+            kind: EvalErrorKind::Jvm { class: "java.lang.ClassCastException" },
+            params: Vec::new(),
+        })
     }
 
     /// `a[i]` past the end, as TLC's value classes index without checking.
     pub(crate) fn index_out_of_bounds(index: usize, length: usize) -> EvalError {
         let message = tlars_java::index_out_of_bounds(index as i64, length);
-        EvalError::from(EvalErrorData { ec: Ec::GENERAL, message, loc: None, kind: EvalErrorKind::Jvm { class: "java.lang.ArrayIndexOutOfBoundsException" }, params: Vec::new() })
+        EvalError::from(EvalErrorData {
+            ec: Ec::GENERAL,
+            message,
+            loc: None,
+            kind: EvalErrorKind::Jvm { class: "java.lang.ArrayIndexOutOfBoundsException" },
+            params: Vec::new(),
+        })
     }
 
     /// `new T[n]` with a negative `n`, whose message is just the size. The randomized
@@ -123,7 +135,13 @@ impl EvalError {
     }
 
     pub(crate) fn unimplemented(what: String) -> EvalError {
-        EvalError::from(EvalErrorData { ec: Ec::GENERAL, message: format!("tlars does not implement {what} yet"), loc: None, kind: EvalErrorKind::Unimplemented, params: Vec::new() })
+        EvalError::from(EvalErrorData {
+            ec: Ec::GENERAL,
+            message: format!("tlars does not implement {what} yet"),
+            loc: None,
+            kind: EvalErrorKind::Unimplemented,
+            params: Vec::new(),
+        })
     }
 }
 

@@ -14,12 +14,11 @@ use crate::liveness::LiveCheck;
 use crate::queue::{Queued, StateQueue};
 use crate::trace::TraceStores;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
-use std::sync::atomic::{AtomicU32, AtomicU64};
 use tlars_msg::{Ec, Report};
 use tlars_tool::{
-    ActionId, CheckId, Ev, EvalError, Flow, Halt, ImpliedAction, Invariant, PartialState, State, StateInfo, StateRef, Tool,
-    WorkerLocals,
+    ActionId, CheckId, Ev, EvalError, Flow, Halt, ImpliedAction, Invariant, PartialState, State, StateInfo, StateRef, Tool, WorkerLocals,
 };
 
 /// `ModelChecker.modelCheck` (`ModelChecker.java:133-352`), with `TLC.process`'s `RunMode`
@@ -32,6 +31,7 @@ pub(crate) fn model_check(tool: &Tool, session: &crate::session::Session<'_>) ->
 }
 
 /// What went wrong first. One variant per `setErrState` cause.
+#[expect(dead_code, reason = "what TLC records per cause; the checker reads only the state and the code so far, and Liveness is M4")]
 pub(crate) enum ErrState {
     InvariantInitial { id: CheckId<Invariant>, state: State },
     Invariant { id: CheckId<Invariant>, pred: Queued, state: State },
@@ -83,10 +83,10 @@ impl ErrSlot {
     }
 }
 
-/// Per-worker counters (`Worker.statesGenerated`, `maxLevel`), summed by the reader.
+/// Per-worker counters (`Worker.statesGenerated`), summed by the reader. The level is in
+/// `TraceStores`.
 pub(crate) struct WorkerStats {
     pub(crate) generated: AtomicU64,
-    pub(crate) max_level: AtomicU32,
     /// `Worker.outDegree`: a `FixedSizedBucketStatistics` of 32 buckets over the number of
     /// *unseen* successors per expanded state, the last bucket holding the overflow.
     pub(crate) out_degree: Mutex<[u64; 32]>,
@@ -180,9 +180,7 @@ impl<'a> ModelChecker<'a> {
             fpset: fpset.into(),
             queue: StateQueue::new(workers).into(),
             traces: TraceStores::new(workers).into(),
-            stats: (0..workers)
-                .map(|_| WorkerStats { generated: AtomicU64::new(0), max_level: AtomicU32::new(0), out_degree: Mutex::new([0; 32]) })
-                .collect(),
+            stats: (0..workers).map(|_| WorkerStats { generated: AtomicU64::new(0), out_degree: Mutex::new([0; 32]) }).collect(),
             err: ErrSlot { first: Mutex::new(None) },
             live: None,
             check_deadlock: tool.globals().check_deadlock,
@@ -439,15 +437,16 @@ impl<'a> ModelChecker<'a> {
 
     /// `AbstractChecker.runTLC`'s main-thread loop (`:446-478`): the first progress report
     /// after 3 s, then one every `progressInterval`. A run that finishes inside the first
-    /// wait prints none, which is why the recordings hold no mid-run progress line.
+    /// wait prints none, which is why the recordings hold no mid-run progress line. Under a
+    /// fixed clock the first wait lasts until the search ends ([`crate::Clock::deadline`]).
     /// `doPeriodicWork` has nothing to do without liveness or checkpointing.
     fn periodic_loop(&self) {
-        if self.queue.wait_finished(std::time::Duration::from_millis(3000)) {
+        if self.queue.wait_finished(&self.clock.deadline(std::time::Duration::from_millis(3000))) {
             return;
         }
         while !self.queue.is_finished() {
             self.print_progress();
-            if self.queue.wait_finished(std::time::Duration::from_millis(PROGRESS_INTERVAL_MILLIS)) {
+            if self.queue.wait_finished(&self.clock.deadline(std::time::Duration::from_millis(PROGRESS_INTERVAL_MILLIS))) {
                 return;
             }
         }
@@ -767,14 +766,7 @@ impl<'a> ModelChecker<'a> {
     /// `checkPostConditionWithCounterExample` is a no-op without one (`Tool.java:3671-3679`).
     /// The rebuild regenerates states, so anything the initial predicate or the next-state
     /// relation prints is printed again.
-    pub(crate) fn post_condition_trace(
-        &self,
-        ev: &mut Ev<'_>,
-        cur: &Queued,
-        succ: Option<Succ<'_>>,
-        written: bool,
-        is_console: bool,
-    ) {
+    pub(crate) fn post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool, is_console: bool) {
         let Some(trace) = self.rebuild_post_condition_trace(ev, cur, succ, written) else { return };
         // The ALIAS over each action of the trace, before the trace is wrapped in a
         // `CounterExample` (`Worker.java:666-674`). It is the `Context.Empty` overload, so
@@ -821,13 +813,7 @@ impl<'a> ModelChecker<'a> {
     /// and `tool.getState` do, so anything the initial predicate or the next-state relation
     /// prints is printed again. `None` is the `ArrayIndexOutOfBoundsException` an incomplete
     /// successor raises, which leaves `doPostCondition` before the ALIAS pass.
-    fn rebuild_post_condition_trace(
-        &self,
-        ev: &mut Ev<'_>,
-        cur: &Queued,
-        succ: Option<Succ<'_>>,
-        written: bool,
-    ) -> Option<Vec<StateInfo>> {
+    fn rebuild_post_condition_trace(&self, ev: &mut Ev<'_>, cur: &Queued, succ: Option<Succ<'_>>, written: bool) -> Option<Vec<StateInfo>> {
         let fps = self.traces.fingerprints_to(cur.ptr);
         let prefix_of_cur = |ev: &mut Ev<'_>| -> Option<Vec<StateInfo>> {
             // `tlc.getTraceInfo(curState)` followed by `tool.getState(curState, last)`.
@@ -967,14 +953,8 @@ impl<'a> ModelChecker<'a> {
                 // (`ConcurrentTLCTrace.java:208-212`), so `TLCExt!Trace` is the empty tuple
                 // for both states, and `s2` answers a prime even where it is incomplete.
                 Some(succ) => {
-                    let line = TraceLine {
-                        label: ev.state_label(&step),
-                        fp: None,
-                        next: succ.state_ref(),
-                        trace: &[],
-                        prev: None,
-                        number: 1,
-                    };
+                    let line =
+                        TraceLine { label: ev.state_label(&step), fp: None, next: succ.state_ref(), trace: &[], prev: None, number: 1 };
                     self.print_line(ev, &PartialState::from_state(&cur.state), line)?;
                 }
             }

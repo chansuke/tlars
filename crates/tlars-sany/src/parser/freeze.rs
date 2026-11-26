@@ -239,7 +239,9 @@ impl Freezer {
         let substs: Vec<J<Subst>> = if substs.is_null() { Vec::new() } else { substs.jget().clone() };
         substs
             .iter()
-            .map(|s| Ok(graph::Subst { decl: self.decl(&s.getOp()?)?, expr: self.expr_or_op_arg(&s.getExpr()?)?, implicit: s.isImplicit()? }))
+            .map(|s| {
+                Ok(graph::Subst { decl: self.decl(&s.getOp()?)?, expr: self.expr_or_op_arg(&s.getExpr()?)?, implicit: s.isImplicit()? })
+            })
             .collect()
     }
 

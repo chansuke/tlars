@@ -14,12 +14,10 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 /// `hosts.ts` `DETERMINISTIC_ARGUMENTS`.
-pub const DETERMINISTIC_ARGS: &[&str] =
-    &["-workers", "1", "-fp", "0", "-seed", "4", "-lncheck", "final", "-noGenerateSpecTE"];
+pub const DETERMINISTIC_ARGS: &[&str] = &["-workers", "1", "-fp", "0", "-seed", "4", "-lncheck", "final", "-noGenerateSpecTE"];
 
 /// `hosts.ts`: the JVM TLC runs in for the recordings.
-pub const TLC_JVM_ARGS: &[&str] =
-    &["-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1", "-XX:-UsePerfData", "-Xmx1g", "-Xss2m"];
+pub const TLC_JVM_ARGS: &[&str] = &["-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1", "-XX:-UsePerfData", "-Xmx1g", "-Xss2m"];
 
 /// `LC_ALL` for the recordings. The JVM calls `setlocale(LC_ALL, "")`, so a C library text
 /// in TLC's output (a `FileNotFoundException`'s `strerror`) follows the recorder's locale;
@@ -61,9 +59,8 @@ impl Context {
 
     /// Text appended before the module's last `====` line, and the cfg it runs with.
     fn wrapping(self) -> (String, &'static str) {
-        let state = |init: &str, next: &str, check: &str| {
-            format!("VARIABLE {STATE}\nInit == {STATE} = {init}\nNext == {next}\nInv == {check}")
-        };
+        let state =
+            |init: &str, next: &str, check: &str| format!("VARIABLE {STATE}\nInit == {STATE} = {init}\nNext == {next}\nInv == {check}");
         let state_cfg = "INIT Init\nNEXT Next\nINVARIANT Inv\n";
         match self {
             Context::Assume => ("ASSUME Test".into(), ""),
@@ -127,8 +124,18 @@ impl Case {
     /// worker of M6. These cases are recorded but not run.
     pub fn deferred_to(&self) -> Option<&'static str> {
         const M5_ARGS: &[&str] = &[
-            "-simulate", "-generate", "-dfid", "-continue", "-difftrace", "-dump", "-dumpTrace", "-coverage", "-inv",
-            "-invlevel", "-postCondition", "-loadTrace",
+            "-simulate",
+            "-generate",
+            "-dfid",
+            "-continue",
+            "-difftrace",
+            "-dump",
+            "-dumpTrace",
+            "-coverage",
+            "-inv",
+            "-invlevel",
+            "-postCondition",
+            "-loadTrace",
         ];
         let args = &self.metadata.args;
         if args.iter().any(|a| M5_ARGS.contains(&a.as_str())) {

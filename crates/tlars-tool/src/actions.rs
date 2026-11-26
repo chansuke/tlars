@@ -10,7 +10,7 @@
 use crate::ctx::{Binding, Ctx};
 use crate::error::EvalResult;
 use crate::eval::expr::{Builtin, Resolved};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use tlars_sany::Atom;
 use tlars_sany::graph::{ExprId, ExprNode, Level, OpDefId, SymbolRef};
@@ -33,7 +33,9 @@ pub struct Action {
     pub(crate) ctx: Ctx,
     pub(crate) name: Option<Atom>,
     pub(crate) op_def: Option<OpDefId>,
+    #[expect(dead_code, reason = "TLC's Action.isInitPredicate; nothing reads it yet")]
     pub(crate) is_init: bool,
+    #[expect(dead_code, reason = "TLC's Action.isInternal; nothing reads it yet")]
     pub(crate) is_internal: bool,
     /// The `SubstInNode`s `Specs.addSubsts` wraps `pred` in, outermost first, when the cfg
     /// reached `pred` through an INSTANCE. tlars already holds their substitutions in `ctx`;
@@ -73,7 +75,8 @@ pub(crate) fn split_wrapped_next(
     out: &mut Vec<Action>,
 ) -> EvalResult<()> {
     let graph = ev.tool().graph();
-    let has_substs = |w: ExprId| matches!(graph.expr(w), ExprNode::SubstIn { substs, .. } | ExprNode::APSubstIn { substs, .. } if !substs.is_empty());
+    let has_substs =
+        |w: ExprId| matches!(graph.expr(w), ExprNode::SubstIn { substs, .. } | ExprNode::APSubstIn { substs, .. } if !substs.is_empty());
     match wraps.iter().position(|&w| has_substs(w)) {
         None => split_next(ev, next, c, op_def, out),
         Some(first) => {
@@ -94,7 +97,14 @@ pub(crate) fn split_next(ev: &mut Ev<'_>, next: ExprId, c: &Ctx, op_def: Option<
 /// `getInitStateSpec()`: one action per initial predicate, unsplit. `new Action(pred, con,
 /// opDef, ...)` names it after the definition the cfg's INIT gave, which `TLCGet("spec")`
 /// reports; a conjunct of SPECIFICATION has no definition and stays unnamed.
-pub(crate) fn init_action(graph: &tlars_sany::graph::SemanticGraph, index: usize, pred: ExprId, c: &Ctx, op_def: Option<OpDefId>, wraps: &[ExprId]) -> Action {
+pub(crate) fn init_action(
+    graph: &tlars_sany::graph::SemanticGraph,
+    index: usize,
+    pred: ExprId,
+    c: &Ctx,
+    op_def: Option<OpDefId>,
+    wraps: &[ExprId],
+) -> Action {
     let name = op_def.map(|d| graph.op_def(d).name);
     Action { id: ActionId(index as u32), pred, ctx: c.clone(), name, op_def, is_init: true, is_internal: false, wraps: wraps.into() }
 }

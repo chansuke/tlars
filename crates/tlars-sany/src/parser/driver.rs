@@ -58,18 +58,16 @@ impl SanyExitCode {
 #[derive(Debug)]
 pub(crate) enum FrontEndFailure {
     /// `FrontEndException`: an unexpected exception, already logged.
-    FrontEnd(JThrow),
+    FrontEnd(#[expect(dead_code, reason = "M5: TLC_PARSING_FAILED2 prints the exception")] JThrow),
 }
 
 /// `Throwable.toString()` of what the front end catches.
 fn throwable_string(e: &JThrow) -> String {
     match e {
         // `AbortException.toString()` is its details'.
-        JThrow::AbortException(a) => a
-            .jread(|a| a.details.clone())
-            .toString()
-            .map(|s| s.java_string())
-            .unwrap_or_else(|_| "tla2sany.semantic.AbortException".into()),
+        JThrow::AbortException(a) => {
+            a.jread(|a| a.details.clone()).toString().map(|s| s.java_string()).unwrap_or_else(|_| "tla2sany.semantic.AbortException".into())
+        }
         other => {
             let class = match other {
                 JThrow::Extern(x) => extern_class_name(x.class),
@@ -129,11 +127,7 @@ pub(crate) fn parse(spec: &J<SpecObj>, out: &J<SanyOutput>, settings: &SanySetti
     };
     match run() {
         Ok(Some(code)) => Ok(code),
-        Ok(None) => Ok(if settings.strict_error_codes {
-            SanyExitCode::from_code(spec.jread(|s| s.errorLevel))
-        } else {
-            SanyExitCode::Ok
-        }),
+        Ok(None) => Ok(if settings.strict_error_codes { SanyExitCode::from_code(spec.jread(|s| s.errorLevel)) } else { SanyExitCode::Ok }),
         // `catch (Exception e)`: logged and rethrown as a `FrontEndException`.
         Err(e) => {
             out.log_2(LogLevel::Error, JStr::of(&throwable_string(&e)));

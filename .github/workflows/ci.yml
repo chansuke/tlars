@@ -14,6 +14,9 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The escape-hatch check diffs against the base branch.
+          fetch-depth: 0
       - uses: cachix/install-nix-action@v31
       - uses: actions/cache@v4
         with:
@@ -23,16 +26,15 @@ jobs:
             target
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'flake.lock') }}
           restore-keys: cargo-${{ runner.os }}-
-      - name: Generated files match the pinned sources
-        run: |
-          nix develop -c cargo run -q -p xtask -- gen-fidelity --check
-          nix develop -c cargo run -q -p xtask -- jj2rs emit --check
-      - name: Tests
-        run: nix develop -c cargo test --release --workspace
-      - name: Conformance cases that passed still pass
-        run: |
-          for target in expressions:assume expressions:init expressions:next expressions:invariant \
-                        standard:assume standard:init standard:next standard:invariant standard:model checker:model \
-                        temporal:model expressions:property; do
-            nix develop -c cargo run -q --release -p xtask -- conformance run --check --suite "${target%%:*}" --context "${target##*:}"
-          done
+      - name: scripts/verify check
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: scripts/verify check --base "origin/$BASE_REF"
+      - name: scripts/verify conformance
+        run: scripts/verify conformance
+      - name: Keep the verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify
+          path: target/verify/

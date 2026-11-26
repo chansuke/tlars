@@ -63,10 +63,7 @@ impl Loc {
         if self.module.is_some() && self.begin_line == 0 && self.begin_col == 0 && self.end_line == 0 && self.end_col == 0 {
             return format!("In module {module}");
         }
-        format!(
-            "line {}, col {} to line {}, col {} of module {module}",
-            self.begin_line, self.begin_col, self.end_line, self.end_col
-        )
+        format!("line {}, col {} to line {}, col {} of module {module}", self.begin_line, self.begin_col, self.end_line, self.end_col)
     }
 }
 
@@ -346,7 +343,20 @@ pub(crate) struct GraphParts {
 impl SemanticGraph {
     pub(crate) fn from_parts(parts: GraphParts, root: ModuleId, interner: Arc<Interner>) -> SemanticGraph {
         let GraphParts { modules, op_defs, decls, params, thms, exprs, expr_levels, expr_level_params, op_levels, body_arg_images } = parts;
-        SemanticGraph { modules, op_defs, decls, params, thms, exprs, expr_levels, expr_level_params, op_levels, body_arg_images, root, interner }
+        SemanticGraph {
+            modules,
+            op_defs,
+            decls,
+            params,
+            thms,
+            exprs,
+            expr_levels,
+            expr_level_params,
+            op_levels,
+            body_arg_images,
+            root,
+            interner,
+        }
     }
 
     pub fn root(&self) -> ModuleId {
@@ -459,7 +469,7 @@ impl SemanticGraph {
         }
     }
     /// Resolve `a!b!c` / plain names the way `SpecProcessor` resolves cfg identifiers.
-    pub fn resolve_root_name(&self, path: &[Atom]) -> Option<SymbolRef> {
+    pub fn resolve_root_name(&self, _path: &[Atom]) -> Option<SymbolRef> {
         todo!("M3: SpecProcessor's name resolution for cfg identifiers")
     }
     pub fn interner(&self) -> &Arc<Interner> {

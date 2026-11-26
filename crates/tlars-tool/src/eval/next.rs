@@ -6,7 +6,7 @@
 //! The successor is built in one `&mut PartialState` with bind/unbind, as in TLC.
 
 use super::expr::{Builtin, Resolved};
-use super::{EvalControl, Ev, NextSink};
+use super::{Ev, EvalControl, NextSink};
 use crate::actions::Action;
 use crate::ctx::{Binding, Ctx};
 use crate::error::{EvalError, Flow};
@@ -77,6 +77,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `getNextStatesImpl`: dispatch on node kind.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     pub(crate) fn next_impl(
         &mut self,
         a: &Action,
@@ -93,7 +94,7 @@ impl<'t> Ev<'t> {
         r
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_impl_inner(
         &mut self,
         a: &Action,
@@ -114,6 +115,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `getNextStatesApplImpl` (`Tool.java:1100-1548`).
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_appl(
         &mut self,
         a: &Action,
@@ -272,8 +274,11 @@ impl<'t> Ev<'t> {
                 let argv = self.eval(arg(1), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
                 let bval = fval.apply(self, &argv, EvalControl::CLEAR)?;
                 let Value::Bool(b) = bval else {
-                    let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["next states", "boolean", &graph.expr_tlc_text(pred)]);
-                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message).with_loc(Some(graph.loc(arg(1)))).into());
+                    let message =
+                        self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["next states", "boolean", &graph.expr_tlc_text(pred)]);
+                    return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message)
+                        .with_loc(Some(graph.loc(arg(1))))
+                        .into());
                 };
                 if b { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
             }
@@ -317,6 +322,7 @@ impl<'t> Ev<'t> {
 
     /// `getNextStatesApplUsrDefOp` and the `default` case: the value must be a boolean, and a
     /// true one continues with the remaining items.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_filter(
         &mut self,
         a: &Action,
@@ -332,15 +338,14 @@ impl<'t> Ev<'t> {
             let shown = v.to_tlc_string(self)?;
             let message =
                 self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["next states", "boolean", &shown, &graph.expr_tlc_text(pred)]);
-            return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred)))
-            .into());
+            return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred))).into());
         };
         if b { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
     }
 
     /// `x' = e`, `x' \in S` and `x' \subseteq S`: bind the primed variable if it is still
     /// free, otherwise test what it is bound to.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_assign(
         &mut self,
         a: &Action,
@@ -364,11 +369,7 @@ impl<'t> Ev<'t> {
             return self.next_continue(a, acts, s0, s1, sink);
         };
         let rval = self.eval(args[1].expect_expr(), c, StateRef::Full(s0), StateRef::Partial(s1), EvalControl::CLEAR)?;
-        let rval = if kind == Assign::Subseteq {
-            self.set_source(args[1].expect_expr(), crate::value::subset(rval))
-        } else {
-            rval
-        };
+        let rval = if kind == Assign::Subseteq { self.set_source(args[1].expect_expr(), crate::value::subset(rval)) } else { rval };
         let bound = s1.lookup(slot).cloned();
         match (kind, bound) {
             (Assign::Eq, None) => {
@@ -378,14 +379,16 @@ impl<'t> Ev<'t> {
                 r
             }
             (Assign::Eq, Some(lval)) => {
-                if lval.tlc_equals(self, &rval)? { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
+                if lval.tlc_equals(self, &rval)? {
+                    self.next_continue(a, acts, s0, s1, sink)
+                } else {
+                    Ok(())
+                }
             }
             (_, None) => {
                 if !rval.is_enumerable() {
-                    let reason = format!(
-                        "In computing next states, the right side of \\IN is not enumerable.\n{}",
-                        graph.expr_tlc_text(pred)
-                    );
+                    let reason =
+                        format!("In computing next states, the right side of \\IN is not enumerable.\n{}", graph.expr_tlc_text(pred));
                     return Err(EvalError::detailed(reason, Some(graph.loc(pred))).into());
                 }
                 let mut elems = rval.elements(self, crate::value::enumerate::EnumOrder::Native)?.expect("an enumerable value enumerates");
@@ -398,13 +401,18 @@ impl<'t> Ev<'t> {
                 Ok(())
             }
             (_, Some(lval)) => {
-                if rval.member(self, &lval)? { self.next_continue(a, acts, s0, s1, sink) } else { Ok(()) }
+                if rval.member(self, &lval)? {
+                    self.next_continue(a, acts, s0, s1, sink)
+                } else {
+                    Ok(())
+                }
             }
         }
     }
 
     /// Conjunction: push `args[1..]` (so they run left to right after `args[0]`), then
     /// evaluate `args[0]`. TLC: `for i = alen-1 .. 1: acts = acts.cons(args[i], c, i)`.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_conj(
         &mut self,
         a: &Action,
@@ -423,13 +431,7 @@ impl<'t> Ev<'t> {
     }
 
     /// Builds the continuation `rest[0] :: rest[1] :: ... :: acts` on the stack, then calls `k`.
-    fn push_conjuncts(
-        &mut self,
-        rest: &[ExprOrOpArg],
-        c: &Ctx,
-        acts: Acts<'_>,
-        k: &mut dyn FnMut(&mut Self, Acts<'_>) -> Flow,
-    ) -> Flow {
+    fn push_conjuncts(&mut self, rest: &[ExprOrOpArg], c: &Ctx, acts: Acts<'_>, k: &mut dyn FnMut(&mut Self, Acts<'_>) -> Flow) -> Flow {
         match rest.split_last() {
             None => k(self, acts),
             Some((last, init)) => {
@@ -441,7 +443,7 @@ impl<'t> Ev<'t> {
 
     /// `\A x \in S : P`: the bindings after the first become predicate items, consed in
     /// enumeration order so the list holds them reversed, exactly as TLC's loop does.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn push_forall(
         &mut self,
         a: &Action,
@@ -493,8 +495,9 @@ impl<'t> Ev<'t> {
                         let shown = v.to_tlc_string(self)?;
                         let text = graph.expr_tlc_text(item.pred);
                         let message = self.out.text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["next states", "boolean", &shown, &text]);
-                        return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(item.pred)))
-                        .into());
+                        return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message)
+                            .with_loc(Some(graph.loc(item.pred)))
+                            .into());
                     };
                     if !b {
                         return sink.add_unsatisfied(self, s0, a.id(), s1);
@@ -515,6 +518,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `processUnchanged`: bind unbound primed vars to their s0 values, test bound ones.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn process_unchanged(
         &mut self,
         a: &Action,
@@ -531,7 +535,7 @@ impl<'t> Ev<'t> {
         r
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn process_unchanged_inner(
         &mut self,
         a: &Action,
@@ -592,6 +596,7 @@ impl<'t> Ev<'t> {
 
     /// `verifyUnchanged`: the expression is compared in both states without synthesising any
     /// successor value.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn verify_unchanged(
         &mut self,
         a: &Action,
@@ -608,13 +613,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `UNCHANGED <<a, b, c>>`: the components after the first become UNCHANGED items.
-    fn push_unchanged(
-        &mut self,
-        rest: &[ExprOrOpArg],
-        c: &Ctx,
-        acts: Acts<'_>,
-        k: &mut dyn FnMut(&mut Self, Acts<'_>) -> Flow,
-    ) -> Flow {
+    fn push_unchanged(&mut self, rest: &[ExprOrOpArg], c: &Ctx, acts: Acts<'_>, k: &mut dyn FnMut(&mut Self, Acts<'_>) -> Flow) -> Flow {
         match rest.split_last() {
             None => k(self, acts),
             Some((last, init)) => {
@@ -626,6 +625,7 @@ impl<'t> Ev<'t> {
 
     /// `getNextStatesImplSubstInKind`: cons one fresh `Thunk` (cachable = false) per
     /// substitution over the *outer* context, then recurse into the body.
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getNextStates* (action, pred, acts, ctx, s0, s1, sink)")]
     fn next_subst_in(
         &mut self,
         a: &Action,

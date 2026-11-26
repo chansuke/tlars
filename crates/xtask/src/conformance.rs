@@ -134,8 +134,11 @@ fn run_tlc(jar: &str, root: &Path, case: &Case, context: Context) -> Result<Outc
     };
     let out = String::from_utf8_lossy(&reader.join().expect("reader")).into_owned();
     let exit = status.code().ok_or_else(|| format!("{}: TLC killed by a signal", case.id))?;
-    let transcript =
-        if case.is_exit_only() { String::new() } else { transcript::normalize(&out, &dir.display().to_string(), context.keeps_state_space()) };
+    let transcript = if case.is_exit_only() {
+        String::new()
+    } else {
+        transcript::normalize(&out, &dir.display().to_string(), context.keeps_state_space())
+    };
     Ok(Outcome { exit, transcript })
 }
 
@@ -182,7 +185,11 @@ const UNIMPLEMENTED_PANIC: &str = "not yet implemented";
 /// no transcript that would expose it.
 fn verdict(want: &Outcome, got: &Outcome, unimplemented: bool) -> Verdict {
     if unimplemented {
-        let difference = if got == want { "exit and transcript agree, but the run stopped at an unimplemented construct".to_string() } else { first_difference(want, got) };
+        let difference = if got == want {
+            "exit and transcript agree, but the run stopped at an unimplemented construct".to_string()
+        } else {
+            first_difference(want, got)
+        };
         return Verdict::Unimplemented(difference);
     }
     if got == want {
@@ -341,9 +348,8 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
     std::fs::write(&report_path, &report).map_err(|e| e.to_string())?;
     println!("failures: {}", report_path.display());
 
-    let listed: Vec<String> = std::fs::read_to_string(passing_path(root, args))
-        .map(|t| t.lines().map(str::to_string).collect())
-        .unwrap_or_default();
+    let listed: Vec<String> =
+        std::fs::read_to_string(passing_path(root, args)).map(|t| t.lines().map(str::to_string).collect()).unwrap_or_default();
     let regressed: Vec<&String> = listed.iter().filter(|id| cases.iter().any(|c| &&c.id == id) && !passing.contains(id)).collect();
     match args.mode {
         RunMode::Update if args.filter.is_none() => {
@@ -355,7 +361,11 @@ pub(crate) fn run(root: &Path, args: &Args) -> Result<(), String> {
         _ => {}
     }
     if !regressed.is_empty() {
-        let msg = format!("{} listed cases no longer pass:\n{}", regressed.len(), regressed.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n"));
+        let msg = format!(
+            "{} listed cases no longer pass:\n{}",
+            regressed.len(),
+            regressed.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("\n")
+        );
         if args.mode == RunMode::Check {
             return Err(msg);
         }

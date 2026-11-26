@@ -384,12 +384,7 @@ const PATCHES: &[(&str, &str, &str, &str)] = &[
         LINTER_RECORDS,
         "stream pipelines as the loops they mean (same order, same short-circuits); the anonymous ChildrenVisitor as a named class",
     ),
-    (
-        "pcal/PcalCharReader.java",
-        "return input.codePoints().toArray();",
-        "return JavaStrings.codePoints(input);",
-        "stream pipeline",
-    ),
+    ("pcal/PcalCharReader.java", "return input.codePoints().toArray();", "return JavaStrings.codePoints(input);", "stream pipeline"),
     (
         "pcal/PcalCharReader.java",
         "return new String(currentLine, column, currentLine.length - column) + '\\n' ;",
@@ -756,8 +751,7 @@ fn emit_on_this_thread(tlaplus_src: &Path, out: &Path, check: bool) -> Result<()
     }
     let overrides: BTreeMap<(String, String), ast::Type> =
         RAW_OVERRIDES.iter().map(|(c, f, t)| ((c.to_string(), f.to_string()), externs::parse_type(t))).collect();
-    let known: BTreeSet<String> =
-        classes.keys().cloned().chain(translated.iter().cloned()).filter(|c| !unmodelled.contains(c)).collect();
+    let known: BTreeSet<String> = classes.keys().cloned().chain(translated.iter().cloned()).filter(|c| !unmodelled.contains(c)).collect();
     let mut skipped = Vec::new();
     for (class, h, members) in &parsed {
         emit::collect_consts(class, members, h.is_interface);
@@ -812,17 +806,21 @@ fn emit_on_this_thread(tlaplus_src: &Path, out: &Path, check: bool) -> Result<()
     }
     code.push_str("        _ => \"java.lang.Object\",\n    }\n}\n\n");
     emit::emit_jthrow(&classes, &mut code);
-    let resets: String = parsed
-        .iter()
-        .filter(|(c, ..)| classes[c].has_statics)
-        .map(|(c, ..)| format!("    {c}::reset_statics();\n"))
-        .collect();
+    let resets: String =
+        parsed.iter().filter(|(c, ..)| classes[c].has_statics).map(|(c, ..)| format!("    {c}::reset_statics();\n")).collect();
     code.push_str(&format!(
         "/// Forgets every translated class's statics, as a fresh JVM would (a new session).\npub(crate) fn reset_all_statics() {{\n{resets}}}\n"
     ));
     if check {
         let current = std::fs::read_to_string(out).map_err(|e| format!("{}: {e}", out.display()))?;
-        return if current == code { Ok(()) } else { Err(format!("{} is stale; run `xtask jj2rs emit`", out.display())) };
+        return if current == code {
+            Ok(())
+        } else {
+            Err(format!(
+                "{} is stale: fix the emitter in crates/xtask/src/jj2rs, then run `xtask jj2rs emit`; do not edit it by hand",
+                out.display()
+            ))
+        };
     }
     std::fs::write(out, code).map_err(|e| format!("{}: {e}", out.display()))?;
     println!("skipped (signature mentions an untranslated class):");

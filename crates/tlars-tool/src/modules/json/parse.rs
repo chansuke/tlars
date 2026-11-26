@@ -165,9 +165,7 @@ impl Thrown {
     fn failure(&self) -> Failure {
         match self {
             Thrown::Syntax(message) => Failure::Thrown(message.clone()),
-            Thrown::Malformed(message) => {
-                Failure::Thrown(format!("com.google.gson.stream.MalformedJsonException: {message}"))
-            }
+            Thrown::Malformed(message) => Failure::Thrown(format!("com.google.gson.stream.MalformedJsonException: {message}")),
             Thrown::Eof(message) => Failure::Thrown(format!("java.io.EOFException: {message}")),
             Thrown::Unpaired => Failure::UnpairedSurrogate,
         }
@@ -471,7 +469,11 @@ impl JsonReader {
                         self.check_lenient()?;
                         // Don't consume the first character in an unquoted string.
                         self.pos -= 1;
-                        if self.is_literal(c)? { Ok(self.set_peeked(Peeked::UnquotedName)) } else { Err(self.syntax_error("Expected name")) }
+                        if self.is_literal(c)? {
+                            Ok(self.set_peeked(Peeked::UnquotedName))
+                        } else {
+                            Err(self.syntax_error("Expected name"))
+                        }
                     }
                 };
             }
@@ -1284,4 +1286,3 @@ mod tests {
         assert_eq!(parsed(&text), Err(format!("com.google.gson.stream.MalformedJsonException: {want}")), "256 objects");
     }
 }
-

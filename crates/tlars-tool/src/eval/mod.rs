@@ -20,9 +20,9 @@ mod replay;
 pub use alias::Aliased;
 
 use crate::actions::ActionId;
+use crate::ctx::Ctx;
 use crate::effects::Effects;
 use crate::error::{EvalError, EvalErrorData, EvalResult, Flow};
-use crate::ctx::Ctx;
 use crate::fp64::Fp;
 use crate::state::{PartialState, State};
 use crate::tool::{CheckId, CounterExampleDef, ImpliedAction, ImpliedInit, Invariant, Tool};
@@ -175,7 +175,7 @@ pub trait InitSink {
 pub trait NextSink {
     fn add_next(&mut self, ev: &mut Ev<'_>, s0: &State, action: ActionId, s1: &PartialState) -> Flow;
     /// `addUnsatisfiedState` (only `-dump ... constrained` and the debugger care).
-    fn add_unsatisfied(&mut self, ev: &mut Ev<'_>, s0: &State, action: ActionId, s1: &PartialState) -> Flow {
+    fn add_unsatisfied(&mut self, _ev: &mut Ev<'_>, _s0: &State, _action: ActionId, _s1: &PartialState) -> Flow {
         Ok(())
     }
 }
@@ -194,6 +194,11 @@ pub struct Ev<'t> {
     depth: u32,
     /// Monotone per-worker counter giving each parent expansion its identity.
     expansions: u64,
+}
+
+/// `new EvalException(ec, params)`: the message is `MP.getMessage(ec, params)`.
+pub(crate) fn eval_exception(ev: &Ev<'_>, ec: Ec, params: &[&str]) -> EvalError {
+    EvalError::eval(ec, ev.out().text(ec, params), params.iter().map(|p| p.to_string()).collect())
 }
 
 impl<'t> Ev<'t> {
@@ -425,7 +430,9 @@ impl<'t> Ev<'t> {
             Some(Value::FcnRcd(fcn)) => {
                 let (domain, values) = fcn.snapshot();
                 let Some(domain) = domain else {
-                    return Err(crate::error::EvalError::unimplemented("a _POSSIBLE register holding a function over an interval (M3 unit 5)".into()));
+                    return Err(crate::error::EvalError::unimplemented(
+                        "a _POSSIBLE register holding a function over an interval (M3 unit 5)".into(),
+                    ));
                 };
                 let mut out = Vec::with_capacity(values.len());
                 for (d, v) in domain.iter().zip(values.iter()) {
@@ -565,7 +572,13 @@ impl<'t> Ev<'t> {
                 let graph = &self.tool.graph;
                 let loc = graph.loc(expr);
                 let message = self.out.text(Ec::TLC_EXPECTED_VALUE, &["boolean", &graph.expr_tlc_text(expr)]);
-                Err(EvalError::from(EvalErrorData { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime, params: Vec::new() }))
+                Err(EvalError::from(EvalErrorData {
+                    ec: Ec::TLC_EXPECTED_VALUE,
+                    message,
+                    loc: Some(loc),
+                    kind: crate::error::EvalErrorKind::Runtime,
+                    params: Vec::new(),
+                }))
             }
         }
     }
@@ -707,7 +720,13 @@ impl<'t> Ev<'t> {
     }
     /// `Action.getLocation(name)`: the action's parameters, as bound by splitting, then the
     /// predicate's location.
-    pub(crate) fn labelled(&mut self, name: &str, pred: ExprId, op_def: Option<tlars_sany::graph::OpDefId>, ctx: &crate::ctx::Ctx) -> String {
+    pub(crate) fn labelled(
+        &mut self,
+        name: &str,
+        pred: ExprId,
+        op_def: Option<tlars_sany::graph::OpDefId>,
+        ctx: &crate::ctx::Ctx,
+    ) -> String {
         let graph = &self.tool().graph;
         let params = op_def.map(|d| graph.op_def(d).params.clone()).unwrap_or_default();
         let mut shown = Vec::new();
@@ -741,11 +760,6 @@ impl<'t> Ev<'t> {
         self.expansions += 1;
         let id = crate::effects::ExpansionId(self.expansions);
         self.locals.effects.current = Some(crate::effects::CurrentState { id, fp: s0_fp, state: s0.clone() });
-    }
-
-    /// `IdThread.getCurrentState()`, which is `null` outside a worker's expansion.
-    pub(crate) fn current_state(&self) -> Option<&State> {
-        self.locals.effects.current.as_ref().map(|c| &c.state)
     }
 
     /// The `IdThread.setCurrentState(currentState)` that `TLCExt!Trace` runs after a nested
@@ -797,7 +811,13 @@ impl<'t> Ev<'t> {
                 let graph = &self.tool.graph;
                 let loc = graph.loc(expr);
                 let message = self.out.text(Ec::TLC_EXPECTED_VALUE, &["boolean", &graph.expr_tlc_text(expr)]);
-                Err(EvalError::from(EvalErrorData { ec: Ec::TLC_EXPECTED_VALUE, message, loc: Some(loc), kind: crate::error::EvalErrorKind::Runtime, params: Vec::new() }))
+                Err(EvalError::from(EvalErrorData {
+                    ec: Ec::TLC_EXPECTED_VALUE,
+                    message,
+                    loc: Some(loc),
+                    kind: crate::error::EvalErrorKind::Runtime,
+                    params: Vec::new(),
+                }))
             }
         }
     }
@@ -857,7 +877,13 @@ impl<'t> Ev<'t> {
     /// What the JVM's `StackOverflowError` becomes. It is an `Error`, so the `catch
     /// (Exception)` blocks TLC evaluates under (assumptions, invariants) let it through.
     fn stack_overflow(&self) -> EvalError {
-        EvalError::from(EvalErrorData { ec: Ec::SYSTEM_STACK_OVERFLOW, message: String::new(), loc: None, kind: crate::error::EvalErrorKind::StackOverflow, params: Vec::new() })
+        EvalError::from(EvalErrorData {
+            ec: Ec::SYSTEM_STACK_OVERFLOW,
+            message: String::new(),
+            loc: None,
+            kind: crate::error::EvalErrorKind::StackOverflow,
+            params: Vec::new(),
+        })
     }
 }
 

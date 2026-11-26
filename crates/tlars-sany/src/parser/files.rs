@@ -10,7 +10,7 @@
 //! `Parsing file <path> (<url>)`; tlars has no jar, and prints the path alone, as TLC does
 //! when its standard modules are on the file system.
 
-#![allow(non_snake_case)]
+#![expect(non_snake_case, dead_code, reason = "the Java library subset generated.rs calls by its Java names; it calls only part of it")]
 
 use super::generated::TLAplusParser;
 use super::java::*;
@@ -98,8 +98,7 @@ impl FilenameToStream {
         if let Some(d) = &*slot {
             return d.clone();
         }
-        let base = std::env::temp_dir();
-        let pid = std::process::id();
+        let crate::Host { temp_dir: base, pid, .. } = super::support::host();
         let mut n = 0u32;
         let dir = loop {
             let candidate = base.join(format!("tlc-{pid}-{n}"));
@@ -263,8 +262,7 @@ fn monolith_module(root: &Path, module_name: &str) -> Option<J<NamedInputStream>
 
 /// `Files.createTempDirectory(null)`.
 fn tempdir_for_monolith() -> Option<PathBuf> {
-    let base = std::env::temp_dir();
-    let pid = std::process::id();
+    let crate::Host { temp_dir: base, pid, .. } = super::support::host();
     (0..u32::MAX).map(|n| base.join(format!("tlars-{pid}-{n}"))).find(|d| std::fs::create_dir(d).is_ok())
 }
 
@@ -314,11 +312,7 @@ impl FileUtil {
     }
 
     /// `FileUtil.createNamedInputStream(name, resolver, rootFileNis)`.
-    pub(crate) fn createNamedInputStream_3(
-        name: JStr,
-        resolver: J<FilenameToStream>,
-        root: J<NamedInputStream>,
-    ) -> J<NamedInputStream> {
+    pub(crate) fn createNamedInputStream_3(name: JStr, resolver: J<FilenameToStream>, root: J<NamedInputStream>) -> J<NamedInputStream> {
         let name = strip_newline(name.as_str()).to_string();
         let stem = if name.to_lowercase().ends_with(TLA_EXTENSION) { &name[..name.len() - TLA_EXTENSION.len()] } else { &name };
         let source_file_name = format!("{stem}{TLA_EXTENSION}");
@@ -351,10 +345,7 @@ impl FileUtil {
                 None => J::null(),
             };
         }
-        tool_println(
-            true,
-            format!("File does not exist: {} while looking in these directories: {}", file.path.display(), r.full_path()),
-        );
+        tool_println(true, format!("File does not exist: {} while looking in these directories: {}", file.path.display(), r.full_path()));
         J::null()
     }
 

@@ -23,6 +23,8 @@ mod function;
 mod golden;
 pub(crate) mod order;
 pub(crate) mod print;
+#[cfg(test)]
+mod properties;
 pub(crate) mod random;
 mod sets;
 pub(crate) mod stream;
@@ -32,7 +34,7 @@ pub(crate) use sets::{lazy_cap, lazy_cup, lazy_diff, set_of_fcns, set_of_rcds, s
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalErrorData, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -67,6 +69,7 @@ impl Source {
 /// `ValueConstants` kind bytes. The discriminants go into fingerprints.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
+#[expect(dead_code, reason = "TLC's kind numbering kept whole; some kinds are never values here")]
 pub(crate) enum ValueKind {
     Bool = 0,
     Int = 1,
@@ -176,13 +179,16 @@ impl IntervalValue {
     }
 
     /// `toSetEnum()`: the elements in order, already normalised.
-    pub(crate) fn to_set_enum_arc(&self) -> Arc<SetEnumValue> {
+    pub(crate) fn to_set_enum_arc(self) -> Arc<SetEnumValue> {
         let elems: Box<[Value]> = (i64::from(self.lo)..=i64::from(self.hi)).map(|n| Value::Int(n as i32)).collect();
         let norm = OnceLock::new();
         let _ = norm.set(elems.clone());
         Arc::new(SetEnumValue { built: elems, norm, source: Source::none() })
     }
 }
+
+/// `OpRcdValue`: the cfg's `op(a, b) = v` lines for one name, in cfg order.
+pub(crate) type OpRcd = Arc<[(Box<[Value]>, Value)]>;
 
 pub struct TupleValue {
     pub(crate) elems: Box<[Value]>,
@@ -210,11 +216,14 @@ impl SetEnumValue {
     }
 }
 
+/// A record's names and values, in the same order.
+pub(crate) type RecordFields = (Box<[Atom]>, Box<[Value]>);
+
 /// Fields as constructed; normalised = sorted by name token.
 pub struct RecordValue {
     pub(crate) names: Box<[Atom]>,
     pub(crate) values: Box<[Value]>,
-    pub(crate) norm: OnceLock<(Box<[Atom]>, Box<[Value]>)>,
+    pub(crate) norm: OnceLock<RecordFields>,
     pub(crate) source: Source,
     /// `tlc2.value.impl.CounterExample`, a subclass of `RecordValue` that behaves like one
     /// everywhere but in `TLCExt!ToTrace`, which refuses a record of the same shape, and in
@@ -232,10 +241,13 @@ pub enum FcnDomain {
 /// computed. An interval domain is normalised by construction, so `norm` stays empty and
 /// `is_normalized` reports the domain's kind. A failed sort (a duplicate domain element) is
 /// not cached, so the error re-surfaces at the next use, as in TLC.
+/// A function's domain and values, in the same order.
+pub(crate) type FcnPairs = (Box<[Value]>, Box<[Value]>);
+
 pub struct FcnRcdValue {
     pub(crate) domain: FcnDomain,
     pub(crate) values: Box<[Value]>,
-    pub(crate) norm: OnceLock<(Box<[Value]>, Box<[Value]>)>,
+    pub(crate) norm: OnceLock<FcnPairs>,
 }
 
 /// Lazy sets. `converted` is `convertAndCache()`'s SetEnum.
@@ -247,6 +259,7 @@ pub struct SubsetValue {
 
 pub struct KSubsetValue {
     pub(crate) base: Value,
+    #[expect(dead_code, reason = "M5: the k-subset operations read it")]
     pub(crate) k: i32,
     pub(crate) converted: OnceLock<Arc<SetEnumValue>>,
 }
@@ -343,9 +356,12 @@ pub struct SetPredValue {
 /// functions. Recursion: TLC stores the function in its own context (`makeRecursive`), a
 /// cycle that would leak under `Arc`. Here `rec_name` is kept and `f := self` is consed onto
 /// the context *at apply time*: same semantics, no cycle.
+/// One `x, y \in S` list of `FcnParams`, as `(formals, isTuple, domain)`.
+pub(crate) type FcnParam = (Box<[ParamId]>, bool, Value);
+
 pub struct FcnLambdaValue {
-    /// `FcnParams`: one entry per `x, y \in S` list, as `(formals, isTuple, domain)`.
-    pub(crate) params: Box<[(Box<[ParamId]>, bool, Value)]>,
+    /// `FcnParams`: one entry per `x, y \in S` list.
+    pub(crate) params: Box<[FcnParam]>,
     pub(crate) body: ExprId,
     pub(crate) env: Closure,
     pub(crate) rec_name: Option<SymbolRef>,
@@ -385,7 +401,9 @@ impl Value {
             (Value::SetOfRcds(a), Value::SetOfRcds(b)) => same(a, b),
             (Value::SetOfTuples(a), Value::SetOfTuples(b)) => same(a, b),
             (Value::Union(a), Value::Union(b)) => same(a, b),
-            (Value::SetCup(a), Value::SetCup(b)) | (Value::SetCap(a), Value::SetCap(b)) | (Value::SetDiff(a), Value::SetDiff(b)) => same(a, b),
+            (Value::SetCup(a), Value::SetCup(b)) | (Value::SetCap(a), Value::SetCap(b)) | (Value::SetDiff(a), Value::SetDiff(b)) => {
+                same(a, b)
+            }
             (Value::SetPred(a), Value::SetPred(b)) => same(a, b),
             (Value::FcnLambda(a), Value::FcnLambda(b)) => same(a, b),
             (Value::User(a), Value::User(b)) => same(a, b),
@@ -879,9 +897,7 @@ impl Value {
             // The classes a permutation cannot touch return `this`.
             Value::Bool(_) | Value::Int(_) | Value::Str(_) | Value::Interval(_) => Ok(None),
             Value::Model(mv) => Ok(perm.get(*mv)?.map(Value::Model)),
-            Value::SetEnum(set) => {
-                Ok(permute_all(ev, perm, set.snapshot())?.map(|vals| Value::SetEnum(set_enum_arc(vals, false))))
-            }
+            Value::SetEnum(set) => Ok(permute_all(ev, perm, set.snapshot())?.map(|vals| Value::SetEnum(set_enum_arc(vals, false)))),
             Value::Record(r) => {
                 let (names, values) = order::record_normalized(ev, r)?;
                 Ok(permute_all(ev, perm, values)?.map(|vals| Value::Record(Value::record_arc(names.to_vec(), vals, true))))

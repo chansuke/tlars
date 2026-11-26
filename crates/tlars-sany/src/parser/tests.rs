@@ -19,16 +19,8 @@ fn dump(out: &mut String, n: &J<SyntaxTreeNode>, depth: usize) {
     let (kind, image, loc, zero, one) = n.jread(|n| (n.kind, n.image, n.location.clone(), n.zero.clone(), n.one.clone()));
     let image = if image.is_null() { "-".into() } else { esc(image.toString().as_str()) };
     let count = |a: &JArr<J<SyntaxTreeNode>>| if a.is_null() { "-".into() } else { a.length().to_string() };
-    let _ = writeln!(
-        out,
-        "{depth} {kind} {image} {},{},{},{} {} {}",
-        loc.at(0),
-        loc.at(1),
-        loc.at(2),
-        loc.at(3),
-        count(&zero),
-        count(&one)
-    );
+    let _ =
+        writeln!(out, "{depth} {kind} {image} {},{},{},{} {} {}", loc.at(0), loc.at(1), loc.at(2), loc.at(3), count(&zero), count(&one));
     for heirs in [zero, one] {
         if heirs.is_null() {
             continue;
@@ -58,6 +50,7 @@ fn level_name(l: LogLevel) -> &'static str {
 fn parse_all(root: &Path, files: &[String]) -> String {
     let interner = Arc::new(Interner::new());
     support::enter(&interner);
+    support::set_host(support::test_host());
     let mut out = String::new();
     let mut interned = 0;
     for file in files {
@@ -110,6 +103,7 @@ fn crate_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+#[expect(clippy::disallowed_methods, reason = "the tlaplus/Examples checkout nix develop points at")]
 fn examples() -> PathBuf {
     PathBuf::from(std::env::var_os("TLAPLUS_EXAMPLES").expect("TLAPLUS_EXAMPLES is not set; run inside `nix develop`"))
 }

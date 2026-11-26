@@ -36,10 +36,7 @@ impl Locale {
     /// variable, then `LANG`, the first that is set and not empty; `C` when none is.
     pub fn from_environment(var: impl Fn(&str) -> Option<String>) -> Locale {
         let pick = |category: &str| {
-            ["LC_ALL", category, "LANG"]
-                .iter()
-                .find_map(|name| var(name).filter(|v| !v.is_empty()))
-                .unwrap_or_else(|| "C".to_string())
+            ["LC_ALL", category, "LANG"].iter().find_map(|name| var(name).filter(|v| !v.is_empty())).unwrap_or_else(|| "C".to_string())
         };
         Locale { ctype: pick("LC_CTYPE"), messages: pick("LC_MESSAGES") }
     }
@@ -88,8 +85,7 @@ mod linux {
     }
 
     fn build(locale: &Locale) -> usize {
-        let (Ok(ctype), Ok(messages)) = (CString::new(locale.ctype.as_str()), CString::new(locale.messages.as_str()))
-        else {
+        let (Ok(ctype), Ok(messages)) = (CString::new(locale.ctype.as_str()), CString::new(locale.messages.as_str())) else {
             return 0;
         };
         // SAFETY: both names are nul-terminated. The first call gets a null base, which asks
@@ -122,7 +118,10 @@ pub fn last_error_string(errno: i32, _locale: &Locale) -> String {
 
 /// The C locale's text, which is what `std::io::Error` prints before its ` (os error N)`
 /// suffix. Compiled everywhere so the fallback is built and tested on the host CI runs on.
-#[cfg_attr(all(target_os = "linux", target_env = "gnu"), allow(dead_code))]
+#[cfg_attr(
+    all(target_os = "linux", target_env = "gnu", not(test)),
+    expect(dead_code, reason = "only the non-glibc last_error_string and the tests call it here")
+)]
 fn c_locale_message(errno: i32) -> String {
     let text = std::io::Error::from_raw_os_error(errno).to_string();
     let suffix = format!(" (os error {errno})");

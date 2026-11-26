@@ -9,12 +9,12 @@ use super::{eval_exception, wrap_evaluating};
 use crate::actions::Action;
 use crate::ctx::{Binding, Ctx};
 use crate::error::{EvalError, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use crate::tool::NamedCheck;
 use crate::value::Value;
-use tlars_msg::Ec;
 use std::io::Read;
+use tlars_msg::Ec;
 use tlars_sany::graph::{ExprOrOpArg, Loc, OpDefId, SymbolRef};
 use tlars_sany::{Atom, JavaClass};
 
@@ -206,13 +206,8 @@ fn location_value(ev: &mut Ev<'_>, loc: Loc) -> EvalResult<Value> {
         return Err(EvalError::unimplemented("a location record for a node with no module (M3 unit 5)".into()));
     };
     let names = LOCATION_FIELDS.iter().map(|n| interner.intern(n)).collect();
-    let values = vec![
-        Value::Int(loc.begin_line),
-        Value::Int(loc.begin_col),
-        Value::Int(loc.end_line),
-        Value::Int(loc.end_col),
-        Value::Str(module),
-    ];
+    let values =
+        vec![Value::Int(loc.begin_line), Value::Int(loc.begin_col), Value::Int(loc.end_line), Value::Int(loc.end_col), Value::Str(module)];
     Ok(Value::Record(Value::record_arc(names, values, false)))
 }
 
@@ -450,9 +445,7 @@ fn all_named_values(ev: &mut Ev<'_>) -> EvalResult<Value> {
         registers.put(name, hash, v, |a, b| a == b);
     }
     if registers.needs_tree_bin() {
-        return Err(EvalError::unimplemented(
-            "TLCGet(\"all:named\") where the register names fill a ConcurrentHashMap tree bin".into(),
-        ));
+        return Err(EvalError::unimplemented("TLCGet(\"all:named\") where the register names fill a ConcurrentHashMap tree bin".into()));
     }
     let named: Vec<(Atom, Value)> = registers.iter().map(|(&n, v)| (n, v.clone())).collect();
     let mut map = tlars_java::JavaHashMap::new();
@@ -530,9 +523,7 @@ pub(crate) fn tlc_set(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
             // `if (mainChecker != null) mainChecker.stop()`: with no checker it is a no-op
             // that still answers TRUE.
             "exit" => {
-                if asked
-                    && let Some(checker) = ev.tool().main_checker()
-                {
+                if asked && let Some(checker) = ev.tool().main_checker() {
                     checker.stop();
                 }
                 return Ok(Value::Bool(true));

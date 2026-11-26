@@ -17,7 +17,7 @@
 use crate::ctx::{Binding, Ctx};
 use crate::error::{EvalError, EvalErrorKind, EvalResult};
 use crate::eval::expr::{Builtin, Resolved};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::{State, StateRef};
 use crate::value::Value;
 use std::sync::Arc;

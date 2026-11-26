@@ -41,6 +41,7 @@ impl Fixture {
                 extra_root_extends: &[],
                 suppressed_codes: &[],
                 messages_as_errors: &[],
+                host: tlars_sany::Host::process(tlars_java::time::Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 }),
             },
             &mut Silent,
         )
@@ -58,10 +59,8 @@ impl Fixture {
         .expect("the fixture module builds a tool");
         // `ModelValue.make` in creation order, which is the index the value stream writes and
         // the slot `ModelValue.mvs[i]` reads back.
-        let model_values = model_values
-            .iter()
-            .map(|(_, name)| tool.add_model_value(interner.intern(name), name).expect("a model value"))
-            .collect();
+        let model_values =
+            model_values.iter().map(|(_, name)| tool.add_model_value(interner.intern(name), name).expect("a model value")).collect();
         Fixture { tool, model_values }
     }
 

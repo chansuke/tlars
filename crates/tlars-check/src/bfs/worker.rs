@@ -1,7 +1,7 @@
 //! `tlc2.tool.Worker`. The bodies here are real code, not pseudocode, because their line
 //! order *is* TLC's observable behaviour (`Worker.java:92-140, 418-470`).
 
-use super::{is_java_error, ErrState, ModelChecker};
+use super::{ErrState, ModelChecker, is_java_error};
 use crate::fpset::{FpSet, Seen};
 use crate::liveness::SetOfStates;
 use crate::queue::Queued;
@@ -34,20 +34,13 @@ struct SinkState {
 impl<'a> Worker<'a> {
     pub(super) fn new(id: u16, mc: &'a ModelChecker<'a>) -> Self {
         let locals = WorkerLocals::new(id, mc.seed);
-        Worker { id, mc, locals, sink: SinkState { generated: 0, unseen: 0, live_successors: None, live_multiplier: 1 }, stats: Some(id as usize) }
-    }
-
-    /// A worker whose evaluation records the nested-expression stack, for the replay TLC
-    /// runs with a `CallStackTool`.
-    pub(super) fn recording(id: u16, mc: &'a ModelChecker<'a>) -> Self {
-        let mut w = Worker::new(id, mc);
-        w.locals.record_call_stack();
-        w.stats = None;
-        w
-    }
-
-    pub(super) fn take_call_stack(&mut self) -> Option<tlars_tool::CallStack> {
-        self.locals.take_call_stack()
+        Worker {
+            id,
+            mc,
+            locals,
+            sink: SinkState { generated: 0, unseen: 0, live_successors: None, live_multiplier: 1 },
+            stats: Some(id as usize),
+        }
     }
 
     /// `Worker.run`.

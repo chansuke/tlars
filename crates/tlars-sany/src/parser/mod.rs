@@ -13,12 +13,17 @@ mod cfg_parse;
 mod driver;
 mod files;
 mod freeze;
+#[rustfmt::skip]
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "xtask jj2rs emits plain #[allow] for the shapes javac accepts; fix the emitter, not this file"
+)]
 mod generated;
 mod java;
 mod load;
 mod pcal_validator;
 mod support;
-
 
 pub(crate) use cfg_parse::parse_cfg;
 pub(crate) use load::{ConsoleLine, LoadJob, load_on_this_thread};

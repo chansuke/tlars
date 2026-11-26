@@ -7,16 +7,19 @@
 //! of them from another crate fails to compile, so there is exactly one way to obtain a graph.
 //!
 //! There is no second AST. TLC consumes SANY's graph directly, and so does `tlars-tool`.
-#![allow(dead_code, unused_variables)]
 
 pub mod cfg;
+#[rustfmt::skip]
 mod error_codes;
-pub mod graph;
 mod fidelity;
+pub mod graph;
 mod intern;
 mod parser;
+#[expect(dead_code, unused_variables, reason = "a stub from before jj2rs; parser/pcal_validator.rs validates PlusCal now")]
 mod pcal;
+#[expect(dead_code, unused_variables, reason = "a skeleton from before jj2rs; the translated SANY runs semantic analysis now")]
 mod semantic;
+#[rustfmt::skip]
 mod standard_modules;
 
 pub use intern::{Atom, Interner, JavaClass};
@@ -59,6 +62,25 @@ pub trait SanyOut {
     fn err_line(&mut self, text: &str);
 }
 
+/// What SANY reads from the JVM and the OS: `System.currentTimeMillis()` and where
+/// `Files.createTempDirectory` makes its directories. The caller takes them from its `Env`.
+#[derive(Clone, Debug)]
+pub struct Host {
+    pub clock: tlars_java::time::Clock,
+    /// `java.io.tmpdir`.
+    pub temp_dir: PathBuf,
+    /// Keeps this process's temporary directory names apart from another's.
+    pub pid: u32,
+}
+
+impl Host {
+    /// This process's temporary directory and pid, for a test or tool that has no `Env`.
+    #[expect(clippy::disallowed_methods, reason = "a caller without an Env reads the process here")]
+    pub fn process(clock: tlars_java::time::Clock) -> Host {
+        Host { clock, temp_dir: std::env::temp_dir(), pid: std::process::id() }
+    }
+}
+
 pub struct LoadRequest<'a> {
     /// TLC's `mainFile`: the root module's file name as given, `.tla` optional.
     pub root_file: &'a str,
@@ -79,6 +101,7 @@ pub struct LoadRequest<'a> {
     /// `MP.getSanySuppressedCodes()` / `MP.getSanyMessagesAsErrorCodes()`.
     pub suppressed_codes: &'a [SanyErrorCode],
     pub messages_as_errors: &'a [SanyErrorCode],
+    pub host: Host,
 }
 
 /// SANY failed; its text has already gone to [`SanyOut`]. What `SpecProcessor.processSpec`
@@ -110,6 +133,7 @@ pub fn load(req: LoadRequest<'_>, out: &mut dyn SanyOut) -> Result<graph::Semant
         interner: req.interner.clone(),
         suppressed_codes: req.suppressed_codes.to_vec(),
         messages_as_errors: req.messages_as_errors.to_vec(),
+        host: req.host,
     };
     let (tx, rx) = std::sync::mpsc::channel();
     let worker = std::thread::Builder::new()

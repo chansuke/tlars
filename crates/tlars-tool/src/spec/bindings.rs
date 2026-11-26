@@ -1,7 +1,7 @@
 //! TLC's `setToolObject(toolId, ...)` side data, as immutable tables indexed by graph ids.
 
 use crate::modules::NativeId;
-use crate::value::Value;
+use crate::value::{OpRcd, Value};
 use tlars_sany::graph::{ExprId, OpDefId};
 
 #[derive(Clone)]
@@ -21,9 +21,6 @@ pub(crate) enum OpBinding {
     /// or `EvaluatingValue` (`SymbolNodeValueLookupProvider.java:270-276`).
     Unimplemented { min_level: u8 },
 }
-
-/// `OpRcdValue`: the cfg's `op(a, b) = v` lines for one name, in cfg order.
-pub(crate) type OpRcd = std::sync::Arc<[(Box<[Value]>, Value)]>;
 
 #[derive(Clone)]
 pub(crate) enum DeclBinding {

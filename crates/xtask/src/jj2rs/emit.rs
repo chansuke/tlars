@@ -220,9 +220,8 @@ fn promote(a: &T, b: &T) -> T {
 /// Whether a value of type `from` can be passed where `to` is expected (Java method
 /// invocation conversion), and whether it is an exact match.
 fn assignable(from: &T, to: &T) -> Option<bool> {
-    let widening = |f: &T, t: &T| {
-        matches!((f, t), (T::Char, T::Int | T::Long | T::Double) | (T::Int, T::Long | T::Double) | (T::Long, T::Double))
-    };
+    let widening =
+        |f: &T, t: &T| matches!((f, t), (T::Char, T::Int | T::Long | T::Double) | (T::Int, T::Long | T::Double) | (T::Long, T::Double));
     match (from, to) {
         (a, b) if a == b => Some(true),
         (_, T::Any) => Some(false),
@@ -286,11 +285,7 @@ pub(crate) fn name_overloads(info: &mut ClassInfo) {
         for (i, sig) in sigs.iter_mut().enumerate() {
             let n = arities[i];
             let same: Vec<usize> = (0..arities.len()).filter(|&j| arities[j] == n).collect();
-            let suffix = if same.len() == 1 {
-                n.to_string()
-            } else {
-                format!("{n}_{}", same.iter().position(|&j| j == i).expect("self"))
-            };
+            let suffix = if same.len() == 1 { n.to_string() } else { format!("{n}_{}", same.iter().position(|&j| j == i).expect("self")) };
             sig.rust_name = if name == "<init>" {
                 suffix
             } else if arities.len() == 1 {
@@ -407,7 +402,17 @@ pub(crate) fn class_info(
     if !members.iter().any(|m| matches!(m.kind, MemberKind::Constructor(_))) {
         info.methods.insert(
             "<init>".into(),
-            vec![MethodSig { params: Vec::new(), ret: T::Void, is_static: true, fallible: true, rust_name: String::new(), member: None, varargs: false, has_body: true, returns_param: false }],
+            vec![MethodSig {
+                params: Vec::new(),
+                ret: T::Void,
+                is_static: true,
+                fallible: true,
+                rust_name: String::new(),
+                member: None,
+                varargs: false,
+                has_body: true,
+                returns_param: false,
+            }],
         );
     }
     name_overloads(&mut info);
@@ -540,7 +545,10 @@ impl<'c> Emitter<'c> {
         let best = cands
             .into_iter()
             .filter_map(|s| {
-                let fit: Option<Vec<bool>> = if s.varargs && !(arg_types.len() == s.params.len() && assignable(&arg_types[arg_types.len() - 1], &s.params[s.params.len() - 1]).is_some()) {
+                let fit: Option<Vec<bool>> = if s.varargs
+                    && !(arg_types.len() == s.params.len()
+                        && assignable(&arg_types[arg_types.len() - 1], &s.params[s.params.len() - 1]).is_some())
+                {
                     let T::Arr(elem) = &s.params[s.params.len() - 1] else { return None };
                     let n = s.params.len() - 1;
                     let fixed: Option<Vec<bool>> = arg_types[..n].iter().zip(&s.params).map(|(a, p)| assignable(a, p)).collect();
@@ -595,8 +603,7 @@ impl<'c> Emitter<'c> {
         let mut out = Vec::new();
         let mut recv = if self.is_static { None } else { Some("self".to_string()) };
         let mut cur = self.class.clone();
-        loop {
-            let Some(p) = HIER.with(|h| h.borrow().places.get(&cur).cloned()) else { break };
+        while let Some(p) = HIER.with(|h| h.borrow().places.get(&cur).cloned()) {
             let Some(outer) = p.outer else { break };
             recv = match (recv, p.is_inner) {
                 (Some(r), true) => Some(format!("{r}.jread(|o| o.this__0.clone())")),
@@ -673,13 +680,20 @@ impl<'c> Emitter<'c> {
             params.push(format!("mut {}: {}", rust_ident(name), t.rust()));
             self.scopes[0].insert(name.clone(), t);
         }
-        let recv = if m.is_static { "" } else if params.is_empty() { "&self" } else { "&self, " };
+        let recv = if m.is_static {
+            ""
+        } else if params.is_empty() {
+            "&self"
+        } else {
+            "&self, "
+        };
         let mut out = format!("    pub(crate) fn {fn_name}({recv}{}) -> JResult<{}> {{\n", params.join(", "), self.method_ret.rust());
         if init_class {
             out.push_str(&class_init(&self.class));
         }
         // A constructor without `this(...)`/`super(...)` starts with an implicit `super()`.
-        let explicit = matches!(m.body.first(), Some(Stmt::Expr(Expr::Call { target: None, name, .. })) if name == "this" || name == "super");
+        let explicit =
+            matches!(m.body.first(), Some(Stmt::Expr(Expr::Call { target: None, name, .. })) if name == "this" || name == "super");
         if is_ctor && !explicit {
             let (code, _) = self.ctor_call("super", &[]);
             out.push_str(&format!("        {code};\n"));
@@ -751,7 +765,12 @@ impl<'c> Emitter<'c> {
                 let label = self.loop_label();
                 let c = self.cond(cond);
                 let head = if c == "true" { format!("{label}: loop") } else { format!("{label}: while {c}") };
-                self.breakables.push(Breakable { java_label: self.pending_label.take(), rust_label: label.clone(), continue_label: Some(label), tries: self.tries.len() });
+                self.breakables.push(Breakable {
+                    java_label: self.pending_label.take(),
+                    rust_label: label.clone(),
+                    continue_label: Some(label),
+                    tries: self.tries.len(),
+                });
                 let body = self.nested(body, depth + 1);
                 self.breakables.pop();
                 format!("{ind}{head} {{\n{body}{ind}}}\n")
@@ -759,7 +778,12 @@ impl<'c> Emitter<'c> {
             Stmt::DoWhile { body, cond } => {
                 let label = self.loop_label();
                 let inner = self.fresh("dobody");
-                self.breakables.push(Breakable { java_label: self.pending_label.take(), rust_label: label.clone(), continue_label: Some(inner.clone()), tries: self.tries.len() });
+                self.breakables.push(Breakable {
+                    java_label: self.pending_label.take(),
+                    rust_label: label.clone(),
+                    continue_label: Some(inner.clone()),
+                    tries: self.tries.len(),
+                });
                 let b = self.nested(body, depth + 2);
                 self.breakables.pop();
                 let c = self.cond(cond);
@@ -775,7 +799,12 @@ impl<'c> Emitter<'c> {
                     out.push_str(&self.stmt(i, depth + 1));
                 }
                 let c = cond.as_ref().map_or("true".into(), |c| self.cond(c));
-                self.breakables.push(Breakable { java_label, rust_label: label.clone(), continue_label: Some(inner.clone()), tries: self.tries.len() });
+                self.breakables.push(Breakable {
+                    java_label,
+                    rust_label: label.clone(),
+                    continue_label: Some(inner.clone()),
+                    tries: self.tries.len(),
+                });
                 let b = self.nested(body, depth + 3);
                 self.breakables.pop();
                 let ups: String = update.iter().map(|u| format!("{ind}        {};\n", self.expr_stmt(u))).collect();
@@ -799,7 +828,12 @@ impl<'c> Emitter<'c> {
                     let label = self.loop_label();
                     let inner = self.fresh("forbody");
                     let t = T::of(ty);
-                    self.breakables.push(Breakable { java_label: self.pending_label.take(), rust_label: label.clone(), continue_label: Some(inner.clone()), tries: self.tries.len() });
+                    self.breakables.push(Breakable {
+                        java_label: self.pending_label.take(),
+                        rust_label: label.clone(),
+                        continue_label: Some(inner.clone()),
+                        tries: self.tries.len(),
+                    });
                     self.scopes.push(BTreeMap::from([(name.clone(), t.clone())]));
                     let b = self.block(&[(**body).clone()], depth + 3);
                     self.scopes.pop();
@@ -817,7 +851,12 @@ impl<'c> Emitter<'c> {
                 let label = self.loop_label();
                 let inner = self.fresh("forbody");
                 let t = T::of(ty);
-                self.breakables.push(Breakable { java_label: self.pending_label.take(), rust_label: label.clone(), continue_label: Some(inner.clone()), tries: self.tries.len() });
+                self.breakables.push(Breakable {
+                    java_label: self.pending_label.take(),
+                    rust_label: label.clone(),
+                    continue_label: Some(inner.clone()),
+                    tries: self.tries.len(),
+                });
                 self.scopes.push(BTreeMap::from([(name.clone(), t.clone())]));
                 let b = self.block(&[(**body).clone()], depth + 3);
                 self.scopes.pop();
@@ -834,7 +873,12 @@ impl<'c> Emitter<'c> {
                     self.stmt(body, depth)
                 } else {
                     let rl = self.fresh("blk");
-                    self.breakables.push(Breakable { java_label: Some(label.clone()), rust_label: rl.clone(), continue_label: None, tries: self.tries.len() });
+                    self.breakables.push(Breakable {
+                        java_label: Some(label.clone()),
+                        rust_label: rl.clone(),
+                        continue_label: None,
+                        tries: self.tries.len(),
+                    });
                     let b = self.nested(body, depth + 1);
                     self.breakables.pop();
                     format!("{ind}{rl}: {{\n{b}{ind}}}\n")
@@ -856,9 +900,11 @@ impl<'c> Emitter<'c> {
                 }
             }
             Stmt::Continue(label) => {
-                let target = self.breakables.iter().rev().find(|b| {
-                    b.continue_label.is_some() && (label.is_none() || b.java_label.as_deref() == label.as_deref())
-                });
+                let target = self
+                    .breakables
+                    .iter()
+                    .rev()
+                    .find(|b| b.continue_label.is_some() && (label.is_none() || b.java_label.as_deref() == label.as_deref()));
                 if let Some(b) = target
                     && self.tries[b.tries..].iter().any(|t| t.finally.is_some())
                 {
@@ -963,9 +1009,16 @@ impl<'c> Emitter<'c> {
                             .iter()
                             .filter_map(|v| {
                                 let t = T::of(&Type { dims: ty.dims + v.extra_dims, ..ty.clone() });
-                                hoisted.push_str(&format!("{ind}    let mut {}: {} = {};\n", rust_ident(&v.name), t.rust(), t.default_value()));
+                                hoisted.push_str(&format!(
+                                    "{ind}    let mut {}: {} = {};\n",
+                                    rust_ident(&v.name),
+                                    t.rust(),
+                                    t.default_value()
+                                ));
                                 self.scopes.last_mut().expect("scope").insert(v.name.clone(), t);
-                                v.init.clone().map(|init| Stmt::Expr(Expr::Assign("=", Box::new(Expr::Name(v.name.clone())), Box::new(init))))
+                                v.init
+                                    .clone()
+                                    .map(|init| Stmt::Expr(Expr::Assign("=", Box::new(Expr::Name(v.name.clone())), Box::new(init))))
                             })
                             .collect::<Vec<_>>(),
                         other => vec![other.clone()],
@@ -1012,7 +1065,8 @@ impl<'c> Emitter<'c> {
         self.tries.push(TryCx { label: label.clone(), finally: finally.clone() });
         let b = self.block(body, depth + 1);
         self.tries.pop();
-        let mut out = format!("{ind}let __r: JResult<()> = {label}: {{\n{b}{ind}    #[allow(unreachable_code)]\n{ind}    Ok(())\n{ind}}};\n");
+        let mut out =
+            format!("{ind}let __r: JResult<()> = {label}: {{\n{b}{ind}    #[allow(unreachable_code)]\n{ind}    Ok(())\n{ind}}};\n");
         let catch_label = self.fresh("catch");
         self.tries.push(TryCx { label: catch_label.clone(), finally: finally.clone() });
         let mut arms = String::new();
@@ -1206,7 +1260,13 @@ impl<'c> Emitter<'c> {
                 let c = self.cond(c);
                 let at = self.type_of(a);
                 let bt = self.type_of(b);
-                let t = if at.is_numeric() && bt.is_numeric() { promote(&at, &bt) } else if at == T::Null { bt } else { at };
+                let t = if at.is_numeric() && bt.is_numeric() {
+                    promote(&at, &bt)
+                } else if at == T::Null {
+                    bt
+                } else {
+                    at
+                };
                 let av = self.expr_as(a, &t);
                 let bv = self.expr_as(b, &t);
                 (format!("(if {c} {{ {av} }} else {{ {bv} }})"), t)
@@ -1892,10 +1952,9 @@ pub(crate) fn rust_ident(n: &str) -> String {
     match n {
         // Keywords that cannot be raw identifiers.
         "self" | "Self" | "crate" | "super" => format!("{n}_"),
-        "type" | "match" | "fn" | "mod" | "use" | "ref" | "move" | "loop" | "impl" | "trait" | "where" | "in" | "as"
-        | "mut" | "let" | "unsafe" | "dyn" | "async" | "await" | "box" | "yield" | "macro"
-        | "pub" | "struct" | "enum" | "extern" | "priv" | "override" | "typeof" | "virtual" | "final" | "abstract" | "become"
-        | "do" | "unsized" | "try" | "gen" => format!("r#{n}"),
+        "type" | "match" | "fn" | "mod" | "use" | "ref" | "move" | "loop" | "impl" | "trait" | "where" | "in" | "as" | "mut" | "let"
+        | "unsafe" | "dyn" | "async" | "await" | "box" | "yield" | "macro" | "pub" | "struct" | "enum" | "extern" | "priv" | "override"
+        | "typeof" | "virtual" | "final" | "abstract" | "become" | "do" | "unsized" | "try" | "gen" => format!("r#{n}"),
         other => other.to_string(),
     }
 }
@@ -1941,7 +2000,11 @@ impl Slots {
             let h = h.borrow();
             (h.root_of(class), h.ancestors(class))
         });
-        let s = self.by_root.get(&root)?.iter().find(|s| s.rust_name == slot && s.origins.iter().any(|o| HIER.with(|h| h.borrow().implements(class, o))))?;
+        let s = self
+            .by_root
+            .get(&root)?
+            .iter()
+            .find(|s| s.rust_name == slot && s.origins.iter().any(|o| HIER.with(|h| h.borrow().implements(class, o))))?;
         ancestors.into_iter().find(|a| s.impls.contains(a))
     }
 }
@@ -1981,7 +2044,8 @@ pub(crate) fn assign_slots(classes: &mut Classes) {
                 }
             }
             // An interface of the class or its ancestors that declares it wins.
-            let mut todo: Vec<String> = ancestors.iter().flat_map(|a| places.get(a).map(|p| p.interfaces.clone()).unwrap_or_default()).collect();
+            let mut todo: Vec<String> =
+                ancestors.iter().flat_map(|a| places.get(a).map(|p| p.interfaces.clone()).unwrap_or_default()).collect();
             let mut seen = BTreeSet::new();
             while let Some(i) = todo.pop() {
                 if !seen.insert(i.clone()) {
@@ -2019,10 +2083,12 @@ pub(crate) fn assign_slots(classes: &mut Classes) {
             for j in i + 1..keys.len() {
                 let (a, b) = (&keys[i], &keys[j]);
                 if a.1 == b.1 && a.2 == b.2 && a.0 != b.0 {
-                    let shared = members.iter().any(|k| HIER.with(|h| {
-                        let h = h.borrow();
-                        h.implements(k, &a.0) && h.implements(k, &b.0)
-                    }));
+                    let shared = members.iter().any(|k| {
+                        HIER.with(|h| {
+                            let h = h.borrow();
+                            h.implements(k, &a.0) && h.implements(k, &b.0)
+                        })
+                    });
                     if shared {
                         let (ri, rj) = (find(&mut group, i), find(&mut group, j));
                         group[rj] = ri;
@@ -2045,14 +2111,22 @@ pub(crate) fn assign_slots(classes: &mut Classes) {
                 let k = arity_same.iter().position(|&q| q == r).expect("self");
                 format!("{name}_{}_{k}", params.len())
             };
-            slots.push(Slot { rust_name, java_name: name.clone(), origins, params: params.clone(), ret: ret.clone(), impls: BTreeSet::new() });
+            slots.push(Slot {
+                rust_name,
+                java_name: name.clone(),
+                origins,
+                params: params.clone(),
+                ret: ret.clone(),
+                impls: BTreeSet::new(),
+            });
         }
         let mut assigned = Vec::new();
         for m in &members {
             for (name, sigs) in &classes[m].methods {
                 for (i, sig) in sigs.iter().enumerate().filter(|(_, s)| !s.is_static && name != "<init>") {
                     let o = origin(m, name, &sig.params);
-                    let slot = slots.iter_mut().find(|s| s.origins.contains(&o) && s.java_name == *name && s.params == sig.params).expect("slot");
+                    let slot =
+                        slots.iter_mut().find(|s| s.origins.contains(&o) && s.java_name == *name && s.params == sig.params).expect("slot");
                     assigned.push((m.clone(), name.clone(), i, slot.rust_name.clone()));
                     if sig.has_body && sig.member.is_some() {
                         slot.impls.insert(m.clone());
@@ -2110,7 +2184,10 @@ pub(crate) fn emit_class(
         let _ = writeln!(out, "    pub(crate) {f}: {},", t.rust());
     }
     let _ = writeln!(out, "}}\n");
-    let _ = writeln!(out, "impl {name} {{\n    /// Java's default field values.\n    pub(crate) fn java_default() -> Self {{\n        {name} {{");
+    let _ = writeln!(
+        out,
+        "impl {name} {{\n    /// Java's default field values.\n    pub(crate) fn java_default() -> Self {{\n        {name} {{"
+    );
     for (f, t) in &fields {
         let _ = writeln!(out, "            {f}: {},", t.default_value());
     }
@@ -2121,7 +2198,9 @@ pub(crate) fn emit_class(
     let mut static_init = String::new();
     for m in members {
         match &m.kind {
-            MemberKind::Field { decl: Stmt::Local { ty, vars }, .. } if vars.iter().all(|v| info.fields.get(&v.name).is_some_and(|f| f.1)) => {
+            MemberKind::Field { decl: Stmt::Local { ty, vars }, .. }
+                if vars.iter().all(|v| info.fields.get(&v.name).is_some_and(|f| f.1)) =>
+            {
                 for v in vars {
                     let t = var_type(name, ty, v, overrides);
                     let is_const = CONSTS.with(|c| c.borrow().contains(&(name.to_string(), v.name.clone())));
@@ -2137,7 +2216,11 @@ pub(crate) fn emit_class(
                                 Expr::ArrayLit(items) => em.array_lit(&t, items),
                                 e => em.expr_as(e, &t),
                             };
-                            let _ = writeln!(static_init, "        {{ let __v = {value}; {name}::statics().jget_mut().{} = __v; }}", rust_ident(&v.name));
+                            let _ = writeln!(
+                                static_init,
+                                "        {{ let __v = {value}; {name}::statics().jget_mut().{} = __v; }}",
+                                rust_ident(&v.name)
+                            );
                         }
                     }
                 }
@@ -2303,7 +2386,11 @@ pub(crate) fn emit_family(classes: &Classes, root: &str, out: &mut String) {
                 continue;
             }
             for (suffix, amp) in [("", "&"), ("_mut", "&mut ")] {
-                let _ = writeln!(out, "    pub(crate) fn {d}_{f}{suffix}({amp}self) -> {amp}{} {{\n        #[allow(unreachable_patterns)]\n        match self {{", t.rust());
+                let _ = writeln!(
+                    out,
+                    "    pub(crate) fn {d}_{f}{suffix}({amp}self) -> {amp}{} {{\n        #[allow(unreachable_patterns)]\n        match self {{",
+                    t.rust()
+                );
                 for k in &ks {
                     let _ = writeln!(out, "            {root}Obj::{k}(o) => {amp}o.{d}_{f},");
                 }
@@ -2319,7 +2406,11 @@ pub(crate) fn emit_family(classes: &Classes, root: &str, out: &mut String) {
     let _ = writeln!(out, "            \"Object\" => true,\n            _ => false,\n        }}\n    }}");
     for c in members.iter().chain(&ifaces) {
         let ks = below(c);
-        let pat = if ks.is_empty() { "_ if false".to_string() } else { ks.iter().map(|k| format!("{root}Obj::{k}(_)")).collect::<Vec<_>>().join(" | ") };
+        let pat = if ks.is_empty() {
+            "_ if false".to_string()
+        } else {
+            ks.iter().map(|k| format!("{root}Obj::{k}(_)")).collect::<Vec<_>>().join(" | ")
+        };
         let _ = writeln!(out, "    pub(crate) fn is_{c}(&self) -> bool {{\n        matches!(self, {pat})\n    }}");
     }
     let _ = writeln!(out, "}}\n\nimpl J<{root}Obj> {{");
@@ -2344,7 +2435,9 @@ pub(crate) fn emit_family(classes: &Classes, root: &str, out: &mut String) {
                     let fallback = match (slot.java_name.as_str(), slot.params.len()) {
                         ("hashCode", 0) => "Ok(self.identity_hash())".to_string(),
                         ("equals", 1) => format!("Ok(p0.instance_of::<J<{root}Obj>>(|o| o.same(self)))"),
-                        ("toString", 0) => "Ok(JStr::of(&object_to_string(self.jread(|o| o.jclass_name()), self.identity_hash())))".to_string(),
+                        ("toString", 0) => {
+                            "Ok(JStr::of(&object_to_string(self.jread(|o| o.jclass_name()), self.identity_hash())))".to_string()
+                        }
                         _ => format!("panic!(\"java.lang.AbstractMethodError: {k}.{}\")", slot.java_name),
                     };
                     let _ = writeln!(out, "            {root}Class::{k} => {fallback},");
@@ -2395,7 +2488,9 @@ pub(crate) fn emit_values(classes: &Classes, names: &[String], out: &mut String)
             None => "self.identity_hash()".into(),
         };
         let eq = match call("equals", 1) {
-            Some(s) if s.params[0].class() == Some("Object") => format!("self.{}(Object::of(other.clone())).expect(\"equals\")", s.rust_name),
+            Some(s) if s.params[0].class() == Some("Object") => {
+                format!("self.{}(Object::of(other.clone())).expect(\"equals\")", s.rust_name)
+            }
             _ => "self.same(other)".into(),
         };
         let default_string = format!("object_to_string({class_name}, self.identity_hash())");
@@ -2414,10 +2509,7 @@ pub(crate) fn emit_values(classes: &Classes, names: &[String], out: &mut String)
                 if arms.is_empty() {
                     default_string
                 } else {
-                    format!(
-                        "match self.jread(|o| o.jclass_name()) {{\n{}\n            _ => {default_string},\n        }}",
-                        arms.join("\n")
-                    )
+                    format!("match self.jread(|o| o.jclass_name()) {{\n{}\n            _ => {default_string},\n        }}", arms.join("\n"))
                 }
             }
             None => default_string,
@@ -2444,7 +2536,10 @@ pub(crate) fn emit_jthrow(classes: &Classes, out: &mut String) {
         let _ = writeln!(out, "    {r}({}),", T::obj(r).rust());
     }
     let _ = writeln!(out, "    Extern(ExternThrowable),\n}}\n");
-    let _ = writeln!(out, "impl JThrow {{\n    /// Whether this is an instance of the library class `class`.\n    pub(crate) fn is_a(&self, class: &str) -> bool {{\n        match self {{");
+    let _ = writeln!(
+        out,
+        "impl JThrow {{\n    /// Whether this is an instance of the library class `class`.\n    pub(crate) fn is_a(&self, class: &str) -> bool {{\n        match self {{"
+    );
     for r in &roots {
         let ext = HIER.with(|h| h.borrow().places[r].extern_parent.clone()).unwrap_or_default();
         let chain = hier::extern_throwable_chain(&ext);
@@ -2468,12 +2563,18 @@ pub(crate) fn emit_jthrow(classes: &Classes, out: &mut String) {
         let _ = writeln!(out, "            JThrow::{r}(e) => {call},");
     }
     let _ = writeln!(out, "            JThrow::Extern(e) => Ok(e.message.clone()),\n        }}\n    }}\n}}\n");
-    let _ = writeln!(out, "impl std::fmt::Debug for JThrow {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match self {{");
+    let _ = writeln!(
+        out,
+        "impl std::fmt::Debug for JThrow {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match self {{"
+    );
     for r in &roots {
         let _ = writeln!(out, "            JThrow::{r}(_) => f.write_str({r:?}),");
     }
     let _ = writeln!(out, "            JThrow::Extern(e) => f.write_str(e.class),\n        }}\n    }}\n}}\n");
-    let _ = writeln!(out, "/// The library exception hierarchy, as far as `catch` needs it.\nfn extern_is_a(class: &str, target: &str) -> bool {{\n    match class {{");
+    let _ = writeln!(
+        out,
+        "/// The library exception hierarchy, as far as `catch` needs it.\nfn extern_is_a(class: &str, target: &str) -> bool {{\n    match class {{"
+    );
     for (c, _) in hier::EXTERN_THROWABLES {
         let _ = writeln!(out, "        {c:?} => {:?}.contains(&target),", hier::extern_throwable_chain(c));
     }

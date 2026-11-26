@@ -123,12 +123,8 @@ impl ListKind {
 impl PairsKind {
     fn style(self) -> PairsStyle {
         match self {
-            PairsKind::Record => {
-                PairsStyle { open: "[ ", close: " ]", pad: "  ", sep: ",", div: " |->", divpad: "    " }
-            }
-            PairsKind::Function => {
-                PairsStyle { open: "( ", close: " )", pad: "  ", sep: " @@", div: " :>", divpad: "    " }
-            }
+            PairsKind::Record => PairsStyle { open: "[ ", close: " ]", pad: "  ", sep: ",", div: " |->", divpad: "    " },
+            PairsKind::Function => PairsStyle { open: "( ", close: " )", pad: "  ", sep: " @@", div: " :>", divpad: "    " },
         }
     }
 }
@@ -172,14 +168,7 @@ fn format(flat: &str, value: &Node, columnwidth: i64, trailerwidth: i64, leftpad
 }
 
 /// `Format.formatValues` (`Format.java:169-193`).
-fn format_values(
-    flat: &str,
-    values: &[Node],
-    columnwidth: i64,
-    trailerwidth: i64,
-    leftpad: &str,
-    sep: &str,
-) -> Caught<String> {
+fn format_values(flat: &str, values: &[Node], columnwidth: i64, trailerwidth: i64, leftpad: &str, sep: &str) -> Caught<String> {
     let mut pp = String::new();
     for (i, value) in values.iter().enumerate() {
         if i + 1 < values.len() {
@@ -197,14 +186,7 @@ fn format_values(
 
 /// `Format.formatPairs` (`Format.java:235-324`). The last pair keeps `trailerwidth` free for
 /// the closing delimiter, while the others spend it on the value and append `sep` instead.
-fn format_pairs(
-    flat: &str,
-    pairs: &[Pair],
-    columnwidth: i64,
-    trailerwidth: i64,
-    leftpad: &str,
-    s: &PairsStyle,
-) -> Caught<String> {
+fn format_pairs(flat: &str, pairs: &[Pair], columnwidth: i64, trailerwidth: i64, leftpad: &str, s: &PairsStyle) -> Caught<String> {
     let (div, divpad, sep) = (s.div.len() as i64, s.divpad.len() as i64, s.sep.len() as i64);
     let mut pp = String::new();
     for (i, pair) in pairs.iter().enumerate() {

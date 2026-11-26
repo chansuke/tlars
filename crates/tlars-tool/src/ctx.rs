@@ -3,8 +3,8 @@
 //! `Ctx` is an `Arc` cons list because closures (`SetPredValue`, `FcnLambdaValue`,
 //! `OpLambdaValue`) capture it and can travel to other workers inside a state.
 
-use crate::eval::{EvalControl, Ev};
 use crate::error::EvalResult;
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use crate::value::Value;
 use std::sync::{Arc, Mutex};
@@ -28,6 +28,19 @@ enum CellName {
     Branch,
 }
 
+/// A Java override: an index into `modules`' registry of native operators.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct NativeId(u16);
+
+impl NativeId {
+    pub(crate) const fn new(index: u16) -> NativeId {
+        NativeId(index)
+    }
+    pub(crate) fn index(self) -> usize {
+        usize::from(self.0)
+    }
+}
+
 /// What a context cell holds. Evaluation-only TLC values (`LazyValue`, `OpLambdaValue`,
 /// `MethodValue`) live here and never inside a [`Value`], so a thunk cannot end up in a set
 /// or a state.
@@ -38,9 +51,10 @@ pub(crate) enum Binding {
     /// Operator argument bound to a user definition (`OpArgNode`).
     OpDef(OpDefId),
     /// Operator argument bound to a Java override (`MethodValue`).
-    Native(crate::modules::NativeId),
+    Native(NativeId),
     /// Operator argument bound to a cfg `op(a, b) = v` constant (`OpRcdValue`).
-    OpRcd(crate::spec::OpRcd),
+    OpRcd(crate::value::OpRcd),
+    #[expect(dead_code, reason = "LAMBDA operator arguments are not bound yet")]
     Lambda(Arc<OpLambda>),
     /// The `@` of an EXCEPT component.
     ExceptAt(Value),
@@ -158,11 +172,12 @@ impl Thunk {
 fn covers(ev: &mut Ev<'_>, cached: &Option<crate::state::Snapshot>, s: &StateRef<'_>) -> bool {
     match cached {
         None => true,
-        Some(snap) => snap.is_empty() || snap.covers(ev, s),
+        Some(snap) => snap.is_empty() || snap.covers(ev.tool().vars(), s, |a, b| matches!(a.tlc_equals(ev, b), Ok(true))),
     }
 }
 
 /// `OpLambdaValue`: `LAMBDA x, y : e` passed as an operator argument.
+#[expect(dead_code, reason = "LAMBDA operator arguments are not bound yet")]
 pub(crate) struct OpLambda {
     pub(crate) params: Box<[ParamId]>,
     pub(crate) body: ExprId,

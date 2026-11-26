@@ -50,7 +50,8 @@ fn run_one(out: &mut String, interner: &Interner, root: &Path, file: &str, depth
     let dir = path.parent().expect("parent").to_path_buf();
     let name = path.file_name().expect("file name").to_string_lossy().into_owned();
     let sany_out = SanyOutput::new_0();
-    let spec = SpecObj::new_2(JStr::of(&name), FilenameToStream::new(Some(dir), Vec::new(), std::env::current_dir().expect("working directory")))?;
+    let spec =
+        SpecObj::new_2(JStr::of(&name), FilenameToStream::new(Some(dir), Vec::new(), std::env::current_dir().expect("working directory")))?;
     let exit = match driver::parse(&spec, &sany_out, &SETTINGS) {
         Ok(code) => code.code().to_string(),
         Err(_) => "FrontEndException".to_string(),
@@ -84,8 +85,9 @@ fn run_one(out: &mut String, interner: &Interner, root: &Path, file: &str, depth
         let dump = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| table.toString_2(depth, errors)));
         let dump = match dump {
             Ok(d) => DumpResult::Text(d?.java_string()),
-            Err(p) if p.downcast_ref::<String>().is_some_and(|m| m == "NullPointerException")
-                || p.downcast_ref::<&str>().is_some_and(|m| *m == "NullPointerException") =>
+            Err(p)
+                if p.downcast_ref::<String>().is_some_and(|m| m == "NullPointerException")
+                    || p.downcast_ref::<&str>().is_some_and(|m| *m == "NullPointerException") =>
             {
                 DumpResult::Exception("java.lang.NullPointerException")
             }
@@ -129,6 +131,7 @@ fn run_all(root: &Path, files: &[String], depth: i32) -> String {
     for file in files {
         let interner = Arc::new(Interner::new());
         support::enter(&interner);
+        support::set_host(support::test_host());
         if let Err(e) = run_one(&mut out, &interner, root, file, depth) {
             panic!("{file}: uncaught {e:?}");
         }
@@ -183,6 +186,7 @@ fn crate_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+#[expect(clippy::disallowed_methods, reason = "the tlaplus/Examples checkout nix develop points at")]
 fn examples() -> PathBuf {
     PathBuf::from(std::env::var_os("TLAPLUS_EXAMPLES").expect("TLAPLUS_EXAMPLES is not set; run inside `nix develop`"))
 }
@@ -266,6 +270,7 @@ fn check_load(golden: &Path, root: &Path) {
             extra_root_extends: &[],
             suppressed_codes: &[],
             messages_as_errors: &[],
+            host: support::test_host(),
         };
         let result = crate::load(req, &mut console);
         // The golden keeps SANY's messages and ToolIO's lines apart; both reach the console.
@@ -295,11 +300,7 @@ fn check_load(golden: &Path, root: &Path) {
                 for (_, m) in graph.modules().take(externals) {
                     for d in m.op_defs.iter() {
                         let level = graph.op_level(*d) as i32;
-                        levels.push(format!(
-                            "level {} {} {level}",
-                            interner.text(m.name),
-                            interner.text(graph.op_def(*d).name)
-                        ));
+                        levels.push(format!("level {} {} {level}", interner.text(m.name), interner.text(graph.op_def(*d).name)));
                     }
                 }
                 let levels: Vec<&String> = levels.iter().collect();

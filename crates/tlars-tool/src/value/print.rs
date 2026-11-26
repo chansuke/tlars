@@ -231,7 +231,7 @@ impl Value {
 
 /// `OpRcdValue.toString` (`OpRcdValue.java:246-275`): `{ <a, b, v>, <c, d, w>}`, with one
 /// space after the brace and none before the closing one.
-pub(crate) fn op_rcd_string(ev: &mut Ev<'_>, lines: &crate::spec::OpRcd) -> EvalResult<String> {
+pub(crate) fn op_rcd_string(ev: &mut Ev<'_>, lines: &super::OpRcd) -> EvalResult<String> {
     let mut out = String::from("{ ");
     for (i, (args, value)) in lines.iter().enumerate() {
         if i > 0 {
@@ -320,10 +320,7 @@ fn cup_cap_diff_operand(ev: &mut Ev<'_>, v: &Value, swallow: bool) -> EvalResult
 /// `instanceof ParenthesizedSubset`: the classes whose terse form needs brackets after
 /// `SUBSET`.
 fn is_parenthesized_subset(v: &Value) -> bool {
-    matches!(
-        v,
-        Value::Interval(_) | Value::Subset(_) | Value::KSubset(_) | Value::SetCup(_) | Value::SetCap(_) | Value::SetDiff(_)
-    )
+    matches!(v, Value::Interval(_) | Value::Subset(_) | Value::KSubset(_) | Value::SetCup(_) | Value::SetCap(_) | Value::SetDiff(_))
 }
 
 /// `Values.ppr(String)` (`Values.java:34-36`).
@@ -345,12 +342,8 @@ struct Snapshot {
 /// identifier-like string, a sequence when the domain is exactly `1..n`, else `(d :> v @@ ...)`.
 fn fcn_rcd_string(ev: &mut Ev<'_>, f: &Arc<FcnRcdValue>, swallow: bool) -> EvalResult<String> {
     let (domain, values) = f.snapshot();
-    let mut snap = Snapshot {
-        intv: f.interval(),
-        domain: domain.unwrap_or_default().to_vec(),
-        values: values.to_vec(),
-        is_norm: f.is_normalized(),
-    };
+    let mut snap =
+        Snapshot { intv: f.interval(), domain: domain.unwrap_or_default().to_vec(), values: values.to_vec(), is_norm: f.is_normalized() };
     if snap.values.is_empty() {
         return Ok("<<>>".to_string());
     }

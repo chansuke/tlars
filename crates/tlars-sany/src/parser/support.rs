@@ -2,12 +2,13 @@
 //! `jj2rs/externs.rs`): the Java library subset, `UniqueString`, `Location`, `SanyOutput`,
 //! `JunctionListContext`, and the translated members listed as hand-written there.
 
-#![allow(non_snake_case)]
+#![expect(non_snake_case, dead_code, reason = "the Java library subset generated.rs calls by its Java names; it calls only part of it")]
 
-use super::generated::{
-    self, Debug, Errors, ParseUnit, SpecObj, TLAtoPCalMapping, trans, LevelConstants, ParamAndPosition, SemanticNodeObj, SimpleCharStream, TLAplusParser, TLAplusParserConstants,
-};
 pub(crate) use super::files::{FileUtil, FilenameToStream, NamedInputStream, ToolIO};
+use super::generated::{
+    self, Debug, Errors, LevelConstants, ParamAndPosition, ParseUnit, SemanticNodeObj, SimpleCharStream, SpecObj, TLAplusParser,
+    TLAplusParserConstants, TLAtoPCalMapping, trans,
+};
 use super::java::*;
 use crate::{Atom, Interner};
 use std::cell::RefCell;
@@ -17,6 +18,24 @@ use std::sync::Arc;
 
 thread_local! {
     static INTERNER: RefCell<Option<Arc<Interner>>> = const { RefCell::new(None) };
+    /// The load's [`crate::Host`], and how often a fixed clock has been read.
+    static HOST: RefCell<Option<(crate::Host, i64)>> = const { RefCell::new(None) };
+}
+
+/// Sets what this thread's parser reads as the time and the temporary directory.
+pub(crate) fn set_host(host: crate::Host) {
+    HOST.with(|h| *h.borrow_mut() = Some((host, 0)));
+}
+
+/// The host a test parses under: a fixed clock and this process's temporary directory.
+#[cfg(test)]
+pub(crate) fn test_host() -> crate::Host {
+    crate::Host::process(tlars_java::time::Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 })
+}
+
+pub(crate) fn host() -> crate::Host {
+    HOST.with(|h| h.borrow().as_ref().map(|(host, _)| host.clone()))
+        .expect("SANY read the host outside a load: pass LoadRequest::host, or call support::set_host in a test")
 }
 
 /// Makes `interner` the one `UniqueString` uses on this thread. Java statics belong to the
@@ -410,8 +429,21 @@ impl System {
         SYSTEM_PROPERTIES.with(|p| p.borrow_mut().insert(key.as_str().to_string(), value));
         previous
     }
+    /// A fixed clock advances one millisecond per reading, so a loop that waits for the
+    /// next millisecond (`ModuleNode.generateUnusedName`) ends, and every run reads the
+    /// same times.
     pub(crate) fn currentTimeMillis() -> i64 {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
+        HOST.with(|h| {
+            let mut h = h.borrow_mut();
+            let (host, reads) = h.as_mut().expect("SANY read the clock outside a load: pass LoadRequest::host");
+            match host.clock {
+                tlars_java::time::Clock::System => host.clock.now_millis(),
+                tlars_java::time::Clock::Fixed { epoch_millis, .. } => {
+                    *reads += 1;
+                    epoch_millis + *reads
+                }
+            }
+        })
     }
 }
 
@@ -429,6 +461,7 @@ pub(crate) enum PrintStream {
 }
 
 impl PrintStream {
+    #[expect(clippy::disallowed_macros, reason = "Java's System.out, which only the translated debugging dumps write to")]
     fn write(&mut self, text: &str) {
         match self {
             PrintStream::Stdout => print!("{text}"),

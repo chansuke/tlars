@@ -418,7 +418,17 @@ pub(crate) fn classes() -> (Classes, Vec<(String, String)>) {
         };
         let is_ctor = name == "<init>";
         let returns_param = ret.mentions_param();
-        let sig = MethodSig { params, ret, is_static: is_static || is_ctor, fallible, rust_name: String::new(), member: None, varargs, has_body: true, returns_param };
+        let sig = MethodSig {
+            params,
+            ret,
+            is_static: is_static || is_ctor,
+            fallible,
+            rust_name: String::new(),
+            member: None,
+            varargs,
+            has_body: true,
+            returns_param,
+        };
         info.methods.entry(name.into()).or_default().push(sig);
     }
     // Library exceptions: values of the generated `JThrow`.

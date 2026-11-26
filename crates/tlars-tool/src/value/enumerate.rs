@@ -8,6 +8,7 @@
 //! - Union: outer elements, then each inner set's elements (duplicates possible);
 //! - SetCup: all of left, then all of right (duplicates); SetCap/SetDiff: left filtered;
 //! - SetPred: inner set's order, filtered by forcing the predicate.
+//!
 //! `x' \in S` and Init's `x \in S` use `Native`; `\E`, `\A`, CHOOSE use `Normalized`.
 
 use super::{IntervalValue, SetPredValue, Value};
@@ -46,23 +47,55 @@ enum EnumState {
     /// `EnumerableValue.EMPTY_ENUMERATION`.
     Empty,
     /// `SubsetValue.emptyEnumeration`: the one subset of an empty set.
-    OnlyEmptySet { done: bool },
-    Interval { lo: i32, next: i64, hi: i64 },
-    Slice { elems: Box<[Value]>, next: usize },
+    OnlyEmptySet {
+        done: bool,
+    },
+    Interval {
+        lo: i32,
+        next: i64,
+        hi: i64,
+    },
+    Slice {
+        elems: Box<[Value]>,
+        next: usize,
+    },
     /// `SetCupValue.Enumerator`.
-    Cup { first: Box<ValueEnumeration>, second: Box<ValueEnumeration> },
+    Cup {
+        first: Box<ValueEnumeration>,
+        second: Box<ValueEnumeration>,
+    },
     /// `SetCapValue.Enumerator` (`keep`) and `SetDiffValue.Enumerator` (`!keep`): the
     /// enumerable side, filtered by membership in the other.
-    Filter { inner: Box<ValueEnumeration>, other: Value, keep: bool },
+    Filter {
+        inner: Box<ValueEnumeration>,
+        other: Value,
+        keep: bool,
+    },
     /// `UnionValue.Enumerator`; `inner` is `None` once the outer set is exhausted.
-    Union { outer: Box<ValueEnumeration>, inner: Option<Box<ValueEnumeration>> },
+    Union {
+        outer: Box<ValueEnumeration>,
+        inner: Option<Box<ValueEnumeration>>,
+    },
     /// `SetPredValue.Enumerator`.
-    Pred { inner: Box<ValueEnumeration>, set: Arc<SetPredValue> },
+    Pred {
+        inner: Box<ValueEnumeration>,
+        set: Arc<SetPredValue>,
+    },
     /// `SubsetValue.elementsNormalized`: subsets by increasing size, each size in
     /// lexicographic order of indices into the normalised base set.
-    Subset { elems: Arc<[Value]>, n: usize, k: usize, indices: Vec<usize> },
+    Subset {
+        elems: Arc<[Value]>,
+        n: usize,
+        k: usize,
+        indices: Vec<usize>,
+    },
     /// The odometer of `[D -> R]`, `[f : S]` and `S \X T`, with the last component fastest.
-    Product { enums: Vec<ValueEnumeration>, current: Vec<Value>, done: bool, build: Build },
+    Product {
+        enums: Vec<ValueEnumeration>,
+        current: Vec<Value>,
+        done: bool,
+        build: Build,
+    },
 }
 
 impl ValueEnumeration {
@@ -341,9 +374,7 @@ impl Value {
             Ok(ValueEnumeration::of(EnumState::Slice { elems, next: 0 }))
         };
         match self {
-            Value::Interval(i) => {
-                Ok(ValueEnumeration::of(EnumState::Interval { lo: i.lo, next: i64::from(i.lo), hi: i64::from(i.hi) }))
-            }
+            Value::Interval(i) => Ok(ValueEnumeration::of(EnumState::Interval { lo: i.lo, next: i64::from(i.lo), hi: i64::from(i.hi) })),
             // `SetEnumValue.Enumerator` normalises in its constructor, so a SetEnum has one
             // order only.
             Value::SetEnum(set) => slice(ev, set),
@@ -439,7 +470,9 @@ impl Value {
                     let Some(base) = s.base.to_set_enum(ev)? else {
                         let shown = s.base.ppr(ev)?;
                         return Err(EvalError::detailed(
-                            format!("Attempted to compute the value of an expression of form\nSUBSET S, but S is a non-enumerable value:\n{shown}"),
+                            format!(
+                                "Attempted to compute the value of an expression of form\nSUBSET S, but S is a non-enumerable value:\n{shown}"
+                            ),
                             None,
                         ));
                     };
@@ -459,7 +492,9 @@ impl Value {
                         if !set.is_enumerable() {
                             let shown = set.ppr(ev)?;
                             return Err(EvalError::detailed(
-                                format!("Attempted to enumerate a set of the form s1 \\X s2 ... \\X sn,\nbut can't enumerate s{i}:\n{shown}"),
+                                format!(
+                                    "Attempted to enumerate a set of the form s1 \\X s2 ... \\X sn,\nbut can't enumerate s{i}:\n{shown}"
+                                ),
                                 None,
                             ));
                         }
@@ -479,7 +514,9 @@ impl Value {
                         if !set.is_enumerable() {
                             let (name, shown) = (ev.tool().graph().interner().text(s.names[i]).to_string(), set.ppr(ev)?);
                             return Err(EvalError::detailed(
-                                format!("Attempted to enumerate a set of the form [l1 : v1, ..., ln : vn],\nbut can't enumerate the value of the `{name}' field:\n{shown}"),
+                                format!(
+                                    "Attempted to enumerate a set of the form [l1 : v1, ..., ln : vn],\nbut can't enumerate the value of the `{name}' field:\n{shown}"
+                                ),
                                 None,
                             ));
                         }
@@ -502,7 +539,9 @@ impl Value {
                             let Some(set) = domain.to_set_enum(ev)? else {
                                 let shown = domain.ppr(ev)?;
                                 return Err(EvalError::detailed(
-                                    format!("Attempted to enumerate a set of the form [D -> R],but the domain D:\n{shown}\ncannot be enumerated."),
+                                    format!(
+                                        "Attempted to enumerate a set of the form [D -> R],but the domain D:\n{shown}\ncannot be enumerated."
+                                    ),
                                     None,
                                 ));
                             };

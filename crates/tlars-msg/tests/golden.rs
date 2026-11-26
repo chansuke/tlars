@@ -28,7 +28,12 @@ fn every_message_matches_tlc() {
             actual.push_str("\n(Use the -nowarning option to disable this warning.)");
         }
         if actual != expected {
-            failures.push(format!("{} class={} tool={tool_mode} params={}:\n  tlars: {actual:?}\n  tlc:   {expected:?}", ec.name(), f[1], params.len()));
+            failures.push(format!(
+                "{} class={} tool={tool_mode} params={}:\n  tlars: {actual:?}\n  tlc:   {expected:?}",
+                ec.name(),
+                f[1],
+                params.len()
+            ));
         }
         checked += 1;
     }

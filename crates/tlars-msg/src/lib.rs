@@ -9,6 +9,7 @@
 //! it is chosen by the call (`printError`, `printWarning`, `printMessage`, `printState`,
 //! `printTLCBug`). So it is chosen here by the [`Report`] method, not stored in the table.
 
+#[rustfmt::skip]
 mod catalog;
 mod computed;
 

@@ -270,7 +270,7 @@ impl Value {
                     Value::Model(_) => Ok(Ordering::Greater),
                     _ => {
                         let shown = other.ppr(ev)?;
-                        Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["STRING", &shown]))
+                        Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["STRING", &shown]))
                     }
                 };
             }
@@ -286,14 +286,14 @@ impl Value {
                     return Ok(Ordering::Greater);
                 }
                 let (a, b) = (self.ppr(ev)?, other.ppr(ev)?);
-                return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[&a, &b]));
+                return Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[&a, &b]));
             }
             // `AnySet.compareTo` (`AnySet.java:27-31`) always throws, so even `ANY = ANY`
             // is an error. A non-`UserValue` never gets here: `UserValue.compareTo` has
             // already answered it above.
             UserValue::AnySet => {
                 let shown = other.ppr(ev)?;
-                return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["ANY", &shown]));
+                return Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &["ANY", &shown]));
             }
             _ => return Err(EvalError::unimplemented("comparison of this special set (M2 unit 3)".into())),
         };
@@ -303,7 +303,7 @@ impl Value {
             Value::Model(_) => Ok(Ordering::Greater),
             _ => {
                 let shown = other.ppr(ev)?;
-                Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[name, &shown]))
+                Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_COMPARE_VALUE, &[name, &shown]))
             }
         }
     }
@@ -331,7 +331,13 @@ impl Value {
             (Value::Str(_), _) => mismatch(ev, "string"),
             (Value::Interval(a), Value::Interval(b)) => {
                 let (sa, sb) = (a.size(ev)?, b.size(ev)?);
-                Ok(if sa != sb { sa.cmp(&sb) } else if sa == 0 { Ordering::Equal } else { a.lo.cmp(&b.lo) })
+                Ok(if sa != sb {
+                    sa.cmp(&sb)
+                } else if sa == 0 {
+                    Ordering::Equal
+                } else {
+                    a.lo.cmp(&b.lo)
+                })
             }
             (Value::Interval(a), _) => Value::SetEnum(a.to_set_enum_arc()).tlc_compare(ev, other),
             (Value::SetEnum(a), _) => {
@@ -495,7 +501,7 @@ impl Value {
                         _ => "STRING",
                     };
                     let shown = elem.ppr(ev)?;
-                    Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&shown, set]))
+                    Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&shown, set]))
                 }
                 // `Sequences.member`: a sequence whose elements are all in the range
                 // (`Sequences.java:392-412`).
@@ -506,7 +512,7 @@ impl Value {
                             return m.non_model_member(ev, self);
                         }
                         let (e, s) = (elem.ppr(ev)?, self.ppr(ev)?);
-                        return Err(crate::modules::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&e, &s]));
+                        return Err(crate::eval::eval_exception(ev, Ec::TLC_MODULE_CHECK_MEMBER_OF, &[&e, &s]));
                     };
                     for e in seq.elems.iter() {
                         if !range.member(ev, e)? {
@@ -622,7 +628,10 @@ impl Value {
                         return m.non_model_member(ev, self);
                     }
                     let (e, p) = (elem.to_tlc_string(ev)?, self.ppr(ev)?);
-                    return Err(EvalError::detailed(format!("Attempted to check if non-record\n{e}\nis in the set of records:\n{p}"), None));
+                    return Err(EvalError::detailed(
+                        format!("Attempted to check if non-record\n{e}\nis in the set of records:\n{p}"),
+                        None,
+                    ));
                 };
                 let (names, values) = record_normalized(ev, &rcd)?;
                 let (names, values) = (names.to_vec(), values.to_vec());
@@ -750,7 +759,10 @@ impl Value {
             Value::Union(u) => {
                 if !u.set.is_enumerable() {
                     let shown = self.ppr(ev)?;
-                    return Err(EvalError::detailed(format!("Attempted to check if the nonenumerable set:\n{shown}\nis a finite set."), None));
+                    return Err(EvalError::detailed(
+                        format!("Attempted to check if the nonenumerable set:\n{shown}\nis a finite set."),
+                        None,
+                    ));
                 }
                 let mut elems = u.set.elements(ev, EnumOrder::Native)?.expect("an enumerable value enumerates");
                 while let Some(v) = elems.next(ev)? {
@@ -764,7 +776,9 @@ impl Value {
                 if !p.inner.is_finite(ev)? {
                     let shown = p.inner.ppr(ev)?;
                     return Err(EvalError::detailed(
-                        format!("Attempted to check if expression of form {{x \\in S : p(x)}} is a finite set, but cannot check if S:\n{shown}\nis finite."),
+                        format!(
+                            "Attempted to check if expression of form {{x \\in S : p(x)}} is a finite set, but cannot check if S:\n{shown}\nis finite."
+                        ),
                         None,
                     ));
                 }
@@ -1244,17 +1258,20 @@ fn values_compare(ev: &mut Ev<'_>, av: &[Value], bv: &[Value]) -> EvalResult<Ord
 /// The one representation-independent view that `tlc_equals`, `tlc_compare` and
 /// `fingerprint` are written against: sets as normalized element slices, functions
 /// (tuples, records, FcnRcd, materialized FcnLambda) as normalized `(key, value)` pairs.
+#[expect(dead_code, reason = "DESIGN.md decision 3: Canon is not wired yet")]
 pub(crate) enum Canon<'v> {
     Scalar(&'v Value),
     Set(Arc<SetEnumValue>),
     Fcn(Arc<super::FcnRcdValue>),
 }
 
-pub(crate) fn canon<'v>(ev: &mut Ev<'_>, v: &'v Value) -> EvalResult<Canon<'v>> {
+#[expect(dead_code, reason = "DESIGN.md decision 3: Canon is not wired yet")]
+pub(crate) fn canon<'v>(_ev: &mut Ev<'_>, _v: &'v Value) -> EvalResult<Canon<'v>> {
     todo!("to_set_enum / to_fcn_rcd, error text from the receiver's class")
 }
 
 /// Run `fast`; in debug builds also run `slow` (the `Canon` path) and assert equality.
+#[expect(dead_code, reason = "DESIGN.md decision 3: Canon is not wired yet")]
 pub(crate) fn fast_checked<T: PartialEq + std::fmt::Debug>(
     ev: &mut Ev<'_>,
     fast: impl FnOnce(&mut Ev<'_>) -> EvalResult<T>,

@@ -11,9 +11,28 @@ use tlars_msg::Ec;
 
 /// The keywords: `configTbl`'s keys. A list ends at a token that is one of them.
 const KEYWORDS: &[&str] = &[
-    "CONSTANT", "CONSTANTS", "CONSTRAINT", "CONSTRAINTS", "ACTION_CONSTRAINT", "ACTION_CONSTRAINTS", "INVARIANT",
-    "INVARIANTS", "INIT", "NEXT", "VIEW", "SYMMETRY", "SPECIFICATION", "PROPERTY", "PROPERTIES", "ALIAS",
-    "POSTCONDITION", "POSTCONDITIONS", "_PERIODIC", "_RL_REWARD", "_POSSIBLE", "CHECK_DEADLOCK",
+    "CONSTANT",
+    "CONSTANTS",
+    "CONSTRAINT",
+    "CONSTRAINTS",
+    "ACTION_CONSTRAINT",
+    "ACTION_CONSTRAINTS",
+    "INVARIANT",
+    "INVARIANTS",
+    "INIT",
+    "NEXT",
+    "VIEW",
+    "SYMMETRY",
+    "SPECIFICATION",
+    "PROPERTY",
+    "PROPERTIES",
+    "ALIAS",
+    "POSTCONDITION",
+    "POSTCONDITIONS",
+    "_PERIODIC",
+    "_RL_REWARD",
+    "_POSSIBLE",
+    "CHECK_DEADLOCK",
 ];
 
 /// What a keyword fills.

@@ -10,12 +10,12 @@
 //! - `takeExcept` for every value, and every "Attempted to apply ..." / "In applying the
 //!   function ..." text.
 
-use super::order::{fcn_normalized, normalized, record_normalized};
 use super::Source;
+use super::order::{fcn_normalized, normalized, record_normalized};
 use super::{Closure, FcnDomain, FcnLambdaValue, FcnRcdValue, IntervalValue, RecordValue, SetOfTuplesValue, TupleValue, Value};
 use crate::ctx::{Binding, Ctx};
 use crate::error::{EvalError, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::value::enumerate::{EnumOrder, ValueEnumeration};
 use std::cmp::Ordering;
 use std::sync::{Arc, OnceLock};
@@ -462,7 +462,10 @@ impl FcnRcdValue {
             }
             *slot = Some(values[i].clone());
         }
-        Some(Arc::new(TupleValue { elems: elems.into_iter().map(|v| v.expect("len distinct indices fill 1..len")).collect(), source: Source::none() }))
+        Some(Arc::new(TupleValue {
+            elems: elems.into_iter().map(|v| v.expect("len distinct indices fill 1..len")).collect(),
+            source: Source::none(),
+        }))
     }
 
     /// `toRcd()` (`FcnRcdValue.java:644-657`).
@@ -774,7 +777,11 @@ impl FcnLambdaValue {
                 sets.push(domain.clone());
             }
         }
-        Ok(Value::SetOfTuples(Arc::new(SetOfTuplesValue { sets: sets.into_boxed_slice(), converted: OnceLock::new(), source: Source::none() })))
+        Ok(Value::SetOfTuples(Arc::new(SetOfTuplesValue {
+            sets: sets.into_boxed_slice(),
+            converted: OnceLock::new(),
+            source: Source::none(),
+        })))
     }
 
     /// `apply(args, control)` (`FcnLambdaValue.java:152-270`).
@@ -921,7 +928,9 @@ impl FcnLambdaValue {
                         let dom = self.get_domain(ev)?.to_tlc_string(ev)?;
                         let n = argn + 1;
                         return Err(EvalError::detailed(
-                            format!("In applying the function\n{f},\nthe argument number {n} is:\n{a}\nwhich is not in the function's domain {dom}.\n"),
+                            format!(
+                                "In applying the function\n{f},\nthe argument number {n} is:\n{a}\nwhich is not in the function's domain {dom}.\n"
+                            ),
                             None,
                         ));
                     }

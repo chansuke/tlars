@@ -1,9 +1,7 @@
 //! Compares tlars-java with JDK 21 output recorded by `tools/golden/JavaGolden.java`.
 
 use tlars_java::time::Pattern;
-use tlars_java::{
-    Hashtable, JavaRandom, decimal_format_grouped, double_to_string, pretty_print, reciprocal_two_digits, string_hash_code,
-};
+use tlars_java::{Hashtable, JavaRandom, decimal_format_grouped, double_to_string, pretty_print, reciprocal_two_digits, string_hash_code};
 
 fn golden(name: &str) -> String {
     let path = format!("{}/tests/golden/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -14,11 +12,7 @@ fn golden(name: &str) -> String {
 fn string_hash_code_matches_java() {
     for line in golden("string_hash.txt").lines() {
         let (hash, cps) = line.split_once('\t').unwrap();
-        let s: String = cps
-            .split(',')
-            .filter(|c| !c.is_empty())
-            .map(|c| char::from_u32(c.parse().unwrap()).unwrap())
-            .collect();
+        let s: String = cps.split(',').filter(|c| !c.is_empty()).map(|c| char::from_u32(c.parse().unwrap()).unwrap()).collect();
         assert_eq!(string_hash_code(&s), hash.parse::<i32>().unwrap(), "{s:?}");
     }
 }

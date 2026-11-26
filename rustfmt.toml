@@ -1,0 +1,3 @@
+# Calibrated to the existing code, which keeps one call or literal per line up to about 140 columns.
+max_width = 140
+use_small_heuristics = "Max"

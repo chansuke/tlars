@@ -2,6 +2,8 @@
 //! mutable references, strings, exceptions, and `int`/`long` arithmetic. Generated code
 //! uses only this module and the support classes; it never touches Rust references directly.
 
+#![expect(dead_code, reason = "the Java semantics generated.rs may call; it calls only part of them")]
+
 use std::any::Any;
 use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
@@ -207,9 +209,7 @@ impl JStr {
     pub(crate) fn index_of(&self, s: &JStr) -> i32 {
         let hay = self.units();
         let needle = s.units();
-        (0..=hay.len().saturating_sub(needle.len()))
-            .find(|&i| hay[i..].starts_with(&needle))
-            .map_or(-1, |p| p as i32)
+        (0..=hay.len().saturating_sub(needle.len())).find(|&i| hay[i..].starts_with(&needle)).map_or(-1, |p| p as i32)
     }
     /// `String` `==`: identity. Equal literals are one object in Java (interned); here two
     /// `JStr::of` calls are not, so translated code must not depend on literal identity.
@@ -331,6 +331,7 @@ impl JInteger {
         JInteger(Some(v))
     }
     #[track_caller]
+    #[expect(non_snake_case, reason = "generated.rs calls Java's Integer.intValue by its name")]
     pub(crate) fn intValue(&self) -> i32 {
         self.0.expect("NullPointerException: unboxing null")
     }
@@ -578,11 +579,6 @@ pub(crate) struct ExternThrowable {
 impl JThrow {
     pub(crate) fn new_extern(class: &'static str, message: JStr) -> JThrow {
         JThrow::Extern(ExternThrowable { class, message })
-    }
-    /// Debugging aid only; TLC's own stack traces are not reproduced.
-    #[allow(non_snake_case)]
-    pub(crate) fn printStackTrace(&self) {
-        eprintln!("{self:?}");
     }
 }
 

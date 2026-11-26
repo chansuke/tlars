@@ -79,18 +79,9 @@ pub(crate) fn class_statics(class: JavaClass) -> &'static [&'static str] {
         // registered before anything is evaluated. Names a parsed module or the cfg already
         // interned keep their earlier token, which is why `"name"` and `"location"` normally
         // sort ahead of every key here.
-        JavaClass::RecordValue => &[
-            "beginLine",
-            "beginColumn",
-            "endLine",
-            "endColumn",
-            "module",
-            "name",
-            "location",
-            "context",
-            "parameters",
-            "_action",
-        ],
+        JavaClass::RecordValue => {
+            &["beginLine", "beginColumn", "endLine", "endColumn", "module", "name", "location", "context", "parameters", "_action"]
+        }
         // `tlc2.value.impl.CounterExample`'s `UniqueString` statics, in declaration order
         // (`CounterExample.java:48-50`). The class initialises when the first counterexample
         // is built, which is the first `TLCExt!CounterExample` that is evaluated or the

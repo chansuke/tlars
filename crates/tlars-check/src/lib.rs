@@ -5,20 +5,24 @@
 //! static TLC relies on (`MP`, `TLCGlobals`, `InternTable`, `ModelValue.mvs`, `FP64`,
 //! `RandomEnumerableValues`) is a field of a per-run `Session`, so many runs can share a
 //! process without leaking state into each other.
-#![allow(dead_code, unused_variables)]
 
 mod bfs;
 mod cli;
+#[expect(dead_code, unused_variables, reason = "M5: the -dfid checker is a stub")]
 mod dfid;
 mod driver;
 mod fpset;
+#[expect(dead_code, unused_variables, reason = "M4: the liveness graph is a stub")]
 mod liveness;
+#[expect(dead_code, unused_variables, reason = "M4: lasso traces (2122 Back to state) are a stub")]
 mod print;
 mod queue;
 mod session;
+#[expect(dead_code, unused_variables, reason = "M5: the -simulate checker is a stub")]
 mod simulate;
 mod trace;
 
+pub use tlars_java::time::Clock;
 pub use tlars_msg::ExitStatus;
 
 use std::io::Write;
@@ -64,6 +68,8 @@ impl Invocation<'static> {
 pub struct Env {
     pub clock: Clock,
     pub pid: u32,
+    /// `java.io.tmpdir`, where SANY copies the standard modules it parses.
+    pub temp_dir: PathBuf,
     /// Source of TLC's random defaults (`-fp` index, `-seed`) when not given.
     pub entropy: Entropy,
     /// Worker thread stack (TLC conformance recordings ran with `-Xss2m`).
@@ -75,12 +81,6 @@ pub struct Env {
     /// The locale the JVM's `setlocale(LC_ALL, "")` would select, which decides the C
     /// library text inside a `FileNotFoundException` message.
     pub locale: tlars_java::Locale,
-}
-
-#[derive(Clone, Copy)]
-pub enum Clock {
-    System,
-    Fixed { epoch_millis: i64, utc_offset_minutes: i32 },
 }
 
 pub enum Entropy {
@@ -99,10 +99,12 @@ pub struct HostInfo {
 
 impl Env {
     /// The real process: system clock, OS entropy, this host.
+    #[expect(clippy::disallowed_methods, reason = "the one place tlars reads the real process")]
     pub fn process() -> Self {
         Env {
             clock: Clock::System,
             pid: std::process::id(),
+            temp_dir: std::env::temp_dir(),
             entropy: Entropy::Os,
             worker_stack_bytes: 64 << 20,
             host: HostInfo::current(),
@@ -112,10 +114,14 @@ impl Env {
     }
 
     /// Fixed clock, pid and entropy: output is a function of the arguments and files.
+    #[expect(clippy::disallowed_methods, reason = "SANY needs a real directory to copy the standard modules to")]
     pub fn hermetic() -> Self {
         Env {
             clock: Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 },
             pid: 0,
+            // A real directory: SANY writes the standard modules there. Their paths only
+            // reach the `Parsing file` lines.
+            temp_dir: std::env::temp_dir(),
             entropy: Entropy::Fixed(0),
             worker_stack_bytes: 64 << 20,
             host: HostInfo { os_name: "Linux".into(), os_version: "0".into(), os_arch: "amd64".into(), cores: 1 },
@@ -136,24 +142,7 @@ impl Env {
                 Box::new(move || text.clone())
             }
             // TODO(M3): the system time zone (`ZoneId.systemDefault()`); UTC until then.
-            Clock::System => Box::new(|| {
-                let millis = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_or(0, |d| d.as_millis() as i64);
-                tlars_java::time::format(tlars_java::time::Pattern::Timestamp, millis, 0)
-            }),
-        }
-    }
-}
-
-impl Clock {
-    /// `System.currentTimeMillis()`.
-    fn now_millis(&self) -> i64 {
-        match self {
-            Clock::Fixed { epoch_millis, .. } => *epoch_millis,
-            Clock::System => std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_millis() as i64),
+            Clock::System => Box::new(|| tlars_java::time::format(tlars_java::time::Pattern::Timestamp, Clock::System.now_millis(), 0)),
         }
     }
 }

@@ -17,6 +17,8 @@ mod any_set;
 mod bags;
 mod file;
 mod finite_sets;
+#[rustfmt::skip]
+#[expect(dead_code, reason = "the generated table carries every field of TLC's override set; modules reads only some")]
 mod java_overrides;
 mod json;
 mod naturals;
@@ -26,29 +28,27 @@ mod sequences;
 pub(crate) mod tlc;
 mod tlc_eval;
 pub(crate) mod tlc_ext;
-mod tlc_trace;
 pub(crate) mod tlc_get_set;
+mod tlc_trace;
 
-pub(crate) use naturals::eval_exception;
+pub(crate) use crate::eval::eval_exception;
 
 pub(crate) use java_overrides::{JAVA_OVERRIDES, JavaOverride};
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use crate::value::Value;
 use tlars_sany::graph::ExprOrOpArg;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct NativeId(u16);
+pub(crate) use crate::ctx::NativeId;
 
 pub(crate) type StrictFn = fn(&mut Ev<'_>, &[Value]) -> EvalResult<Value>;
 /// `@Evaluation`-style: receives unevaluated arguments (TLCGet, Assert, ...). `Ok(None)` is
 /// the Java method returning `null`, which makes `EvaluatingValue.eval` fall back to the
 /// operator's own TLA+ definition (`EvaluatingValue.java:84-88`).
-pub(crate) type LazyFn =
-    fn(&mut Ev<'_>, &[ExprOrOpArg], &Ctx, StateRef<'_>, StateRef<'_>, EvalControl) -> EvalResult<Option<Value>>;
+pub(crate) type LazyFn = fn(&mut Ev<'_>, &[ExprOrOpArg], &Ctx, StateRef<'_>, StateRef<'_>, EvalControl) -> EvalResult<Option<Value>>;
 
 #[derive(Clone, Copy)]
 pub(crate) enum NativeImpl {
@@ -207,11 +207,11 @@ pub(crate) fn java_override(module: &str, tla_name: &str) -> Option<&'static Jav
 
 impl NativeId {
     pub(crate) fn of_module(module: &str, tla_name: &str) -> Option<NativeId> {
-        REGISTRY.iter().position(|op| op.module == module && op.tla_name == tla_name).map(|i| NativeId(i as u16))
+        REGISTRY.iter().position(|op| op.module == module && op.tla_name == tla_name).map(|i| NativeId::new(i as u16))
     }
 
     pub(crate) fn op(self) -> &'static NativeOp {
-        &REGISTRY[self.0 as usize]
+        &REGISTRY[self.index()]
     }
 }
 
@@ -289,7 +289,7 @@ fn override_failed(ev: &Ev<'_>, signature: &str, cause: &str) -> EvalError {
 
 #[cfg(test)]
 mod tests {
-    use super::{JAVA_OVERRIDES, REGISTRY, java_overrides::OverrideKind, java_override};
+    use super::{JAVA_OVERRIDES, REGISTRY, java_override, java_overrides::OverrideKind};
 
     /// Every native stands for a Java override TLC really has, with the same `minLevel` and,
     /// where TLC wraps the method in a `MethodValue`, the same parameter count. A native for
