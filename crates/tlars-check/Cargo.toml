@@ -14,3 +14,6 @@ tlars-tool = { path = "../tlars-tool" }
 # `transcript::normalize`, so a golden test compares transcripts the way the corpus runner
 # does. A dev-dependency may point back at this crate.
 tlars-conformance = { path = "../tlars-conformance" }
+
+[lints]
+workspace = true

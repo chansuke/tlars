@@ -8,3 +8,6 @@ publish = false
 [dependencies]
 tlars-check = { path = "../tlars-check" }
 regex = "1"
+
+[lints]
+workspace = true

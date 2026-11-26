@@ -7,3 +7,6 @@ license.workspace = true
 [dependencies]
 tlars-java = { path = "../tlars-java" }
 tlars-msg = { path = "../tlars-msg" }
+
+[lints]
+workspace = true

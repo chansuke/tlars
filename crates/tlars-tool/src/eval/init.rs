@@ -267,7 +267,7 @@ impl<'t> Ev<'t> {
     }
 
     /// `x = e`, `x \in S` and `x \subseteq S`: bind an unassigned variable, else test it.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "the parameters of TLC's Tool.getInitStates* (pred, acts, ctx, state, sink)")]
     fn init_assign(
         &mut self,
         pred: ExprId,

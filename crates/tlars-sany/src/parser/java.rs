@@ -578,11 +578,6 @@ impl JThrow {
     pub(crate) fn new_extern(class: &'static str, message: JStr) -> JThrow {
         JThrow::Extern(ExternThrowable { class, message })
     }
-    /// Debugging aid only; TLC's own stack traces are not reproduced.
-    #[allow(non_snake_case)]
-    pub(crate) fn printStackTrace(&self) {
-        eprintln!("{self:?}");
-    }
 }
 
 pub(crate) use super::generated::JThrow;

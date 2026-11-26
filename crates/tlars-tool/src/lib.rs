@@ -5,7 +5,7 @@
 //! [`build_tool`] to obtain a frozen [`Tool`], [`Tool::ev`] to get a per-worker [`Ev`], and
 //! the `Ev` methods (state generation, checks, fingerprint, replay, printing). Everything
 //! about *how* evaluation works stays private.
-#![allow(dead_code, unused_variables)]
+#![expect(dead_code, unused_variables, reason = "stubs for later milestones; narrowed to each stub in a later change")]
 
 mod actions;
 mod ctx;

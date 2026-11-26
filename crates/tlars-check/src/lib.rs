@@ -5,7 +5,7 @@
 //! static TLC relies on (`MP`, `TLCGlobals`, `InternTable`, `ModelValue.mvs`, `FP64`,
 //! `RandomEnumerableValues`) is a field of a per-run `Session`, so many runs can share a
 //! process without leaking state into each other.
-#![allow(dead_code, unused_variables)]
+#![expect(dead_code, unused_variables, reason = "stubs for later milestones; narrowed to each stub in a later change")]
 
 mod bfs;
 mod cli;

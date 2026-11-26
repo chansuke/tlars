@@ -7,7 +7,7 @@
 //! of them from another crate fails to compile, so there is exactly one way to obtain a graph.
 //!
 //! There is no second AST. TLC consumes SANY's graph directly, and so does `tlars-tool`.
-#![allow(dead_code, unused_variables)]
+#![expect(dead_code, unused_variables, reason = "stubs for later milestones; narrowed to each stub in a later change")]
 
 pub mod cfg;
 #[rustfmt::skip]
