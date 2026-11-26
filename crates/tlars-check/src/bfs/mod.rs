@@ -432,15 +432,16 @@ impl<'a> ModelChecker<'a> {
 
     /// `AbstractChecker.runTLC`'s main-thread loop (`:446-478`): the first progress report
     /// after 3 s, then one every `progressInterval`. A run that finishes inside the first
-    /// wait prints none, which is why the recordings hold no mid-run progress line.
+    /// wait prints none, which is why the recordings hold no mid-run progress line. Under a
+    /// fixed clock the first wait lasts until the search ends ([`crate::Clock::deadline`]).
     /// `doPeriodicWork` has nothing to do without liveness or checkpointing.
     fn periodic_loop(&self) {
-        if self.queue.wait_finished(std::time::Duration::from_millis(3000)) {
+        if self.queue.wait_finished(&self.clock.deadline(std::time::Duration::from_millis(3000))) {
             return;
         }
         while !self.queue.is_finished() {
             self.print_progress();
-            if self.queue.wait_finished(std::time::Duration::from_millis(PROGRESS_INTERVAL_MILLIS)) {
+            if self.queue.wait_finished(&self.clock.deadline(std::time::Duration::from_millis(PROGRESS_INTERVAL_MILLIS))) {
                 return;
             }
         }
