@@ -28,6 +28,19 @@ enum CellName {
     Branch,
 }
 
+/// A Java override: an index into `modules`' registry of native operators.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct NativeId(u16);
+
+impl NativeId {
+    pub(crate) const fn new(index: u16) -> NativeId {
+        NativeId(index)
+    }
+    pub(crate) fn index(self) -> usize {
+        usize::from(self.0)
+    }
+}
+
 /// What a context cell holds. Evaluation-only TLC values (`LazyValue`, `OpLambdaValue`,
 /// `MethodValue`) live here and never inside a [`Value`], so a thunk cannot end up in a set
 /// or a state.
@@ -38,7 +51,7 @@ pub(crate) enum Binding {
     /// Operator argument bound to a user definition (`OpArgNode`).
     OpDef(OpDefId),
     /// Operator argument bound to a Java override (`MethodValue`).
-    Native(crate::modules::NativeId),
+    Native(NativeId),
     /// Operator argument bound to a cfg `op(a, b) = v` constant (`OpRcdValue`).
     OpRcd(crate::value::OpRcd),
     Lambda(Arc<OpLambda>),
