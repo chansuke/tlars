@@ -7,7 +7,6 @@
 //! of them from another crate fails to compile, so there is exactly one way to obtain a graph.
 //!
 //! There is no second AST. TLC consumes SANY's graph directly, and so does `tlars-tool`.
-#![expect(dead_code, unused_variables, reason = "stubs for later milestones; narrowed to each stub in a later change")]
 
 pub mod cfg;
 #[rustfmt::skip]
@@ -16,7 +15,9 @@ mod fidelity;
 pub mod graph;
 mod intern;
 mod parser;
+#[expect(dead_code, unused_variables, reason = "a stub from before jj2rs; parser/pcal_validator.rs validates PlusCal now")]
 mod pcal;
+#[expect(dead_code, unused_variables, reason = "a skeleton from before jj2rs; the translated SANY runs semantic analysis now")]
 mod semantic;
 #[rustfmt::skip]
 mod standard_modules;

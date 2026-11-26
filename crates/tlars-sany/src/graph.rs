@@ -448,7 +448,7 @@ impl SemanticGraph {
         }
     }
     /// Resolve `a!b!c` / plain names the way `SpecProcessor` resolves cfg identifiers.
-    pub fn resolve_root_name(&self, path: &[Atom]) -> Option<SymbolRef> {
+    pub fn resolve_root_name(&self, _path: &[Atom]) -> Option<SymbolRef> {
         todo!("M3: SpecProcessor's name resolution for cfg identifiers")
     }
     pub fn interner(&self) -> &Arc<Interner> {

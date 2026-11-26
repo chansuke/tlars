@@ -10,7 +10,7 @@
 //! `Parsing file <path> (<url>)`; tlars has no jar, and prints the path alone, as TLC does
 //! when its standard modules are on the file system.
 
-#![expect(non_snake_case, reason = "the Java names generated.rs calls these by")]
+#![expect(non_snake_case, dead_code, reason = "the Java library subset generated.rs calls by its Java names; it calls only part of it")]
 
 use super::generated::TLAplusParser;
 use super::java::*;

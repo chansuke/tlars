@@ -67,6 +67,7 @@ impl Source {
 /// `ValueConstants` kind bytes. The discriminants go into fingerprints.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
+#[expect(dead_code, reason = "TLC's kind numbering kept whole; some kinds are never values here")]
 pub(crate) enum ValueKind {
     Bool = 0,
     Int = 1,
@@ -256,6 +257,7 @@ pub struct SubsetValue {
 
 pub struct KSubsetValue {
     pub(crate) base: Value,
+    #[expect(dead_code, reason = "M5: the k-subset operations read it")]
     pub(crate) k: i32,
     pub(crate) converted: OnceLock<Arc<SetEnumValue>>,
 }

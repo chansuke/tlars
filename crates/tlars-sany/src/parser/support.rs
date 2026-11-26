@@ -2,7 +2,7 @@
 //! `jj2rs/externs.rs`): the Java library subset, `UniqueString`, `Location`, `SanyOutput`,
 //! `JunctionListContext`, and the translated members listed as hand-written there.
 
-#![expect(non_snake_case, reason = "the Java names generated.rs calls these by")]
+#![expect(non_snake_case, dead_code, reason = "the Java library subset generated.rs calls by its Java names; it calls only part of it")]
 
 pub(crate) use super::files::{FileUtil, FilenameToStream, NamedInputStream, ToolIO};
 use super::generated::{

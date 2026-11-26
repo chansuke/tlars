@@ -175,7 +175,7 @@ pub trait InitSink {
 pub trait NextSink {
     fn add_next(&mut self, ev: &mut Ev<'_>, s0: &State, action: ActionId, s1: &PartialState) -> Flow;
     /// `addUnsatisfiedState` (only `-dump ... constrained` and the debugger care).
-    fn add_unsatisfied(&mut self, ev: &mut Ev<'_>, s0: &State, action: ActionId, s1: &PartialState) -> Flow {
+    fn add_unsatisfied(&mut self, _ev: &mut Ev<'_>, _s0: &State, _action: ActionId, _s1: &PartialState) -> Flow {
         Ok(())
     }
 }
@@ -760,11 +760,6 @@ impl<'t> Ev<'t> {
         self.expansions += 1;
         let id = crate::effects::ExpansionId(self.expansions);
         self.locals.effects.current = Some(crate::effects::CurrentState { id, fp: s0_fp, state: s0.clone() });
-    }
-
-    /// `IdThread.getCurrentState()`, which is `null` outside a worker's expansion.
-    pub(crate) fn current_state(&self) -> Option<&State> {
-        self.locals.effects.current.as_ref().map(|c| &c.state)
     }
 
     /// The `IdThread.setCurrentState(currentState)` that `TLCExt!Trace` runs after a nested

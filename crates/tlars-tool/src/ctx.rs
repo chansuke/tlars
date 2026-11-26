@@ -54,6 +54,7 @@ pub(crate) enum Binding {
     Native(NativeId),
     /// Operator argument bound to a cfg `op(a, b) = v` constant (`OpRcdValue`).
     OpRcd(crate::value::OpRcd),
+    #[expect(dead_code, reason = "LAMBDA operator arguments are not bound yet")]
     Lambda(Arc<OpLambda>),
     /// The `@` of an EXCEPT component.
     ExceptAt(Value),
@@ -172,6 +173,7 @@ fn covers(ev: &mut Ev<'_>, cached: &Option<crate::state::Snapshot>, s: &StateRef
 }
 
 /// `OpLambdaValue`: `LAMBDA x, y : e` passed as an operator argument.
+#[expect(dead_code, reason = "LAMBDA operator arguments are not bound yet")]
 pub(crate) struct OpLambda {
     pub(crate) params: Box<[ParamId]>,
     pub(crate) body: ExprId,

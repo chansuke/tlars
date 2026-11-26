@@ -2,6 +2,8 @@
 //! mutable references, strings, exceptions, and `int`/`long` arithmetic. Generated code
 //! uses only this module and the support classes; it never touches Rust references directly.
 
+#![expect(dead_code, reason = "the Java semantics generated.rs may call; it calls only part of them")]
+
 use std::any::Any;
 use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;

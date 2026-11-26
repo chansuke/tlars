@@ -200,7 +200,7 @@ impl CfgBind<'_> {
             let value = predefined(name).expect("a predefined name has a value");
             self.defns.insert(graph.interner().intern(name), Some(OpBinding::Value(value)));
         }
-        let constants = constant_table(&config.constants, graph, mvs)?;
+        let constants = constant_table(&config.constants, mvs)?;
         // `:556-569`: every root constant needs a cfg value or an override.
         for &d in root.constant_decls.iter() {
             let name = graph.decl(d).name;
@@ -239,7 +239,7 @@ impl CfgBind<'_> {
         for (_, m) in graph.modules() {
             let module = graph.interner().text(m.name).to_string();
             let Some(lines) = config.mod_constants.get(&module, java_hash(&module)) else { continue };
-            let constants = constant_table(lines, graph, mvs)?;
+            let constants = constant_table(lines, mvs)?;
             for &d in m.op_defs.iter() {
                 let def = graph.op_def(d);
                 let Some(body) = def.body else { continue };
@@ -410,7 +410,6 @@ fn decl_binding(val: &OpBinding) -> DeclBinding {
 /// `OpRcdValue` whose arity every later line must match.
 fn constant_table(
     lines: &[CfgConstant],
-    graph: &SemanticGraph,
     mvs: &[crate::value::ModelValue],
 ) -> Result<std::collections::BTreeMap<String, OpBinding>, SpecError> {
     let mut table: std::collections::BTreeMap<String, OpBinding> = Default::default();

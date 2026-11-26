@@ -18,6 +18,7 @@ mod bags;
 mod file;
 mod finite_sets;
 #[rustfmt::skip]
+#[expect(dead_code, reason = "the generated table carries every field of TLC's override set; modules reads only some")]
 mod java_overrides;
 mod json;
 mod naturals;

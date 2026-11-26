@@ -876,11 +876,6 @@ impl<'t> Ev<'t> {
         Err(EvalError::detailed(format!("Attempted to apply operator:\n{shown}\nto arguments ({args_text}), which is undefined."), None))
     }
 
-    fn body_binding(&self, d: OpDefId) -> Option<OpBinding> {
-        let tool = self.tool();
-        tool.graph.op_def(d).body.and_then(|b| tool.bindings.body_chain(&tool.graph, b))
-    }
-
     pub(crate) fn symbol_name(&self, sym: SymbolRef) -> String {
         let graph = &self.tool().graph;
         let name = match sym {

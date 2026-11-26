@@ -79,6 +79,7 @@ impl StateQueue {
         }
     }
     /// `suspendAll`: park workers for periodic work (liveness, checkpoint, FPSet growth).
+    #[expect(dead_code, reason = "M4/M6: liveness and checkpoints park the workers")]
     pub(crate) fn suspend_all(&self) -> bool {
         let mut inner = self.inner.lock().expect("queue");
         if inner.finished {
@@ -91,6 +92,7 @@ impl StateQueue {
         }
         !inner.finished
     }
+    #[expect(dead_code, reason = "M4/M6: liveness and checkpoints park the workers")]
     pub(crate) fn resume_all(&self) {
         let mut inner = self.inner.lock().expect("queue");
         inner.suspend_requested = false;

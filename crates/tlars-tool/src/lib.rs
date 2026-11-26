@@ -5,7 +5,6 @@
 //! [`build_tool`] to obtain a frozen [`Tool`], [`Tool::ev`] to get a per-worker [`Ev`], and
 //! the `Ev` methods (state generation, checks, fingerprint, replay, printing). Everything
 //! about *how* evaluation works stays private.
-#![expect(dead_code, unused_variables, reason = "stubs for later milestones; narrowed to each stub in a later change")]
 
 mod actions;
 mod ctx;
@@ -16,6 +15,7 @@ mod fp64;
 #[rustfmt::skip]
 mod fp64_polys;
 mod globals;
+#[expect(dead_code, unused_variables, reason = "M4: the liveness formula side is a stub")]
 mod live;
 mod modules;
 mod spec;
