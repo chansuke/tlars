@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# One command to check a change. Prints one line per step and keeps the full logs and
+# summary.md (summary-conformance.md, summary-bench.md for those modes) under target/verify/.
+#
+#   scripts/verify [check] [--base REV]   format, clippy, added lines, generated files, and
+#                                         the tests (release with debug assertions), then
+#                                         the docs/verification.md items the change touches
+#   scripts/verify conformance            the ten conformance targets against *.passing
+#   scripts/verify full [--base REV]      check and conformance, then the Nix build and the
+#                                         golden files recorded again from the pinned TLC
+#                                         (they must come out unchanged)
+#   scripts/verify bench                  xtask bench run (tlars only), for a perf change
+#
+# REV defaults to origin/main. Runs inside `nix develop`, which has the pinned TLC, JDK and
+# corpora.
+set -euo pipefail
+
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+if [ -z "${IN_NIX_SHELL:-}" ]; then
+  exec nix develop "$root" --command "$0" "$@"
+fi
+cd "$root"
+
+mode=check
+base=origin/main
+while (($# > 0)); do
+  case $1 in
+  check | conformance | full | bench) mode=$1 ;;
+  --base)
+    base=${2:?--base needs a revision}
+    shift
+    ;;
+  *)
+    sed -n '2,/^set /p' "$0" | sed '$d; s/^# \{0,1\}//' >&2
+    exit 2
+    ;;
+  esac
+  shift
+done
+git rev-parse --verify --quiet "$base^{commit}" >/dev/null || base=main
+
+out=$root/target/verify
+logs=$out/logs
+mkdir -p "$logs"
+summary=$out/summary.md
+case $mode in conformance | bench) summary=$out/summary-$mode.md ;; esac
+failed=0
+rows=()
+
+# step NAME COMMAND...: runs COMMAND with its output in logs/NAME.log.
+step() {
+  local name=$1 log=$logs/$1.log started status=0
+  shift
+  started=$(date +%s)
+  "$@" >"$log" 2>&1 || status=$?
+  local took=$(($(date +%s) - started))s
+  if ((status == 0)); then
+    printf 'pass  %-18s %5s  %s\n' "$name" "$took" "${log#"$root"/}"
+    rows+=("| $name | pass | $took | \`${log#"$root"/}\` |")
+  else
+    printf 'FAIL  %-18s %5s  %s\n' "$name" "$took" "${log#"$root"/}"
+    rows+=("| $name | **fail** | $took | \`${log#"$root"/}\` |")
+    tail -n 30 "$log" | sed 's/^/      /'
+    failed=1
+  fi
+}
+
+check_steps() {
+  step fmt cargo fmt --check
+  step clippy cargo clippy --locked --workspace --all-targets -- -D warnings
+  step added-lines scripts/check-escape-hatches.sh "$base...HEAD"
+  step generated bash -c 'cargo run --locked -q -p xtask -- gen-fidelity --check && cargo run --locked -q -p xtask -- jj2rs emit --check'
+  step test cargo test --locked --profile ci --workspace
+}
+
+conformance_steps() {
+  step conformance tools/conf-all.sh --check
+}
+
+# The docs/verification.md items whose files this change touches, as a Markdown list.
+checklist() {
+  local changed
+  changed=$(git diff --name-only "$base...HEAD"; git diff --name-only HEAD)
+  item() { # PATTERN TEXT
+    if grep -Eq -- "$1" <<<"$changed"; then echo "- $2"; fi
+  }
+  item '^crates/tlars-sany/src/(cfg|parser/cfg_parse)' "cfg parsing changed: a spec fixture under crates/tlars-conformance/tests/specs/ shows the new behaviour, recorded with tools/golden/spec_golden.sh."
+  item '\.passing$' "a *.passing list changed: it only gained cases (\`git diff $base -- '*.passing'\` removes none)."
+  item '^crates/tlars-check/src/(cli|lib|session|driver)\.rs' "the CLI or Env changed: a case in tools/golden/cli_cases.txt covers it, recorded with tools/golden/cli_golden.sh."
+  item '^crates/tlars-tool/src/value/' "a value class changed: the fingerprint, value stream and print goldens still pass, and a new case is in the Java golden generator if TLC's output differs."
+  item '^crates/tlars-check/src/(bfs|queue|fpset|trace)' "the checker's concurrency changed: \`runs_in_one_process_do_not_share_state\` passes and \`scripts/verify bench\` shows no slowdown."
+  item '^crates/xtask/src/(jj2rs|catalog|java_overrides)' "a generator changed: its output is regenerated and committed in the same change."
+  item '^(flake\.(nix|lock)|Cargo\.lock)$' "the toolchain or dependencies changed: \`scripts/verify full\` passes."
+}
+
+case $mode in
+check) check_steps ;;
+conformance) conformance_steps ;;
+full)
+  check_steps
+  conformance_steps
+  step nix-build nix build .#default --no-link
+  step goldens bash -c 'for s in cli fingerprint parse semantic spec value_stream; do tools/golden/${s}_golden.sh || exit 1; done; git diff --exit-code -- "crates/*/tests/golden"'
+  ;;
+bench) step bench cargo run --locked --release -q -p xtask -- bench run --engine tlars ;;
+esac
+
+{
+  echo "# Verification"
+  echo
+  echo "Revision $(git rev-parse --short HEAD), compared with $base; mode \`$mode\`."
+  if ! git diff --quiet HEAD --; then
+    echo "The working tree has changes that are not committed."
+  fi
+  echo
+  echo "| Step | Result | Time | Log |"
+  echo "|---|---|---|---|"
+  printf '%s\n' "${rows[@]}"
+  if [ "$mode" = check ] || [ "$mode" = full ]; then
+    items=$(checklist)
+    if [ -n "$items" ]; then
+      echo
+      echo "## Checklist items this change touches"
+      echo
+      echo "Each one is a check of its own; see docs/verification.md."
+      echo
+      echo "$items"
+    fi
+  fi
+  case $mode in
+  check) echo; echo "Not run in this mode: conformance (\`scripts/verify conformance\`), the Nix build and the goldens (\`scripts/verify full\`)." ;;
+  conformance) echo; echo "Not run in this mode: format, clippy, tests (\`scripts/verify\`)." ;;
+  esac
+} >"$summary"
+
+echo "summary: ${summary#"$root"/}"
+exit "$failed"

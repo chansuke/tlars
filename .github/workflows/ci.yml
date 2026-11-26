@@ -26,24 +26,15 @@ jobs:
             target
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'flake.lock') }}
           restore-keys: cargo-${{ runner.os }}-
-      - name: Added lines keep no escape hatch
-        if: github.event_name == 'pull_request'
+      - name: scripts/verify check
         env:
-          BASE_REF: ${{ github.base_ref }}
-        run: scripts/check-escape-hatches.sh "origin/$BASE_REF...HEAD"
-      - name: Formatting
-        run: nix develop -c cargo fmt --check
-      - name: Clippy
-        run: nix develop -c cargo clippy --workspace --all-targets -- -D warnings
-      - name: Generated files match the pinned sources
-        run: |
-          nix develop -c cargo run -q -p xtask -- gen-fidelity --check
-          nix develop -c cargo run -q -p xtask -- jj2rs emit --check
-      - name: Tests
-        run: nix develop -c cargo test --profile ci --workspace
-      - name: Conformance cases that passed still pass
-        run: |
-          for target in expressions:assume expressions:init expressions:next expressions:invariant \
-                        standard:assume standard:init standard:next standard:invariant standard:model checker:model; do
-            nix develop -c cargo run -q --release -p xtask -- conformance run --check --suite "${target%%:*}" --context "${target##*:}"
-          done
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: scripts/verify check --base "origin/$BASE_REF"
+      - name: scripts/verify conformance
+        run: scripts/verify conformance
+      - name: Keep the verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify
+          path: target/verify/
