@@ -7,7 +7,7 @@
 
 use super::expr::{Builtin, Resolved};
 use super::next::{ActItem, ActKind, Acts};
-use super::{EvalControl, Ev};
+use super::{Ev, EvalControl};
 use crate::ctx::{Binding, Ctx};
 use crate::error::{EvalError, EvalResult};
 use crate::state::{FunState, StateRef};
@@ -245,7 +245,8 @@ impl<'t> Ev<'t> {
                 let argv = self.eval(arg(1), c, s0, StateRef::Fun(s1), EvalControl::ENABLED)?;
                 let bval = fval.apply(self, &argv, EvalControl::ENABLED)?;
                 let Value::Bool(b) = bval else {
-                    let message = self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["ENABLED", "boolean", &graph.expr_tlc_text(pred)]);
+                    let message =
+                        self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, &["ENABLED", "boolean", &graph.expr_tlc_text(pred)]);
                     return Err(EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING2, message).with_loc(Some(graph.loc(arg(1)))));
                 };
                 if !b {
@@ -358,8 +359,7 @@ impl<'t> Ev<'t> {
     /// (`Tool.java:3128-3131`), where `shown` is `bval.toString()`.
     fn enabled_expected_boolean(&mut self, pred: ExprId, shown: &str) -> EvalError {
         let graph = &self.tool().graph;
-        let message =
-            self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["ENABLED", "boolean", shown, &graph.expr_tlc_text(pred)]);
+        let message = self.out().text(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, &["ENABLED", "boolean", shown, &graph.expr_tlc_text(pred)]);
         EvalError::runtime(Ec::TLC_EXPECTED_EXPRESSION_IN_COMPUTING, message).with_loc(Some(graph.loc(pred)))
     }
 

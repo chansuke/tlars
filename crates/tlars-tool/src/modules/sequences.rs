@@ -3,7 +3,7 @@
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::modules::eval_exception;
 use crate::state::StateRef;
 use crate::value::{UserValue, Value};
@@ -221,11 +221,7 @@ fn select_seq_body(
             Value::Bool(false) => {}
             _ => {
                 let shown = ev.op_arg_text(args[1], Some(test))?;
-                return Err(eval_exception(
-                    ev,
-                    Ec::TLC_MODULE_ARGUMENT_ERROR,
-                    &["second", "SelectSeq", "boolean-valued operator", &shown],
-                ));
+                return Err(eval_exception(ev, Ec::TLC_MODULE_ARGUMENT_ERROR, &["second", "SelectSeq", "boolean-valued operator", &shown]));
             }
         }
     }

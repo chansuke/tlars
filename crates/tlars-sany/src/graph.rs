@@ -63,10 +63,7 @@ impl Loc {
         if self.module.is_some() && self.begin_line == 0 && self.begin_col == 0 && self.end_line == 0 && self.end_col == 0 {
             return format!("In module {module}");
         }
-        format!(
-            "line {}, col {} to line {}, col {} of module {module}",
-            self.begin_line, self.begin_col, self.end_line, self.end_col
-        )
+        format!("line {}, col {} to line {}, col {} of module {module}", self.begin_line, self.begin_col, self.end_line, self.end_col)
     }
 }
 

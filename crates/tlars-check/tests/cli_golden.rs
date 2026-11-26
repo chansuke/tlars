@@ -20,10 +20,7 @@ impl Write for Captured {
 
 /// The welcome line names the build: `TLC2 Version <...>`.
 fn normalize_version(text: &str) -> String {
-    text.lines()
-        .map(|l| if l.starts_with("TLC2 Version ") { "TLC2 Version <version>" } else { l })
-        .collect::<Vec<_>>()
-        .join("\n")
+    text.lines().map(|l| if l.starts_with("TLC2 Version ") { "TLC2 Version <version>" } else { l }).collect::<Vec<_>>().join("\n")
 }
 
 #[test]

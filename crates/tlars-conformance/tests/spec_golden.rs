@@ -141,7 +141,9 @@ fn spec_runs_match_tlc() {
         let blocked = specs_dir().join(case).join("blocked").exists();
         if blocked {
             if !announced {
-                failures.push(format!("{case}: tlars no longer stops at an unimplemented construct; drop the `blocked` file\n  tlars ({status}):\n{actual}"));
+                failures.push(format!(
+                    "{case}: tlars no longer stops at an unimplemented construct; drop the `blocked` file\n  tlars ({status}):\n{actual}"
+                ));
             }
             continue;
         }

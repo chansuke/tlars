@@ -4,7 +4,7 @@
 //! tool objects), so INSTANCE substitutions shadow the instantiated module's declarations.
 //! Operator arguments and LET definitions become `Binding::Thunk` (call-by-name).
 
-use super::{EvalControl, Ev};
+use super::{Ev, EvalControl};
 use crate::ctx::{Binding, Ctx, Thunk};
 use crate::error::{EvalError, EvalResult};
 use crate::spec::OpBinding;
@@ -31,7 +31,9 @@ pub(crate) enum Resolved {
     /// A definition TLC overrides with a Java method tlars does not implement. Keeping it
     /// apart from `Undef` is what lets every caller stop as unimplemented instead of
     /// reporting an undefined operator. The level is the override's `minLevel`.
-    Unimplemented { min_level: u8 },
+    Unimplemented {
+        min_level: u8,
+    },
     /// A theorem or assumption name, which `lookup` returns as the `ThmOrAssumpDefNode`
     /// itself; the evaluator expands its body like a definition's (`Tool.java:2050-2061`).
     Thm(tlars_sany::graph::ThmId),
@@ -330,7 +332,11 @@ impl<'t> Ev<'t> {
                     let v = self.eval(arg(i), c, s0, s1, control)?;
                     let Value::Bool(b) = v else {
                         let what = if conj { "conjunction" } else { "disjunction" };
-                        let reason = format!("A non-boolean expression ({}) was used as a formula in a {what}.\n{}", v.kind_string(), text(self, arg(i)));
+                        let reason = format!(
+                            "A non-boolean expression ({}) was used as a formula in a {what}.\n{}",
+                            v.kind_string(),
+                            text(self, arg(i))
+                        );
                         return Err(not_boolean(self, reason, arg(i)));
                     };
                     if b != conj {
@@ -347,7 +353,11 @@ impl<'t> Ev<'t> {
                 };
                 let v1 = self.eval(arg(0), c, s0, s1, control)?;
                 let Value::Bool(b1) = v1 else {
-                    let reason = format!("Attempted to evaluate an expression of form {form} when P was\n{}.\n{}", v1.kind_string(), text(self, expr));
+                    let reason = format!(
+                        "Attempted to evaluate an expression of form {form} when P was\n{}.\n{}",
+                        v1.kind_string(),
+                        text(self, expr)
+                    );
                     return Err(not_boolean(self, reason, expr));
                 };
                 // `/\` and `=>` need Q only when P holds, `\/` only when it does not.
@@ -361,7 +371,11 @@ impl<'t> Ev<'t> {
                 }
                 let v2 = self.eval(arg(1), c, s0, s1, control)?;
                 if !matches!(v2, Value::Bool(_)) {
-                    let reason = format!("Attempted to evaluate an expression of form {form} when Q was\n{}.\n{}", v2.kind_string(), text(self, expr));
+                    let reason = format!(
+                        "Attempted to evaluate an expression of form {form} when Q was\n{}.\n{}",
+                        v2.kind_string(),
+                        text(self, expr)
+                    );
                     return Err(not_boolean(self, reason, expr));
                 }
                 Ok(v2)
@@ -372,7 +386,10 @@ impl<'t> Ev<'t> {
                 match (v1, v2) {
                     (Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(a == b)),
                     _ => {
-                        let reason = format!("Attempted to evaluate an expression of form P <=> Q when P or Q was not a boolean.\n{}", text(self, expr));
+                        let reason = format!(
+                            "Attempted to evaluate an expression of form P <=> Q when P or Q was not a boolean.\n{}",
+                            text(self, expr)
+                        );
                         Err(not_boolean(self, reason, expr))
                     }
                 }
@@ -382,7 +399,8 @@ impl<'t> Ev<'t> {
                 match v {
                     Value::Bool(b) => Ok(Value::Bool(!b)),
                     _ => {
-                        let reason = format!("Attempted to apply the operator ~ to a non-boolean\n({})\n{}", v.kind_string(), text(self, expr));
+                        let reason =
+                            format!("Attempted to apply the operator ~ to a non-boolean\n({})\n{}", v.kind_string(), text(self, expr));
                         Err(not_boolean(self, reason, arg(0)))
                     }
                 }
@@ -405,7 +423,11 @@ impl<'t> Ev<'t> {
                     Value::Bool(true) => self.eval(arg(1), c, s0, s1, control),
                     Value::Bool(false) => self.eval(arg(2), c, s0, s1, control),
                     _ => {
-                        let reason = format!("A non-boolean expression ({}) was used as the condition of an IF.\n{}", v.kind_string(), text(self, expr));
+                        let reason = format!(
+                            "A non-boolean expression ({}) was used as the condition of an IF.\n{}",
+                            v.kind_string(),
+                            text(self, expr)
+                        );
                         Err(not_boolean(self, reason, expr))
                     }
                 }
@@ -424,7 +446,11 @@ impl<'t> Ev<'t> {
                                 Value::Bool(true) => return self.eval(pair_args[1].expect_expr(), c, s0, s1, control),
                                 Value::Bool(false) => {}
                                 _ => {
-                                    let reason = format!("A non-boolean expression ({}) was used as a condition of a CASE. {}", v.kind_string(), text(self, guard));
+                                    let reason = format!(
+                                        "A non-boolean expression ({}) was used as a condition of a CASE. {}",
+                                        v.kind_string(),
+                                        text(self, guard)
+                                    );
                                     return Err(not_boolean(self, reason, guard));
                                 }
                             }
@@ -677,7 +703,8 @@ impl<'t> Ev<'t> {
                         None => {
                             let field = sval.to_tlc_string(self)?;
                             let shown = rval.ppr(self)?;
-                            let reason = format!("Attempted to select nonexistent field {field} from the record\n{shown}\n{}", text(self, expr));
+                            let reason =
+                                format!("Attempted to select nonexistent field {field} from the record\n{shown}\n{}", text(self, expr));
                             Err(not_boolean(self, reason, expr))
                         }
                     };
@@ -782,7 +809,8 @@ impl<'t> Ev<'t> {
                 let form = if angle { "<A>_e" } else { "[A]_e" };
                 let v = self.eval(arg(0), c, s0, s1, control)?;
                 let Value::Bool(b) = v else {
-                    let reason = format!("Attempted to evaluate an expression of form {form}, but A was not a boolean.\n{}", text(self, expr));
+                    let reason =
+                        format!("Attempted to evaluate an expression of form {form}, but A was not a boolean.\n{}", text(self, expr));
                     return Err(not_boolean(self, reason, expr));
                 };
                 // `<A>_e` is false and `[A]_e` true as soon as A settles it.
@@ -879,9 +907,7 @@ impl<'t> Ev<'t> {
     ) -> EvalResult<Option<OpArgValue<'s>>> {
         let ExprOrOpArg::OpArg(sym) = arg else { return Ok(None) };
         Ok(match self.lookup(sym, c, StateRef::Empty, false) {
-            Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => {
-                Some(OpArgValue::Op { def: d, ctx: c.clone(), s0, s1, control })
-            }
+            Resolved::Binding(Binding::OpDef(d)) | Resolved::UserOp(d) => Some(OpArgValue::Op { def: d, ctx: c.clone(), s0, s1, control }),
             Resolved::Binding(Binding::Native(id)) | Resolved::Native(id) => Some(OpArgValue::Native(id)),
             _ => None,
         })
@@ -943,7 +969,14 @@ impl<'t> Ev<'t> {
 
     /// `Tool.contexts` (`Tool.java:4080-4110`): every domain is evaluated first; then the
     /// bindings run like an odometer with the first variable fastest.
-    pub(crate) fn contexts(&mut self, bound: &BoundSymbols, c: &Ctx, s0: StateRef<'_>, s1: StateRef<'_>, control: EvalControl) -> EvalResult<Contexts> {
+    pub(crate) fn contexts(
+        &mut self,
+        bound: &BoundSymbols,
+        c: &Ctx,
+        s0: StateRef<'_>,
+        s1: StateRef<'_>,
+        control: EvalControl,
+    ) -> EvalResult<Contexts> {
         let graph = &self.tool().graph;
         let mut vars = Vec::new();
         for list in bound.lists.iter() {
@@ -1244,9 +1277,7 @@ impl<'t> Ev<'t> {
                 }
                 // A recursive function's own name is bound, so its body is not walked again.
                 let c = match (self.opcode(*op), bound.as_deref()) {
-                    (Some(Builtin::RecursiveFcnSpec), Some(b)) => {
-                        c.cons(SymbolRef::Param(b.unbounded[0]), Binding::Value(Value::Int(1)))
-                    }
+                    (Some(Builtin::RecursiveFcnSpec), Some(b)) => c.cons(SymbolRef::Param(b.unbounded[0]), Binding::Value(Value::Int(1))),
                     _ => c.clone(),
                 };
                 for a in args.iter() {
@@ -1483,13 +1514,63 @@ impl Builtin {
 
 /// Every name `BuiltInOPs` registers (`BuiltInOPs.java:17-84`).
 const BUILT_IN_OPS: &[&str] = &[
-    "$AngleAct", "$BoundedChoose", "$BoundedExists", "$BoundedForall", "$Case", "$CartesianProd", "$ConjList",
-    "$DisjList", "$Except", "$FcnApply", "$FcnConstructor", "$IfThenElse", "$NonRecursiveFcnSpec", "$Pair",
-    "$RcdConstructor", "$RcdSelect", "$RecursiveFcnSpec", "$Seq", "$SquareAct", "$SetEnumerate", "$SF", "$SetOfAll",
-    "$SetOfRcds", "$SetOfFcns", "$SubsetOf", "$Tuple", "$TemporalExists", "$TemporalForall", "$UnboundedChoose",
-    "$UnboundedExists", "$UnboundedForall", "$WF", "\\lnot", "SUBSET", "UNION", "DOMAIN", "[]", "<>", "ENABLED",
-    "UNCHANGED", "=", "\\land", "\\lor", "=>", "\\cdot", "\\equiv", "~>", "-+->", "/=", "\\subseteq", "\\in",
-    "\\notin", "\\", "\\intersect", "$Nop", "\\union", "'",
+    "$AngleAct",
+    "$BoundedChoose",
+    "$BoundedExists",
+    "$BoundedForall",
+    "$Case",
+    "$CartesianProd",
+    "$ConjList",
+    "$DisjList",
+    "$Except",
+    "$FcnApply",
+    "$FcnConstructor",
+    "$IfThenElse",
+    "$NonRecursiveFcnSpec",
+    "$Pair",
+    "$RcdConstructor",
+    "$RcdSelect",
+    "$RecursiveFcnSpec",
+    "$Seq",
+    "$SquareAct",
+    "$SetEnumerate",
+    "$SF",
+    "$SetOfAll",
+    "$SetOfRcds",
+    "$SetOfFcns",
+    "$SubsetOf",
+    "$Tuple",
+    "$TemporalExists",
+    "$TemporalForall",
+    "$UnboundedChoose",
+    "$UnboundedExists",
+    "$UnboundedForall",
+    "$WF",
+    "\\lnot",
+    "SUBSET",
+    "UNION",
+    "DOMAIN",
+    "[]",
+    "<>",
+    "ENABLED",
+    "UNCHANGED",
+    "=",
+    "\\land",
+    "\\lor",
+    "=>",
+    "\\cdot",
+    "\\equiv",
+    "~>",
+    "-+->",
+    "/=",
+    "\\subseteq",
+    "\\in",
+    "\\notin",
+    "\\",
+    "\\intersect",
+    "$Nop",
+    "\\union",
+    "'",
 ];
 
 impl Builtin {

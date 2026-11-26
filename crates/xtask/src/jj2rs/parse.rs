@@ -13,8 +13,15 @@ pub(crate) struct Member {
 pub(crate) enum MemberKind {
     Method(Method),
     Constructor(Method),
-    Field { decl: Stmt, is_static: bool, is_final: bool },
-    Class { header: ClassHeader, members: Vec<Member> },
+    Field {
+        decl: Stmt,
+        is_static: bool,
+        is_final: bool,
+    },
+    Class {
+        header: ClassHeader,
+        members: Vec<Member>,
+    },
     StaticInit(Vec<Stmt>),
     /// Fields, nested classes, initializers: kept as source line ranges for hand porting.
     Other(&'static str),
@@ -796,10 +803,8 @@ impl<'t> Parser<'t> {
         }
         let primitive = PRIMITIVES.contains(&name.as_str());
         let class_like = name.chars().next().is_some_and(char::is_uppercase);
-        let next_starts_operand = matches!(
-            self.peek_at(j + 1),
-            Tok::Ident(_) | Tok::Int(_) | Tok::Str(_) | Tok::Char(_) | Tok::Punct("(" | "!" | "~")
-        );
+        let next_starts_operand =
+            matches!(self.peek_at(j + 1), Tok::Ident(_) | Tok::Int(_) | Tok::Str(_) | Tok::Char(_) | Tok::Punct("(" | "!" | "~"));
         primitive || (class_like && (dims > 0 || next_starts_operand))
     }
 
@@ -914,5 +919,4 @@ impl<'t> Parser<'t> {
             t => Err(format!("line {line}: unexpected {t:?} in expression")),
         }
     }
-
 }

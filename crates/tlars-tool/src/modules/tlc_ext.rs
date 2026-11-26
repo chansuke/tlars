@@ -6,7 +6,7 @@
 use super::{eval_exception, wrap_evaluating};
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalErrorData, EvalErrorKind, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use crate::value::Value;
 use tlars_msg::Ec;
@@ -166,9 +166,7 @@ fn get_trace_impl(ev: &mut Ev<'_>, s0: StateRef<'_>) -> EvalResult<Value> {
                 vec![ev.trace_record(StateRef::Full(&current))?]
             } else {
                 let Some(uid) = current.uid() else {
-                    return Err(EvalError::unimplemented(
-                        "TLCExt!Trace over a state the trace store has no record of (M3 unit 6)".into(),
-                    ));
+                    return Err(EvalError::unimplemented("TLCExt!Trace over a state the trace store has no record of (M3 unit 6)".into()));
                 };
                 let mut records = prefix_records(ev, uid)?;
                 records.push(ev.trace_record(StateRef::Full(&current))?);
@@ -243,9 +241,7 @@ pub(crate) fn to_trace(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
             // A tuple element holding a Java null, which every later read treats as its own
             // kind of value.
             None => {
-                return Err(EvalError::unimplemented(
-                    "ToTrace over a counterexample whose state numbers leave a gap (M4)".into(),
-                ));
+                return Err(EvalError::unimplemented("ToTrace over a counterexample whose state numbers leave a gap (M4)".into()));
             }
         }
     }
@@ -454,21 +450,29 @@ fn successor_fingerprint(ev: &mut Ev<'_>, s1: StateRef<'_>) -> EvalResult<crate:
         // `TLCState.Empty` is a state of nulls, so only a spec with no variable at all has
         // a fingerprint to compute here.
         StateRef::Empty | StateRef::Null | StateRef::Fun(_) => {
-            if ev.tool().var_count() == 0 { ev.fingerprint(&crate::state::State::of_values(Vec::new())) } else { null() }
+            if ev.tool().var_count() == 0 {
+                ev.fingerprint(&crate::state::State::of_values(Vec::new()))
+            } else {
+                null()
+            }
         }
     }
 }
 
 /// The `while (true)` prompt loop (`TLCExt.java:148-184`). Every answer but `n` ends with
 /// the step allowed; an unrecognised one asks again.
-fn prompt_for_successor(ev: &mut Ev<'_>, s0: &crate::state::State, s1: &crate::state::State, action: crate::actions::ActionId) -> EvalResult<Value> {
+fn prompt_for_successor(
+    ev: &mut Ev<'_>,
+    s0: &crate::state::State,
+    s1: &crate::state::State,
+    action: crate::actions::ActionId,
+) -> EvalResult<Value> {
     // `String.format(.., s0.getLevel(), action.getName(), action)`: the third conversion is
     // `Action.toString()`, which prints the generic `<Action ..>` rather than the name.
     let label = ev.action_to_string(action);
     let name = ev.action_name(action);
     loop {
-        let prompt =
-            format!("Extend behavior of length {} with a \"{name}\" step [{label}]? (Yes/no/explored/states/diff):", s0.level());
+        let prompt = format!("Extend behavior of length {} with a \"{name}\" step [{label}]? (Yes/no/explored/states/diff):", s0.level());
         ev.out().message(Ec::TLC_MODULE_OVERRIDE_STDOUT, &[&prompt]);
         let line = read_line(ev)?;
         let trimmed = line.trim();
@@ -611,7 +615,6 @@ fn tlc_eval2_impl(
         tlars_sany::graph::Level::Action | tlars_sany::graph::Level::Temporal => Ok(None),
     }
 }
-
 
 /// `TLCExt.tlcNoOp(val)` (`TLCExt.java:303-306`): the value itself. It exists so a Java
 /// breakpoint can be set inside TLC's evaluator.

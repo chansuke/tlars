@@ -10,7 +10,7 @@
 use crate::ctx::{Binding, Ctx};
 use crate::error::EvalResult;
 use crate::eval::expr::{Builtin, Resolved};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use tlars_sany::Atom;
 use tlars_sany::graph::{ExprId, ExprNode, Level, OpDefId, SymbolRef};
@@ -61,7 +61,13 @@ pub(crate) fn split_next(ev: &mut Ev<'_>, next: ExprId, c: &Ctx, op_def: Option<
 /// `getInitStateSpec()`: one action per initial predicate, unsplit. `new Action(pred, con,
 /// opDef, ...)` names it after the definition the cfg's INIT gave, which `TLCGet("spec")`
 /// reports; a conjunct of SPECIFICATION has no definition and stays unnamed.
-pub(crate) fn init_action(graph: &tlars_sany::graph::SemanticGraph, index: usize, pred: ExprId, c: &Ctx, op_def: Option<OpDefId>) -> Action {
+pub(crate) fn init_action(
+    graph: &tlars_sany::graph::SemanticGraph,
+    index: usize,
+    pred: ExprId,
+    c: &Ctx,
+    op_def: Option<OpDefId>,
+) -> Action {
     let name = op_def.map(|d| graph.op_def(d).name);
     Action { id: ActionId(index as u32), pred, ctx: c.clone(), name, op_def, is_init: true, is_internal: false }
 }

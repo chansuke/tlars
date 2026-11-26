@@ -100,11 +100,8 @@ impl Hier {
             if !h.places[c].is_interface {
                 continue;
             }
-            let roots: BTreeSet<String> = order
-                .iter()
-                .filter(|k| !h.places[*k].is_interface && h.implements(k, c))
-                .map(|k| h.root_of(k))
-                .collect();
+            let roots: BTreeSet<String> =
+                order.iter().filter(|k| !h.places[*k].is_interface && h.implements(k, c)).map(|k| h.root_of(k)).collect();
             if roots.len() == 1 {
                 h.iface_root.insert(c.clone(), roots.into_iter().next().expect("one"));
             }

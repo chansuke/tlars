@@ -13,8 +13,12 @@ const BACK_TO_STATE: &str = "Back to state";
 const STUTTERING: &str = " Stuttering";
 
 pub(crate) fn system_error_reading_pool(p: &[&str], _: &RenderCx) -> String {
-    if p.len() == 2 { "when reading pool file %2% (StatePoolReader.run):\n%1%" } else { "when reading the disk (StatePoolReader.run):\n%1%" }
-        .into()
+    if p.len() == 2 {
+        "when reading pool file %2% (StatePoolReader.run):\n%1%"
+    } else {
+        "when reading the disk (StatePoolReader.run):\n%1%"
+    }
+    .into()
 }
 
 pub(crate) fn system_error_cleaning_pool(_: &[&str], cx: &RenderCx) -> String {
@@ -221,10 +225,7 @@ pub(crate) fn tlc_checkpoint_end(_: &[&str], cx: &RenderCx) -> String {
 
 pub(crate) fn tlc_progress_stats(p: &[&str], cx: &RenderCx) -> String {
     match p.len() {
-        4 => format!(
-            "Progress(%1%) at {}: %2% states generated, %3% distinct states found, %4% states left on queue.",
-            cx.now
-        ),
+        4 => format!("Progress(%1%) at {}: %2% states generated, %3% distinct states found, %4% states left on queue.", cx.now),
         6 => format!(
             "Progress(%1%) at {}: %2% states generated (%5% s/min), %3% distinct states found (%6% ds/min), %4% states left on queue.",
             cx.now

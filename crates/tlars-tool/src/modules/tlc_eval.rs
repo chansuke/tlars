@@ -9,7 +9,7 @@
 use super::wrap_evaluating;
 use crate::ctx::Ctx;
 use crate::error::EvalResult;
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::state::StateRef;
 use crate::value::Value;
 use tlars_sany::graph::{ExprId, ExprOrOpArg, Level};

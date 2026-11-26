@@ -137,9 +137,7 @@ impl Env {
             }
             // TODO(M3): the system time zone (`ZoneId.systemDefault()`); UTC until then.
             Clock::System => Box::new(|| {
-                let millis = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_or(0, |d| d.as_millis() as i64);
+                let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
                 tlars_java::time::format(tlars_java::time::Pattern::Timestamp, millis, 0)
             }),
         }
@@ -151,9 +149,7 @@ impl Clock {
     fn now_millis(&self) -> i64 {
         match self {
             Clock::Fixed { epoch_millis, .. } => *epoch_millis,
-            Clock::System => std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_millis() as i64),
+            Clock::System => std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64),
         }
     }
 }

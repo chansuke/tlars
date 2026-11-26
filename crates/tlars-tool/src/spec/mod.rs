@@ -100,10 +100,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         todo!("M3: ParameterizedSpecObj extras");
     }
     let root = graph.module(graph.root());
-    let vars = VarTable {
-        decls: root.variable_decls.clone(),
-        names: root.variable_decls.iter().map(|&d| graph.decl(d).name).collect(),
-    };
+    let vars = VarTable { decls: root.variable_decls.clone(), names: root.variable_decls.iter().map(|&d| graph.decl(d).name).collect() };
     let mut constants = ConstantPass {
         graph: &graph,
         op_defs: (0..graph.op_def_count()).map(|_| None).collect(),
@@ -125,12 +122,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
     binder.bind(&config, &model_values)?;
     let CfgBind { defns, decls, op_defs, bodies, .. } = binder;
     let mut tool = Tool {
-        bindings: Bindings {
-            op_defs: op_defs.into(),
-            bodies: bodies.into(),
-            decls: decls.into(),
-            literals: literals.into(),
-        },
+        bindings: Bindings { op_defs: op_defs.into(), bodies: bodies.into(), decls: decls.into(), literals: literals.into() },
         builtins: crate::eval::expr::Builtin::table(&graph),
         graph: std::sync::Arc::new(graph),
         vars,
@@ -215,10 +207,7 @@ impl CfgBind<'_> {
             let text = graph.interner().text(name);
             let val = constants.get(&*text);
             if val.is_none() && config.overrides.get(&text.to_string(), java_hash(&text)).is_none() {
-                return Err(SpecError::Config {
-                    ec: Ec::TLC_CONFIG_VALUE_NOT_ASSIGNED_TO_CONSTANT_PARAM,
-                    params: vec![text.to_string()],
-                });
+                return Err(SpecError::Config { ec: Ec::TLC_CONFIG_VALUE_NOT_ASSIGNED_TO_CONSTANT_PARAM, params: vec![text.to_string()] });
             }
             self.decls[d.index()] = val.map(decl_binding);
             self.defns.insert(name, val.cloned());
@@ -571,7 +560,9 @@ impl ConstantPass<'_> {
                 }
                 None => Err(SpecError::Config { ec: Ec::TLC_INTEGER_TOO_BIG, params: vec![digits.to_string()] }),
             },
-            ExprNode::Decimal { text, .. } => Err(SpecError::Config { ec: Ec::TLC_CANT_HANDLE_REAL_NUMBERS, params: vec![text.to_string()] }),
+            ExprNode::Decimal { text, .. } => {
+                Err(SpecError::Config { ec: Ec::TLC_CANT_HANDLE_REAL_NUMBERS, params: vec![text.to_string()] })
+            }
             ExprNode::String { value, .. } => {
                 self.literals[e.index()] = Some(Value::Str(*value));
                 Ok(())
@@ -740,8 +731,7 @@ fn fold_substituted_constant(
     let mut locals = WorkerLocals::new(0, tool.globals.seed);
     let evaluated = {
         let mut ev = tool.ev(&mut locals, out);
-        ev.eval(body, &Ctx::EMPTY, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR)
-            .and_then(|v| v.deep_normalize(&mut ev).map(|()| v))
+        ev.eval(body, &Ctx::EMPTY, StateRef::Empty, StateRef::Empty, EvalControl::CLEAR).and_then(|v| v.deep_normalize(&mut ev).map(|()| v))
     };
     match evaluated {
         Ok(v) => {
@@ -788,12 +778,7 @@ struct Pred {
 /// checks. An empty cfg binds nothing, but a spec with variables still needs an INIT.
 fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unprocessed: &Defns, out: &dyn Report) -> Result<(), SpecError> {
     let graph = tool.graph.clone();
-    let mut pass = ConfigPass {
-        init_preds: Vec::new(),
-        next_pred: None,
-        invariants: Vec::new(),
-        temporals: Vec::new(),
-    };
+    let mut pass = ConfigPass { init_preds: Vec::new(), next_pred: None, invariants: Vec::new(), temporals: Vec::new() };
     pass.invariants(config, tool, defns, out)?;
     match config.specification.as_deref().filter(|s| !s.is_empty()) {
         None => pass.init_and_next(config, tool, defns)?,
@@ -851,10 +836,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     // `deadlock = deadlock && tool.getModelConfig().getCheckDeadlock()` (`TLC.java:1408`).
     tool.globals.check_deadlock = tool.globals.check_deadlock && config.check_deadlock.unwrap_or(true);
     let ConfigPass { init_preds, next_pred, invariants, temporals } = pass;
-    tool.invariants = invariants
-        .into_iter()
-        .map(|(name, p)| NamedCheck { name, expr: p.expr, ctx: p.ctx, op_def: p.op_def })
-        .collect();
+    tool.invariants = invariants.into_iter().map(|(name, p)| NamedCheck { name, expr: p.expr, ctx: p.ctx, op_def: p.op_def }).collect();
     tool.model_constraints = model_constraints.into();
     tool.action_constraints = action_constraints.into();
     tool.view = view;
@@ -863,10 +845,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
     tool.postconditions = postconditions;
     tool.postcondition_error = postcondition_error;
     tool.counter_example = counter_example;
-    tool.temporal = crate::tool::Temporal {
-        fairness: temporals.into_iter().map(|p| (p.expr, p.ctx)).collect(),
-        properties: Box::new([]),
-    };
+    tool.temporal = crate::tool::Temporal { fairness: temporals.into_iter().map(|p| (p.expr, p.ctx)).collect(), properties: Box::new([]) };
     // The `Tool` constructor's splitting (`Tool.java:224-240`). Only the next-state
     // relation is split; `getInitStateSpec()` hands the initial predicates over as they are,
     // so an init predicate that is not a boolean fails during generation, not here.
@@ -878,11 +857,8 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
             crate::actions::split_next(&mut ev, next.expr, &next.ctx, next.op_def, &mut actions).map_err(uncaught)?;
         }
     }
-    tool.init_actions = init_preds
-        .iter()
-        .enumerate()
-        .map(|(i, p)| crate::actions::init_action(&graph, i, p.expr, &p.ctx, p.op_def))
-        .collect();
+    tool.init_actions =
+        init_preds.iter().enumerate().map(|(i, p)| crate::actions::init_action(&graph, i, p.expr, &p.ctx, p.op_def)).collect();
     tool.actions = actions.into();
     Ok(())
 }
@@ -945,10 +921,9 @@ impl ConfigPass {
         let graph = tool.graph.clone();
         let one = |name: &str, what: &str| -> Result<Pred, SpecError> {
             match defn_of(defns, &graph, name) {
-                None => Err(SpecError::Config {
-                    ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
-                    params: vec![what.to_string(), name.to_string()],
-                }),
+                None => {
+                    Err(SpecError::Config { ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED, params: vec![what.to_string(), name.to_string()] })
+                }
                 Some(OpBinding::Replaced(d)) => {
                     if !graph.op_def(d).params.is_empty() {
                         return Err(SpecError::Config {
@@ -959,10 +934,9 @@ impl ConfigPass {
                     let body = graph.op_def(d).body.expect("a user definition has a body");
                     Ok(Pred { expr: body, ctx: Ctx::EMPTY, op_def: Some(d) })
                 }
-                Some(_) => Err(SpecError::Config {
-                    ec: Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT,
-                    params: vec![what.to_string(), name.to_string()],
-                }),
+                Some(_) => {
+                    Err(SpecError::Config { ec: Ec::TLC_CONFIG_ID_MUST_NOT_BE_CONSTANT, params: vec![what.to_string(), name.to_string()] })
+                }
             }
         };
         if let Some(name) = config.init.as_deref().filter(|s| !s.is_empty()) {
@@ -1100,14 +1074,7 @@ impl ConfigPass {
     }
 
     /// `[]A`: `[][Next]_v` is the next-state relation, anything else a temporal formula.
-    fn config_spec_box(
-        &mut self,
-        pred: ExprId,
-        args: &[ExprOrOpArg],
-        c: &Ctx,
-        tool: &Tool,
-        out: &dyn Report,
-    ) -> Result<(), SpecError> {
+    fn config_spec_box(&mut self, pred: ExprId, args: &[ExprOrOpArg], c: &Ctx, tool: &Tool, out: &dyn Report) -> Result<(), SpecError> {
         let graph = tool.graph.clone();
         let box_arg = args[0].expect_expr();
         let mut locals = WorkerLocals::new(0, tool.globals.seed);
@@ -1227,42 +1194,27 @@ fn collect_subscript(ev: &mut crate::eval::Ev<'_>, subscript: ExprId, c: &Ctx, f
 
 /// `processModelConstraints` / `processActionConstraints` (`SpecProcessor.java:2196-2260`):
 /// each name must be a 0-arity definition.
-fn named_checks(
-    names: &[String],
-    tool: &Tool,
-    defns: &Defns,
-    out: &dyn Report,
-    what: &str,
-) -> Result<Vec<NamedCheck>, SpecError> {
+fn named_checks(names: &[String], tool: &Tool, defns: &Defns, out: &dyn Report, what: &str) -> Result<Vec<NamedCheck>, SpecError> {
     let graph = tool.graph.clone();
     let mut checks = Vec::new();
     for name in names {
         match defn_of(defns, &graph, name) {
             Some(OpBinding::Replaced(d)) => {
                 if !graph.op_def(d).params.is_empty() {
-                    return Err(SpecError::Config {
-                        ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG,
-                        params: vec![what.to_string(), name.clone()],
-                    });
+                    return Err(SpecError::Config { ec: Ec::TLC_CONFIG_ID_REQUIRES_NO_ARG, params: vec![what.to_string(), name.clone()] });
                 }
                 let body = graph.op_def(d).body.expect("a user definition has a body");
                 checks.push(NamedCheck { name: graph.interner().intern(name), expr: body, ctx: Ctx::EMPTY, op_def: Some(d) });
             }
             None => {
-                return Err(SpecError::Config {
-                    ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
-                    params: vec![what.to_string(), name.clone()],
-                });
+                return Err(SpecError::Config { ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED, params: vec![what.to_string(), name.clone()] });
             }
             // A constraint that folded to TRUE is accepted and contributes nothing; any
             // other value is rejected (`SpecProcessor.java:1684-1692`).
             Some(OpBinding::Value(Value::Bool(true))) => {}
             Some(other) => {
                 let shown = binding_string(tool, &other, out)?;
-                return Err(SpecError::Config {
-                    ec: Ec::TLC_CONFIG_ID_HAS_VALUE,
-                    params: vec![what.to_string(), name.clone(), shown],
-                });
+                return Err(SpecError::Config { ec: Ec::TLC_CONFIG_ID_HAS_VALUE, params: vec![what.to_string(), name.clone(), shown] });
             }
         }
     }
@@ -1540,9 +1492,8 @@ impl SymmetrySetList {
         // ending before it begins, and the JDK's exception escapes `getSymmetryPerms`.
         let alias: String = if image.starts_with(PERMUTATIONS) {
             let units = image.encode_utf16().count() as i64;
-            tlars_java::substring(image, PERMUTATIONS.encode_utf16().count() as i64 + 1, units - 1).map_err(|message| {
-                SpecError::Unexpected { class: "java.lang.StringIndexOutOfBoundsException", message }
-            })?
+            tlars_java::substring(image, PERMUTATIONS.encode_utf16().count() as i64 + 1, units - 1)
+                .map_err(|message| SpecError::Unexpected { class: "java.lang.StringIndexOutOfBoundsException", message })?
         } else {
             image.to_string()
         };
@@ -1608,10 +1559,9 @@ fn config_view(config: &ModelConfig, tool: &Tool, defns: &Defns) -> Result<Optio
     let Some(name) = config.view.as_deref().filter(|s| !s.is_empty()) else { return Ok(None) };
     let graph = tool.graph.clone();
     match defn_of(defns, &graph, name) {
-        None => Err(SpecError::Config {
-            ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED,
-            params: vec!["view function".to_string(), name.to_string()],
-        }),
+        None => {
+            Err(SpecError::Config { ec: Ec::TLC_CONFIG_SPECIFIED_NOT_DEFINED, params: vec!["view function".to_string(), name.to_string()] })
+        }
         Some(OpBinding::Replaced(d)) => {
             if !graph.op_def(d).params.is_empty() {
                 return Err(SpecError::Config {

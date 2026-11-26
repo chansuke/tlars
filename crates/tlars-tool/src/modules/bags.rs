@@ -8,7 +8,7 @@
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalResult};
-use crate::eval::{EvalControl, Ev};
+use crate::eval::{Ev, EvalControl};
 use crate::modules::{eval_exception, wrap_method};
 use crate::state::StateRef;
 use crate::value::{FcnRcdValue, Value};
@@ -103,7 +103,11 @@ pub(crate) fn is_a_bag(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
 pub(crate) fn bag_cardinality(ev: &mut Ev<'_>, a: &[Value]) -> EvalResult<Value> {
     let Some(fcn) = to_fcn_rcd(ev, &a[0])? else {
         let shown = a[0].ppr(ev)?;
-        return Err(eval_exception(ev, Ec::TLC_MODULE_APPLYING_TO_WRONG_VALUE, &["BagCardinality", "a function with a finite domain", &shown]));
+        return Err(eval_exception(
+            ev,
+            Ec::TLC_MODULE_APPLYING_TO_WRONG_VALUE,
+            &["BagCardinality", "a function with a finite domain", &shown],
+        ));
     };
     let (_, values) = fcn.snapshot();
     let mut num = 0;

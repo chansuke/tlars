@@ -214,7 +214,11 @@ fn read_config(session: &Session<'_>, user_dir: Option<&Path>, library_paths: &[
     // `configFile = mainFile` after an absolute main file was reduced to its name.
     let base = session.options.config.clone().unwrap_or_else(|| {
         let spec = Path::new(&session.options.spec);
-        if spec.is_absolute() { spec.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() } else { session.options.spec.clone() }
+        if spec.is_absolute() {
+            spec.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+        } else {
+            session.options.spec.clone()
+        }
     });
     if base.ends_with(".tla") {
         todo!("M5: a cfg embedded in a monolithic spec");

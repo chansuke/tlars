@@ -19,16 +19,8 @@ fn dump(out: &mut String, n: &J<SyntaxTreeNode>, depth: usize) {
     let (kind, image, loc, zero, one) = n.jread(|n| (n.kind, n.image, n.location.clone(), n.zero.clone(), n.one.clone()));
     let image = if image.is_null() { "-".into() } else { esc(image.toString().as_str()) };
     let count = |a: &JArr<J<SyntaxTreeNode>>| if a.is_null() { "-".into() } else { a.length().to_string() };
-    let _ = writeln!(
-        out,
-        "{depth} {kind} {image} {},{},{},{} {} {}",
-        loc.at(0),
-        loc.at(1),
-        loc.at(2),
-        loc.at(3),
-        count(&zero),
-        count(&one)
-    );
+    let _ =
+        writeln!(out, "{depth} {kind} {image} {},{},{},{} {} {}", loc.at(0), loc.at(1), loc.at(2), loc.at(3), count(&zero), count(&one));
     for heirs in [zero, one] {
         if heirs.is_null() {
             continue;

@@ -207,9 +207,7 @@ impl JStr {
     pub(crate) fn index_of(&self, s: &JStr) -> i32 {
         let hay = self.units();
         let needle = s.units();
-        (0..=hay.len().saturating_sub(needle.len()))
-            .find(|&i| hay[i..].starts_with(&needle))
-            .map_or(-1, |p| p as i32)
+        (0..=hay.len().saturating_sub(needle.len())).find(|&i| hay[i..].starts_with(&needle)).map_or(-1, |p| p as i32)
     }
     /// `String` `==`: identity. Equal literals are one object in Java (interned); here two
     /// `JStr::of` calls are not, so translated code must not depend on literal identity.

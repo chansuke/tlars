@@ -6,8 +6,8 @@
 //! built from the right (TLC swaps the operands), and `SUBSET {} \cup Nat` a SetCupValue
 //! that prints and enumerates symbolically.
 
-use super::enumerate::EnumOrder;
 use super::Source;
+use super::enumerate::EnumOrder;
 use super::{SetBinValue, SetOfFcnsValue, SetOfRcdsValue, SetOfTuplesValue, SubsetValue, UnionValue, Value, ValueVec};
 use crate::error::{EvalError, EvalResult};
 use crate::eval::Ev;
