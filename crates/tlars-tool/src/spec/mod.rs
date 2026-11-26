@@ -12,7 +12,7 @@
 
 mod bindings;
 
-pub(crate) use bindings::{Bindings, DeclBinding, OpBinding, OpRcd};
+pub(crate) use bindings::{Bindings, DeclBinding, OpBinding};
 
 use crate::ctx::Ctx;
 use crate::error::{EvalError, EvalErrorKind};
