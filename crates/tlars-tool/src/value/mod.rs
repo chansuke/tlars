@@ -184,6 +184,9 @@ impl IntervalValue {
     }
 }
 
+/// `OpRcdValue`: the cfg's `op(a, b) = v` lines for one name, in cfg order.
+pub(crate) type OpRcd = Arc<[(Box<[Value]>, Value)]>;
+
 pub struct TupleValue {
     pub(crate) elems: Box<[Value]>,
     pub(crate) source: Source,

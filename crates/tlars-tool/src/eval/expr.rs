@@ -23,7 +23,7 @@ pub(crate) enum Resolved {
     UserOp(tlars_sany::graph::OpDefId),
     Native(crate::modules::NativeId),
     /// cfg `op(a, b) = v` (`OpRcdValue`, an `OpValue`).
-    OpRcd(crate::spec::OpRcd),
+    OpRcd(crate::value::OpRcd),
     /// A state variable the state holds no value for, where `lookup` returns the
     /// `OpDeclNode` itself. It is the declaration, not a `vars[]` slot: ENABLED can reach one
     /// an instantiated module declares, which has no slot.
@@ -846,7 +846,7 @@ impl<'t> Ev<'t> {
     /// `OpRcdValue.eval(args, control)` (`OpRcdValue.java:130-162`): the first line all of
     /// whose arguments are equal to the actual ones, compared with the *line's* value as the
     /// receiver.
-    fn apply_op_rcd(&mut self, lines: &crate::spec::OpRcd, args: &[Value]) -> EvalResult<Value> {
+    fn apply_op_rcd(&mut self, lines: &crate::value::OpRcd, args: &[Value]) -> EvalResult<Value> {
         for (params, value) in lines.iter() {
             if params.len() != args.len() {
                 let flat = crate::value::print::op_rcd_string(self, lines)?;

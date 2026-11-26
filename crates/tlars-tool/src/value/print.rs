@@ -231,7 +231,7 @@ impl Value {
 
 /// `OpRcdValue.toString` (`OpRcdValue.java:246-275`): `{ <a, b, v>, <c, d, w>}`, with one
 /// space after the brace and none before the closing one.
-pub(crate) fn op_rcd_string(ev: &mut Ev<'_>, lines: &crate::spec::OpRcd) -> EvalResult<String> {
+pub(crate) fn op_rcd_string(ev: &mut Ev<'_>, lines: &super::OpRcd) -> EvalResult<String> {
     let mut out = String::from("{ ");
     for (i, (args, value)) in lines.iter().enumerate() {
         if i > 0 {
