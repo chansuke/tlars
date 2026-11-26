@@ -160,7 +160,14 @@ fn gen_fidelity(tlaplus: &Path, check: bool) -> Result<(), String> {
             println!("wrote {}", out.path.display());
         }
     }
-    if stale.is_empty() { Ok(()) } else { Err(format!("stale generated files:\n{}", stale.join("\n"))) }
+    if stale.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "stale generated files (fix the generator in crates/xtask, then run `xtask gen-fidelity`; do not edit them by hand):\n{}",
+            stale.join("\n")
+        ))
+    }
 }
 
 /// `tla2sany/StandardModules/*.tla`, which TLC loads from its jar: copied into
