@@ -72,6 +72,14 @@ pub struct Host {
     pub pid: u32,
 }
 
+impl Host {
+    /// This process's temporary directory and pid, for a test or tool that has no `Env`.
+    #[expect(clippy::disallowed_methods, reason = "a caller without an Env reads the process here")]
+    pub fn process(clock: tlars_java::time::Clock) -> Host {
+        Host { clock, temp_dir: std::env::temp_dir(), pid: std::process::id() }
+    }
+}
+
 pub struct LoadRequest<'a> {
     /// TLC's `mainFile`: the root module's file name as given, `.tla` optional.
     pub root_file: &'a str,

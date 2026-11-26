@@ -41,11 +41,7 @@ impl Fixture {
                 extra_root_extends: &[],
                 suppressed_codes: &[],
                 messages_as_errors: &[],
-                host: tlars_sany::Host {
-                    clock: tlars_java::time::Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 },
-                    temp_dir: std::env::temp_dir(),
-                    pid: std::process::id(),
-                },
+                host: tlars_sany::Host::process(tlars_java::time::Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 }),
             },
             &mut Silent,
         )

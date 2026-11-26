@@ -96,6 +96,7 @@ pub struct HostInfo {
 
 impl Env {
     /// The real process: system clock, OS entropy, this host.
+    #[expect(clippy::disallowed_methods, reason = "the one place tlars reads the real process")]
     pub fn process() -> Self {
         Env {
             clock: Clock::System,
@@ -110,6 +111,7 @@ impl Env {
     }
 
     /// Fixed clock, pid and entropy: output is a function of the arguments and files.
+    #[expect(clippy::disallowed_methods, reason = "SANY needs a real directory to copy the standard modules to")]
     pub fn hermetic() -> Self {
         Env {
             clock: Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 },
@@ -137,10 +139,7 @@ impl Env {
                 Box::new(move || text.clone())
             }
             // TODO(M3): the system time zone (`ZoneId.systemDefault()`); UTC until then.
-            Clock::System => Box::new(|| {
-                let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
-                tlars_java::time::format(tlars_java::time::Pattern::Timestamp, millis, 0)
-            }),
+            Clock::System => Box::new(|| tlars_java::time::format(tlars_java::time::Pattern::Timestamp, Clock::System.now_millis(), 0)),
         }
     }
 }

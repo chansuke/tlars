@@ -15,3 +15,18 @@ disallowed-macros = [
     { path = "std::eprintln", reason = "write TLC-visible output through tlars_msg::Report; remove debugging output" },
     { path = "std::dbg", reason = "remove debugging output before committing" },
 ]
+
+# Determinism guard (DESIGN.md "Determinism"): what TLC reads from the JVM and the OS comes
+# through `Env`, so `Env::hermetic()` makes output a function of the arguments and files.
+# `Env::process()` and `tlars_java::time::Clock` are the places that read the host; a test
+# that needs a nix develop variable takes #[expect(clippy::disallowed_methods, reason = "...")].
+disallowed-methods = [
+    { path = "std::time::SystemTime::now", reason = "read the time through Env::clock (Clock::now_millis), so hermetic runs stay deterministic" },
+    { path = "std::time::Instant::now", reason = "take a deadline from Env::clock (Clock::deadline), so a hermetic run does not depend on how long it takes" },
+    { path = "std::env::var", reason = "take it from Env or the Invocation (-D properties are Invocation::system_properties)" },
+    { path = "std::env::var_os", reason = "take it from Env or the Invocation (-D properties are Invocation::system_properties)" },
+    { path = "std::env::vars", reason = "take it from Env or the Invocation; the environment is never read whole" },
+    { path = "std::env::temp_dir", reason = "take it from Env::temp_dir (tlars_sany::Host::temp_dir inside SANY)" },
+    { path = "std::process::id", reason = "take it from Env::pid (tlars_sany::Host::pid inside SANY)" },
+    { path = "std::thread::sleep", reason = "wait on a Condvar with a deadline from Clock::deadline; a sleep makes the result depend on timing" },
+]

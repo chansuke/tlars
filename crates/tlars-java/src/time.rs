@@ -107,6 +107,7 @@ pub enum Clock {
     Fixed { epoch_millis: i64, utc_offset_minutes: i32 },
 }
 
+#[expect(clippy::disallowed_methods, reason = "Clock is the one place that reads the system time")]
 impl Clock {
     /// `System.currentTimeMillis()`.
     pub fn now_millis(&self) -> i64 {
@@ -141,6 +142,7 @@ pub enum Remaining {
     Passed,
 }
 
+#[expect(clippy::disallowed_methods, reason = "Clock is the one place that reads the system time")]
 impl Deadline {
     pub fn remaining(&self) -> Remaining {
         match self {

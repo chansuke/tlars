@@ -30,11 +30,7 @@ pub(crate) fn set_host(host: crate::Host) {
 /// The host a test parses under: a fixed clock and this process's temporary directory.
 #[cfg(test)]
 pub(crate) fn test_host() -> crate::Host {
-    crate::Host {
-        clock: tlars_java::time::Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 },
-        temp_dir: std::env::temp_dir(),
-        pid: std::process::id(),
-    }
+    crate::Host::process(tlars_java::time::Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 })
 }
 
 pub(crate) fn host() -> crate::Host {

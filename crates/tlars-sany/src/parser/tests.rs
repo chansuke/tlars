@@ -103,6 +103,7 @@ fn crate_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+#[expect(clippy::disallowed_methods, reason = "the tlaplus/Examples checkout nix develop points at")]
 fn examples() -> PathBuf {
     PathBuf::from(std::env::var_os("TLAPLUS_EXAMPLES").expect("TLAPLUS_EXAMPLES is not set; run inside `nix develop`"))
 }
