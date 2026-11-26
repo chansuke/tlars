@@ -35,14 +35,15 @@ fn usage_errors_match_tlc() {
         let expected = f[2].replace("\\n", "\n").replace("\\\\", "\\");
 
         let out = Captured::default();
+        let env = Env::hermetic();
         let inv = Invocation {
             args: args.clone(),
             system_properties: Vec::new(),
-            cwd: std::env::temp_dir(),
+            cwd: env.temp_dir.clone(),
             stdout: Box::new(out.clone()),
             stderr: Box::new(std::io::sink()),
             stdin: Box::new(std::io::empty()),
-            env: Env::hermetic(),
+            env,
             unimplemented: None,
         };
         let status = run(inv).code();

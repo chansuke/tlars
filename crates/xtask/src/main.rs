@@ -21,7 +21,11 @@
 //!   xtask intern-dump-diff <dump>  compare tlars's intern sequence with an instrumented TLC
 //!                                  InternTable dump for a spec
 
-#![expect(clippy::disallowed_macros, reason = "a developer tool that reports on the terminal")]
+#![expect(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    reason = "a developer tool: it reports on the terminal, reads nix develop variables and times the runs it benchmarks"
+)]
 
 mod bench;
 mod catalog;
