@@ -42,6 +42,7 @@ impl Fp {
 }
 
 /// Number of `-fp` choices (`FP64.Polys.length`).
+#[cfg(test)]
 pub(crate) const POLY_COUNT: usize = POLYS.len();
 
 pub(crate) struct Fp64 {
@@ -96,6 +97,7 @@ impl Fp64 {
     }
 
     /// 8 bytes, little-endian.
+    #[cfg(test)]
     pub(crate) fn extend_i64(&self, fp: Fp, x: i64) -> Fp {
         x.to_le_bytes().into_iter().fold(fp, |fp, b| self.extend_byte(fp, b))
     }

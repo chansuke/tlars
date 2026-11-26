@@ -58,7 +58,7 @@ impl SanyExitCode {
 #[derive(Debug)]
 pub(crate) enum FrontEndFailure {
     /// `FrontEndException`: an unexpected exception, already logged.
-    FrontEnd(JThrow),
+    FrontEnd(#[expect(dead_code, reason = "M5: TLC_PARSING_FAILED2 prints the exception")] JThrow),
 }
 
 /// `Throwable.toString()` of what the front end catches.

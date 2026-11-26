@@ -237,11 +237,6 @@ impl StateRef<'_> {
         }
     }
 
-    /// `TLCState.Null`, which `LazyValue.getValue` treats differently from `Empty`.
-    pub(crate) fn is_null(&self) -> bool {
-        matches!(self, StateRef::Null)
-    }
-
     /// `s.copy()` as `LazyValue`'s cache keeps it; `None` for `Null`.
     pub(crate) fn snapshot(&self, vars: &VarTable) -> Option<Snapshot> {
         match self {

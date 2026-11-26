@@ -1258,17 +1258,20 @@ fn values_compare(ev: &mut Ev<'_>, av: &[Value], bv: &[Value]) -> EvalResult<Ord
 /// The one representation-independent view that `tlc_equals`, `tlc_compare` and
 /// `fingerprint` are written against: sets as normalized element slices, functions
 /// (tuples, records, FcnRcd, materialized FcnLambda) as normalized `(key, value)` pairs.
+#[expect(dead_code, reason = "DESIGN.md decision 3: Canon is not wired yet")]
 pub(crate) enum Canon<'v> {
     Scalar(&'v Value),
     Set(Arc<SetEnumValue>),
     Fcn(Arc<super::FcnRcdValue>),
 }
 
-pub(crate) fn canon<'v>(ev: &mut Ev<'_>, v: &'v Value) -> EvalResult<Canon<'v>> {
+#[expect(dead_code, reason = "DESIGN.md decision 3: Canon is not wired yet")]
+pub(crate) fn canon<'v>(_ev: &mut Ev<'_>, _v: &'v Value) -> EvalResult<Canon<'v>> {
     todo!("to_set_enum / to_fcn_rcd, error text from the receiver's class")
 }
 
 /// Run `fast`; in debug builds also run `slow` (the `Canon` path) and assert equality.
+#[expect(dead_code, reason = "DESIGN.md decision 3: Canon is not wired yet")]
 pub(crate) fn fast_checked<T: PartialEq + std::fmt::Debug>(
     ev: &mut Ev<'_>,
     fast: impl FnOnce(&mut Ev<'_>) -> EvalResult<T>,

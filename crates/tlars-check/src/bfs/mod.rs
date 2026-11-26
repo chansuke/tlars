@@ -14,8 +14,8 @@ use crate::liveness::LiveCheck;
 use crate::queue::{Queued, StateQueue};
 use crate::trace::TraceStores;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering::Relaxed;
-use std::sync::atomic::{AtomicU32, AtomicU64};
 use tlars_msg::{Ec, Report};
 use tlars_tool::{
     ActionId, CheckId, Ev, EvalError, Flow, Halt, ImpliedAction, Invariant, PartialState, State, StateInfo, StateRef, Tool, WorkerLocals,
@@ -31,6 +31,7 @@ pub(crate) fn model_check(tool: &Tool, session: &crate::session::Session<'_>) ->
 }
 
 /// What went wrong first. One variant per `setErrState` cause.
+#[expect(dead_code, reason = "what TLC records per cause; the checker reads only the state and the code so far, and Liveness is M4")]
 pub(crate) enum ErrState {
     InvariantInitial { id: CheckId<Invariant>, state: State },
     Invariant { id: CheckId<Invariant>, pred: Queued, state: State },
@@ -82,10 +83,10 @@ impl ErrSlot {
     }
 }
 
-/// Per-worker counters (`Worker.statesGenerated`, `maxLevel`), summed by the reader.
+/// Per-worker counters (`Worker.statesGenerated`), summed by the reader. The level is in
+/// `TraceStores`.
 pub(crate) struct WorkerStats {
     pub(crate) generated: AtomicU64,
-    pub(crate) max_level: AtomicU32,
     /// `Worker.outDegree`: a `FixedSizedBucketStatistics` of 32 buckets over the number of
     /// *unseen* successors per expanded state, the last bucket holding the overflow.
     pub(crate) out_degree: Mutex<[u64; 32]>,
@@ -179,9 +180,7 @@ impl<'a> ModelChecker<'a> {
             fpset: fpset.into(),
             queue: StateQueue::new(workers).into(),
             traces: TraceStores::new(workers).into(),
-            stats: (0..workers)
-                .map(|_| WorkerStats { generated: AtomicU64::new(0), max_level: AtomicU32::new(0), out_degree: Mutex::new([0; 32]) })
-                .collect(),
+            stats: (0..workers).map(|_| WorkerStats { generated: AtomicU64::new(0), out_degree: Mutex::new([0; 32]) }).collect(),
             err: ErrSlot { first: Mutex::new(None) },
             live: None,
             check_deadlock: tool.globals().check_deadlock,

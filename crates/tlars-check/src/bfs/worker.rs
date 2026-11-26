@@ -43,19 +43,6 @@ impl<'a> Worker<'a> {
         }
     }
 
-    /// A worker whose evaluation records the nested-expression stack, for the replay TLC
-    /// runs with a `CallStackTool`.
-    pub(super) fn recording(id: u16, mc: &'a ModelChecker<'a>) -> Self {
-        let mut w = Worker::new(id, mc);
-        w.locals.record_call_stack();
-        w.stats = None;
-        w
-    }
-
-    pub(super) fn take_call_stack(&mut self) -> Option<tlars_tool::CallStack> {
-        self.locals.take_call_stack()
-    }
-
     /// `Worker.run`.
     pub(super) fn run(&mut self) {
         let mc = self.mc;

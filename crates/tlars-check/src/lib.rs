@@ -5,17 +5,20 @@
 //! static TLC relies on (`MP`, `TLCGlobals`, `InternTable`, `ModelValue.mvs`, `FP64`,
 //! `RandomEnumerableValues`) is a field of a per-run `Session`, so many runs can share a
 //! process without leaking state into each other.
-#![expect(dead_code, unused_variables, reason = "stubs for later milestones; narrowed to each stub in a later change")]
 
 mod bfs;
 mod cli;
+#[expect(dead_code, unused_variables, reason = "M5: the -dfid checker is a stub")]
 mod dfid;
 mod driver;
 mod fpset;
+#[expect(dead_code, unused_variables, reason = "M4: the liveness graph is a stub")]
 mod liveness;
+#[expect(dead_code, unused_variables, reason = "M4: lasso traces (2122 Back to state) are a stub")]
 mod print;
 mod queue;
 mod session;
+#[expect(dead_code, unused_variables, reason = "M5: the -simulate checker is a stub")]
 mod simulate;
 mod trace;
 

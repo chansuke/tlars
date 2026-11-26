@@ -33,7 +33,9 @@ pub struct Action {
     pub(crate) ctx: Ctx,
     pub(crate) name: Option<Atom>,
     pub(crate) op_def: Option<OpDefId>,
+    #[expect(dead_code, reason = "TLC's Action.isInitPredicate; nothing reads it yet")]
     pub(crate) is_init: bool,
+    #[expect(dead_code, reason = "TLC's Action.isInternal; nothing reads it yet")]
     pub(crate) is_internal: bool,
 }
 

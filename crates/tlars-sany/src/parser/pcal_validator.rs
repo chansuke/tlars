@@ -11,6 +11,7 @@ use super::java::*;
 use super::support::{ArrayList, JavaVector};
 
 /// `Validator.ValidationResult`.
+#[expect(dead_code, reason = "Validator.ValidationResult whole; SANY's validator never returns NoTlaChecksumsExist")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ValidationResult {
     NoPlusCalExists,
