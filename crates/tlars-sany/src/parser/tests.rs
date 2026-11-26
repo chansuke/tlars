@@ -50,6 +50,7 @@ fn level_name(l: LogLevel) -> &'static str {
 fn parse_all(root: &Path, files: &[String]) -> String {
     let interner = Arc::new(Interner::new());
     support::enter(&interner);
+    support::set_host(support::test_host());
     let mut out = String::new();
     let mut interned = 0;
     for file in files {

@@ -131,6 +131,7 @@ fn run_all(root: &Path, files: &[String], depth: i32) -> String {
     for file in files {
         let interner = Arc::new(Interner::new());
         support::enter(&interner);
+        support::set_host(support::test_host());
         if let Err(e) = run_one(&mut out, &interner, root, file, depth) {
             panic!("{file}: uncaught {e:?}");
         }
@@ -268,6 +269,7 @@ fn check_load(golden: &Path, root: &Path) {
             extra_root_extends: &[],
             suppressed_codes: &[],
             messages_as_errors: &[],
+            host: support::test_host(),
         };
         let result = crate::load(req, &mut console);
         // The golden keeps SANY's messages and ToolIO's lines apart; both reach the console.

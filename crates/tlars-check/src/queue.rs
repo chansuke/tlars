@@ -2,9 +2,9 @@
 //! what makes the whole run deterministic.
 
 use crate::trace::TracePtr;
-use crate::{Deadline, Remaining};
 use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex};
+use tlars_java::time::{Deadline, Remaining};
 use tlars_tool::{Fp, State};
 
 /// A state waiting for expansion: TLC's `TLCState` with `uid`/`workerId`/`level`.

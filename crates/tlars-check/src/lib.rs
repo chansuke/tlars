@@ -19,6 +19,7 @@ mod session;
 mod simulate;
 mod trace;
 
+pub use tlars_java::time::Clock;
 pub use tlars_msg::ExitStatus;
 
 use std::io::Write;
@@ -64,6 +65,8 @@ impl Invocation<'static> {
 pub struct Env {
     pub clock: Clock,
     pub pid: u32,
+    /// `java.io.tmpdir`, where SANY copies the standard modules it parses.
+    pub temp_dir: PathBuf,
     /// Source of TLC's random defaults (`-fp` index, `-seed`) when not given.
     pub entropy: Entropy,
     /// Worker thread stack (TLC conformance recordings ran with `-Xss2m`).
@@ -75,12 +78,6 @@ pub struct Env {
     /// The locale the JVM's `setlocale(LC_ALL, "")` would select, which decides the C
     /// library text inside a `FileNotFoundException` message.
     pub locale: tlars_java::Locale,
-}
-
-#[derive(Clone, Copy)]
-pub enum Clock {
-    System,
-    Fixed { epoch_millis: i64, utc_offset_minutes: i32 },
 }
 
 pub enum Entropy {
@@ -103,6 +100,7 @@ impl Env {
         Env {
             clock: Clock::System,
             pid: std::process::id(),
+            temp_dir: std::env::temp_dir(),
             entropy: Entropy::Os,
             worker_stack_bytes: 64 << 20,
             host: HostInfo::current(),
@@ -116,6 +114,9 @@ impl Env {
         Env {
             clock: Clock::Fixed { epoch_millis: 0, utc_offset_minutes: 0 },
             pid: 0,
+            // A real directory: SANY writes the standard modules there. Their paths only
+            // reach the `Parsing file` lines.
+            temp_dir: std::env::temp_dir(),
             entropy: Entropy::Fixed(0),
             worker_stack_bytes: 64 << 20,
             host: HostInfo { os_name: "Linux".into(), os_version: "0".into(), os_arch: "amd64".into(), cores: 1 },
@@ -140,52 +141,6 @@ impl Env {
                 let millis = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
                 tlars_java::time::format(tlars_java::time::Pattern::Timestamp, millis, 0)
             }),
-        }
-    }
-}
-
-impl Clock {
-    /// `System.currentTimeMillis()`.
-    fn now_millis(&self) -> i64 {
-        match self {
-            Clock::Fixed { epoch_millis, .. } => *epoch_millis,
-            Clock::System => std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64),
-        }
-    }
-
-    /// When a wait of `timeout` that starts now gives up (`Object.wait(ms)`). A fixed clock
-    /// does not advance, so its waits end only when notified: a hermetic run prints no
-    /// progress report however long it takes.
-    fn deadline(&self, timeout: std::time::Duration) -> Deadline {
-        match self {
-            Clock::Fixed { .. } => Deadline::Never,
-            Clock::System => Deadline::At(std::time::Instant::now() + timeout),
-        }
-    }
-}
-
-/// The end of a timed wait, from [`Clock::deadline`].
-pub(crate) enum Deadline {
-    /// The wait ends only when it is notified.
-    Never,
-    At(std::time::Instant),
-}
-
-/// What is left of a [`Deadline`].
-pub(crate) enum Remaining {
-    Unbounded,
-    For(std::time::Duration),
-    Passed,
-}
-
-impl Deadline {
-    pub(crate) fn remaining(&self) -> Remaining {
-        match self {
-            Deadline::Never => Remaining::Unbounded,
-            Deadline::At(at) => match at.checked_duration_since(std::time::Instant::now()) {
-                Some(left) if !left.is_zero() => Remaining::For(left),
-                _ => Remaining::Passed,
-            },
         }
     }
 }
