@@ -1270,8 +1270,16 @@ impl<'t> Ev<'t> {
                         }
                     }
                     Resolved::Binding(Binding::Thunk(t)) => {
-                        let (e, tc) = (t.expr, t.ctx.clone());
-                        level = level.max(self.level_bound(e, &tc));
+                        let bound = match t.level_bound.get() {
+                            Some(&l) => l,
+                            None => {
+                                let (e, tc) = (t.expr, t.ctx.clone());
+                                let l = self.level_bound(e, &tc);
+                                let _ = t.level_bound.set(l);
+                                l
+                            }
+                        };
+                        level = level.max(bound);
                     }
                     // A Java override contributes its declared `minLevel`, which is how
                     // `TLCGet` stays out of constant folding (`:270-276`). An override tlars
