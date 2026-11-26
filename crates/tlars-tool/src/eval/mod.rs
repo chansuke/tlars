@@ -125,6 +125,10 @@ impl CallStack {
         self.frozen = true;
         self.frames.extend_from_slice(sources);
     }
+    /// `CallStackTool.hasCallStack()`.
+    pub fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
     /// `CallStack.toString` (`CallStack.java:53-88`): one numbered line per frame, counted
     /// from zero, with consecutive repeats of the same node collapsed.
     pub fn to_tlc_string(&self, tool: &Tool) -> String {

@@ -88,12 +88,12 @@ impl EvalError {
     }
 
     /// `new EvalException(ec, params)`; `message` is `MP.getMessage(ec, params)`.
-    pub(crate) fn eval(ec: Ec, message: String, params: Vec<String>) -> EvalError {
+    pub fn eval(ec: Ec, message: String, params: Vec<String>) -> EvalError {
         EvalError::from(EvalErrorData { ec, message, loc: None, kind: EvalErrorKind::Eval, params })
     }
 
     /// `Assert.fail(ec, params)`; `message` is `MP.getMessage(ec, params)`.
-    pub(crate) fn runtime(ec: Ec, message: String) -> EvalError {
+    pub fn runtime(ec: Ec, message: String) -> EvalError {
         EvalError::from(EvalErrorData { ec, message, loc: None, kind: EvalErrorKind::Runtime, params: Vec::new() })
     }
 
@@ -134,7 +134,7 @@ impl EvalError {
         EvalError::from(EvalErrorData { ec: Ec::GENERAL, message: size.to_string(), loc: None, kind, params: Vec::new() })
     }
 
-    pub(crate) fn unimplemented(what: String) -> EvalError {
+    pub fn unimplemented(what: String) -> EvalError {
         EvalError::from(EvalErrorData {
             ec: Ec::GENERAL,
             message: format!("tlars does not implement {what} yet"),

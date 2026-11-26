@@ -43,6 +43,17 @@ pub struct CounterExampleStep {
 /// edge `<<source, action, target>>` per step after the first, both as unnormalised sets in
 /// trace order.
 pub fn counter_example_of(ev: &mut Ev<'_>, trace: &[CounterExampleStep], is_console: bool) -> EvalResult<Value> {
+    counter_example_lasso(ev, trace, None, is_console)
+}
+
+/// `new CounterExample(trace, action, loopOrdinal, isConsole)`: with a loop, one more edge
+/// goes from the last state back to the state numbered `loopOrdinal`, labelled `action`.
+pub fn counter_example_lasso(
+    ev: &mut Ev<'_>,
+    trace: &[CounterExampleStep],
+    back: Option<(Option<crate::actions::ActionId>, usize)>,
+    is_console: bool,
+) -> EvalResult<Value> {
     let mut states: Vec<Value> = Vec::with_capacity(trace.len());
     let mut actions: Vec<Value> = Vec::new();
     for step in trace {
@@ -60,6 +71,19 @@ pub fn counter_example_of(ev: &mut Ev<'_>, trace: &[CounterExampleStep], is_cons
             actions.push(Value::tuple(vec![last.clone(), action, pair.clone()]));
         }
         states.push(pair);
+    }
+    if let Some((action, ordinal)) = back
+        && ordinal > 0
+    {
+        let action = match action {
+            Some(id) => {
+                let a = ev.tool().action(id);
+                super::tlc_get_set::action_value(ev, a)?
+            }
+            None => super::tlc_get_set::unknown_action_value(ev)?,
+        };
+        let last = states.last().expect("a lasso has states").clone();
+        actions.push(Value::tuple(vec![last, action, states[ordinal - 1].clone()]));
     }
     let actions = Value::set_enum_of(actions, false);
     let states = Value::set_enum_of(states, false);

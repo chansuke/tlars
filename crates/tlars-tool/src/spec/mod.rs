@@ -140,7 +140,7 @@ pub fn build_tool(input: ToolInput<'_>) -> Result<Tool, SpecError> {
         postcondition_error: None,
         counter_example: CounterExampleDef::Absent,
         symmetry: Box::new([]),
-        temporal: crate::tool::Temporal { fairness: Box::new([]), properties: Box::new([]) },
+        temporal: crate::tool::Temporal { fairness: Box::new([]), properties: Box::new([]), spec: None },
         fp64: crate::fp64::Fp64::new(globals.fp_index),
         tlc_caches: std::sync::Mutex::new(Default::default()),
         model_values,
@@ -880,6 +880,7 @@ fn process_config(config: &ModelConfig, tool: &mut Tool, defns: &Defns, unproces
             .into_iter()
             .map(|c| crate::tool::TemporalCheck { name: c.name, shown: c.shown.into(), expr: c.pred.expr, ctx: c.pred.ctx })
             .collect(),
+        spec: spec_def,
     };
     // The `Tool` constructor's splitting (`Tool.java:224-240`). Only the next-state
     // relation is split; `getInitStateSpec()` hands the initial predicates over as they are,

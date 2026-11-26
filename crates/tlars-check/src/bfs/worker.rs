@@ -5,6 +5,7 @@ use super::{ErrState, ModelChecker, is_java_error};
 use crate::fpset::{FpSet, Seen};
 use crate::liveness::SetOfStates;
 use crate::queue::Queued;
+use std::sync::atomic::Ordering;
 use std::sync::atomic::Ordering::Relaxed;
 use tlars_tool::{ActionId, Ev, Flow, Halt, NextSink, PartialState, State, WorkerLocals};
 
@@ -84,10 +85,24 @@ impl<'a> Worker<'a> {
                 }
                 mc.post_condition_trace(&mut ev, &cur, None, false, first);
             }
-            if let (Some(live), Some(succs)) = (mc.live.as_ref(), self.sink.live_successors.take()) {
+            if let (Some(live), Some(mut succs)) = (mc.live.as_ref(), self.sink.live_successors.take()) {
+                // `doNextCheckLiveness`: the stuttering step goes in last.
                 let mut ev = mc.tool.ev(&mut self.locals, mc.out);
-                if let Err(e) = live.add_next_state(&mut ev, &cur, succs) {
-                    mc.next_failed(&cur, None, e);
+                succs.put(&mut ev, cur.fp, cur.state.clone());
+                match live.add_next_state(&mut ev, &cur, &succs, &mc.printed_liveness_error_stack) {
+                    Err(e) => self.live_failed(&cur, &succs, e),
+                    // `printErrorTrace` ends with `mainChecker.stop()`, `setErrState(..,
+                    // TLC_INVARIANT_VIOLATED_BEHAVIOR)` and an `InvariantViolatedException`,
+                    // which `doNextFailed` reports as nothing because the error is set.
+                    Ok(crate::liveness::Added::Violated) => {
+                        mc.queue.finish_all();
+                        mc.set_err_with(super::ErrState::Liveness, tlars_msg::Ec::TLC_INVARIANT_VIOLATED_BEHAVIOR, false);
+                    }
+                    Ok(crate::liveness::Added::Done) => {
+                        if succs.capacity() > 16 * self.sink.live_multiplier as usize {
+                            self.sink.live_multiplier += 1;
+                        }
+                    }
                 }
             }
             if let Some(slot) = self.stats {
@@ -99,6 +114,41 @@ impl<'a> Worker<'a> {
             self.sink.unseen = 0;
         }
         outcome
+    }
+}
+
+impl Worker<'_> {
+    /// `doNextCheckLiveness`'s `catch (EvalException | TLCRuntimeException)`
+    /// (`Worker.java:185-230`): the first worker to fail re-runs `addNextState` under a
+    /// `CallStackTool` and prints the nested expressions, before `doNextFailed` reports the
+    /// original exception and the trace. A later failure of another worker is dropped.
+    fn live_failed(&mut self, cur: &Queued, succs: &SetOfStates, e: tlars_tool::EvalError) {
+        let mc = self.mc;
+        if !matches!(e.kind, tlars_tool::EvalErrorKind::Eval | tlars_tool::EvalErrorKind::Runtime) {
+            mc.next_failed(cur, None, e);
+            return;
+        }
+        if mc.printed_liveness_error_stack.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let live = mc.live.as_ref().expect("liveness is checked");
+        self.locals.record_call_stack();
+        let rerun = {
+            let mut ev = mc.tool.ev(&mut self.locals, mc.out);
+            live.add_next_state(&mut ev, cur, succs, &mc.printed_liveness_error_stack)
+        };
+        let stack = self.locals.take_call_stack().expect("recording was switched on");
+        let failure = match rerun {
+            // `Assert.fail(EC.GENERAL, origExp)`: the re-run should have failed too.
+            Ok(_) => tlars_tool::EvalError::runtime(tlars_msg::Ec::GENERAL, e.message.clone()),
+            Err(_) => {
+                if !stack.is_empty() {
+                    mc.out.error(tlars_msg::Ec::TLC_NESTED_EXPRESSION, &[&stack.to_tlc_string(mc.tool)]);
+                }
+                e
+            }
+        };
+        mc.next_failed(cur, None, failure);
     }
 }
 

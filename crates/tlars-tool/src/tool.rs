@@ -106,6 +106,9 @@ pub struct Temporal {
     pub fairness: Box<[(ExprId, Ctx)]>,
     /// `getImpliedTemporals()`: the PROPERTY conjuncts of temporal level, in cfg order.
     pub properties: Box<[TemporalCheck]>,
+    /// The cfg's SPECIFICATION and the location of its definition, which
+    /// `printStutteringCounterExampleWarning` names; `None` when the cfg has none.
+    pub spec: Option<(String, String)>,
 }
 
 /// One implied temporal formula. Its `Action` is named after the cfg PROPERTY it came from,
@@ -237,6 +240,11 @@ impl Tool {
     }
     /// `Spec.getCounterExampleDef()`'s `OpDefNode`: the definition a counterexample is bound
     /// to, if `TLCExt!CounterExample`'s Java override is the one under that name.
+    /// Whether `TLCExt!CounterExample` appears in the spec, so that a POSTCONDITION is
+    /// evaluated with a counterexample bound.
+    pub fn uses_counter_example(&self) -> bool {
+        self.counter_example != CounterExampleDef::Absent
+    }
     pub(crate) fn counter_example_def(&self) -> Option<OpDefId> {
         match self.counter_example {
             CounterExampleDef::Evaluating(d) => Some(d),
