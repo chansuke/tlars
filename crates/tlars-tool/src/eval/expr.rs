@@ -828,9 +828,16 @@ impl<'t> Ev<'t> {
             }
             Builtin::Nop => self.eval(arg(0), c, s0, s1, control),
             Builtin::Cdot => Err(super::enabled::cdot_unsupported(self, expr)),
-            Builtin::Box | Builtin::TemporalExists | Builtin::TemporalForall => {
-                Err(EvalError::unimplemented("a temporal operator outside PROPERTY (M4)".into()))
-            }
+            // `Assert.fail(EC.TLC_ENCOUNTERED_FORMULA_IN_PREDICATE, {what, expr}, expr, c)`
+            // (`Tool.java:2810-2848`): a temporal formula outside PROPERTY.
+            Builtin::Box => Err(encountered_temporal(self, expr, "[]A")),
+            Builtin::TemporalExists => Err(encountered_temporal(self, expr, "\\EE")),
+            Builtin::TemporalForall => Err(encountered_temporal(self, expr, "\\AA")),
+            Builtin::Unimplemented("$SF") => Err(encountered_temporal(self, expr, "SF")),
+            Builtin::Unimplemented("$WF") => Err(encountered_temporal(self, expr, "WF")),
+            Builtin::Unimplemented("~>") => Err(encountered_temporal(self, expr, "a ~> b")),
+            Builtin::Unimplemented("-+->") => Err(encountered_temporal(self, expr, "a -+-> formula")),
+            Builtin::Unimplemented("<>") => Err(encountered_temporal(self, expr, "<>A")),
             Builtin::Unimplemented(name) => Err(EvalError::unimplemented(format!("the operator {name} (M2 unit 4)"))),
         }
     }
@@ -1350,6 +1357,16 @@ impl<'t> Ev<'t> {
             _ => Ok(0),
         }
     }
+}
+
+/// `TLC_ENCOUNTERED_FORMULA_IN_PREDICATE` for the temporal operator `what` at `expr`.
+fn encountered_temporal(ev: &Ev<'_>, expr: ExprId, what: &str) -> EvalError {
+    let graph = &ev.tool().graph;
+    let params = [what, &graph.expr_tlc_text(expr)];
+    let message = ev.out().text(Ec::TLC_ENCOUNTERED_FORMULA_IN_PREDICATE, &params);
+    EvalError::runtime(Ec::TLC_ENCOUNTERED_FORMULA_IN_PREDICATE, message)
+        .with_loc(Some(graph.loc(expr)))
+        .with_params(params.iter().map(|p| p.to_string()).collect())
 }
 
 /// `opNode.getKind() == VariableDeclKind`.
