@@ -182,7 +182,7 @@ impl IntervalValue {
     pub(crate) fn to_set_enum_arc(self) -> Arc<SetEnumValue> {
         let elems: Box<[Value]> = (i64::from(self.lo)..=i64::from(self.hi)).map(|n| Value::Int(n as i32)).collect();
         let norm = OnceLock::new();
-        let _ = norm.set(elems.clone());
+        let _ = norm.set(None);
         Arc::new(SetEnumValue { built: elems, norm, source: Source::none() })
     }
 }
@@ -200,7 +200,9 @@ pub struct TupleValue {
 /// `{1, "a"}`) is not cached, so the error re-surfaces at the next use, as in TLC.
 pub struct SetEnumValue {
     pub(crate) built: Box<[Value]>,
-    pub(crate) norm: OnceLock<Box<[Value]>>,
+    /// Set once normalised: `None` when `built` already is the normalised array, so a set
+    /// built normalised does not hold its elements twice.
+    pub(crate) norm: OnceLock<Option<Box<[Value]>>>,
     pub(crate) source: Source,
 }
 
@@ -210,8 +212,8 @@ impl SetEnumValue {
     /// whether the operand had been normalised.
     pub(crate) fn snapshot(&self) -> &[Value] {
         match self.norm.get() {
-            Some(norm) => norm,
-            None => &self.built,
+            Some(Some(norm)) => norm,
+            _ => &self.built,
         }
     }
 }
@@ -984,7 +986,7 @@ pub(crate) fn set_enum_arc(elems: Vec<Value>, is_norm: bool) -> Arc<SetEnumValue
     let elems = elems.into_boxed_slice();
     let norm = OnceLock::new();
     if is_norm {
-        let _ = norm.set(elems.clone());
+        let _ = norm.set(None);
     }
     Arc::new(SetEnumValue { built: elems, norm, source: Source::none() })
 }

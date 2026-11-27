@@ -441,7 +441,8 @@ impl Value {
             },
             // `ValueVec.search`: binary search once normalised, `equals` scan before.
             Value::SetEnum(set) => match set.norm.get() {
-                Some(norm) => {
+                Some(_) => {
+                    let norm = set.snapshot();
                     let (mut lo, mut hi) = (0, norm.len());
                     while lo < hi {
                         let mid = lo + (hi - lo) / 2;
@@ -957,17 +958,24 @@ fn any_empty(ev: &mut Ev<'_>, sets: &[Value]) -> EvalResult<bool> {
     Ok(false)
 }
 
-/// `SetEnumValue.normalize()` / `ValueVec.sort(true)`: binary insertion, dedup on
-/// `compareTo == 0` (the element already placed stays). Publishes into `norm` on success
-/// only.
+/// `SetEnumValue.normalize()`. Publishes into `norm` on success only.
 pub(crate) fn normalized<'a>(ev: &mut Ev<'_>, set: &'a SetEnumValue) -> EvalResult<&'a [Value]> {
-    if let Some(norm) = set.norm.get() {
-        return Ok(norm);
+    if set.norm.get().is_none() {
+        let (out, unchanged) = sort_dedup(ev, set.built.iter().cloned())?;
+        let _ = set.norm.set((!unchanged).then(|| out.into_boxed_slice()));
     }
-    let mut out: Vec<Value> = Vec::with_capacity(set.built.len());
-    let mut elems = set.built.iter();
+    Ok(set.snapshot())
+}
+
+/// `ValueVec.sort(true)` (`ValueVec.java:172-204`): binary insertion, dedup on
+/// `compareTo == 0` (the element already placed stays). The flag says whether the result is
+/// the input in its own order, nothing moved or dropped.
+fn sort_dedup(ev: &mut Ev<'_>, elems: impl ExactSizeIterator<Item = Value>) -> EvalResult<(Vec<Value>, bool)> {
+    let mut out: Vec<Value> = Vec::with_capacity(elems.len());
+    let mut unchanged = true;
+    let mut elems = elems;
     if let Some(first) = elems.next() {
-        out.push(first.clone());
+        out.push(first);
     }
     for elem in elems {
         let (mut lo, mut hi, mut idx) = (0, out.len(), 0);
@@ -981,11 +989,15 @@ pub(crate) fn normalized<'a>(ev: &mut Ev<'_>, set: &'a SetEnumValue) -> EvalResu
                 Ordering::Greater => lo = idx + 1,
             }
         }
-        if cmp != Ordering::Equal {
-            out.insert(if cmp == Ordering::Less { idx } else { idx + 1 }, elem.clone());
+        if cmp == Ordering::Equal {
+            unchanged = false;
+        } else {
+            let at = if cmp == Ordering::Less { idx } else { idx + 1 };
+            unchanged &= at == out.len();
+            out.insert(at, elem);
         }
     }
-    Ok(set.norm.get_or_init(|| out.into_boxed_slice()))
+    Ok((out, unchanged))
 }
 
 /// `RecordValue.normalize()` / `sort()` (`RecordValue.java:619-651`): the smallest field
