@@ -329,15 +329,15 @@ impl<'t> Ev<'t> {
             let mut vals: Vec<crate::value::Value> = Vec::with_capacity(sz);
             let mut abandoned = false;
             for j in 0..sz {
-                let own = s.get(self.tool.vars.slot(j)).clone();
+                let own = s.get(tool.vars.slot(j));
                 let permuted = own.permute(self, &tool.symmetry[i])?.unwrap_or_else(|| own.clone());
                 vals.push(permuted);
                 if cmp == std::cmp::Ordering::Equal {
                     let current = match &min_vals {
-                        Some(m) => m[j].clone(),
+                        Some(m) => &m[j],
                         None => own,
                     };
-                    cmp = vals[j].clone().tlc_compare(self, &current)?;
+                    cmp = vals[j].tlc_compare(self, current)?;
                     if cmp == std::cmp::Ordering::Greater {
                         abandoned = true;
                         break;

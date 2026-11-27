@@ -223,7 +223,9 @@ pub(crate) type RecordFields = (Box<[Atom]>, Box<[Value]>);
 pub struct RecordValue {
     pub(crate) names: Box<[Atom]>,
     pub(crate) values: Box<[Value]>,
-    pub(crate) norm: OnceLock<RecordFields>,
+    /// Set once normalised: `None` when the constructed order already is the sorted one, so
+    /// a record built normalised does not hold its fields twice.
+    pub(crate) norm: OnceLock<Option<RecordFields>>,
     pub(crate) source: Source,
     /// `tlc2.value.impl.CounterExample`, a subclass of `RecordValue` that behaves like one
     /// everywhere but in `TLCExt!ToTrace`, which refuses a record of the same shape, and in
@@ -459,10 +461,20 @@ impl Value {
     /// FingerprintException.getNewHead(this, e); } else { throw e; } }` that every method of
     /// every value class carries. The head of the chain is the outermost value, as
     /// `prependNewHead` builds it.
-    #[inline]
+    #[inline(always)]
     pub(crate) fn fp<T>(&self, r: EvalResult<T>) -> EvalResult<T> {
-        let Err(e) = r else { return r };
-        let Some(source) = self.source() else { return Err(e) };
+        match r {
+            Ok(v) => Ok(v),
+            Err(e) => Err(self.fp_chain(e)),
+        }
+    }
+
+    /// The `catch` half of [`Value::fp`], kept out of line so that the success path, which
+    /// every comparison and permutation takes, is not a call.
+    #[cold]
+    #[inline(never)]
+    fn fp_chain(&self, e: EvalError) -> EvalError {
+        let Some(source) = self.source() else { return e };
         let sources = match e.kind {
             crate::error::EvalErrorKind::Fingerprint { ref sources } => {
                 let mut chain = Vec::with_capacity(sources.len() + 1);
@@ -474,7 +486,7 @@ impl Value {
         };
         let mut e = e;
         e.kind = crate::error::EvalErrorKind::Fingerprint { sources };
-        Err(e)
+        e
     }
 
     pub(crate) fn kind(&self) -> ValueKind {
@@ -583,7 +595,7 @@ impl Value {
         let (names, values) = (names.into_boxed_slice(), values.into_boxed_slice());
         let norm = OnceLock::new();
         if is_norm {
-            let _ = norm.set((names.clone(), values.clone()));
+            let _ = norm.set(None);
         }
         Arc::new(RecordValue { names, values, norm, source: Source::none(), counter_example })
     }

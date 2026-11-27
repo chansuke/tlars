@@ -357,8 +357,8 @@ impl RecordValue {
     /// `snapshot()`: the sorted pair once `normalize()` has run, the constructed one before.
     pub(crate) fn snapshot(&self) -> (&[Atom], &[Value]) {
         match self.norm.get() {
-            Some((names, values)) => (names, values),
-            None => (&self.names, &self.values),
+            Some(Some((names, values))) => (names, values),
+            _ => (&self.names, &self.values),
         }
     }
 

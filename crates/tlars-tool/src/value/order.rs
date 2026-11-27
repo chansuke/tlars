@@ -125,11 +125,11 @@ impl Value {
                     let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to check equality of the set {x} with the value:\n{y}"), None));
                 };
-                let (xs, ys) = (normalized(ev, a)?.to_vec(), normalized(ev, &b)?.to_vec());
+                let (xs, ys) = (normalized(ev, a)?, normalized(ev, &b)?);
                 if xs.len() != ys.len() {
                     return Ok(false);
                 }
-                for (x, y) in xs.iter().zip(&ys) {
+                for (x, y) in xs.iter().zip(ys.iter()) {
                     if !x.tlc_equals(ev, y)? {
                         return Ok(false);
                     }
@@ -340,6 +340,8 @@ impl Value {
                 })
             }
             (Value::Interval(a), _) => Value::SetEnum(a.to_set_enum_arc()).tlc_compare(ev, other),
+            (Value::SetEnum(a), Value::SetEnum(b)) => set_compare(ev, a, b),
+            (Value::Record(a), Value::Record(b)) => record_compare(ev, a, b),
             (Value::SetEnum(a), _) => {
                 let Some(b) = other.to_set_enum(ev)? else {
                     if let Value::Model(m) = other {
@@ -348,17 +350,7 @@ impl Value {
                     let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to compare the set {x} with the value:\n{y}"), None));
                 };
-                let (xs, ys) = (normalized(ev, a)?.to_vec(), normalized(ev, &b)?.to_vec());
-                if xs.len() != ys.len() {
-                    return Ok(xs.len().cmp(&ys.len()));
-                }
-                for (x, y) in xs.iter().zip(&ys) {
-                    let c = x.tlc_compare(ev, y)?;
-                    if c != Ordering::Equal {
-                        return Ok(c);
-                    }
-                }
-                Ok(Ordering::Equal)
+                set_compare(ev, a, &b)
             }
             // A tuple's domain is 1..Len, so equal lengths mean equal domains
             // (`TupleValue.java:67-91`).
@@ -388,24 +380,7 @@ impl Value {
                     let (x, y) = (self.ppr(ev)?, other.ppr(ev)?);
                     return Err(EvalError::detailed(format!("Attempted to compare record:\n{x}\nwith non-record\n{y}"), None));
                 };
-                let (an, av) = record_normalized(ev, a)?;
-                let (bn, bv) = record_normalized(ev, &b)?;
-                if an.len() != bn.len() {
-                    return Ok(an.len().cmp(&bn.len()));
-                }
-                for (x, y) in an.iter().zip(bn.iter()) {
-                    let c = x.tok().cmp(&y.tok());
-                    if c != Ordering::Equal {
-                        return Ok(c);
-                    }
-                }
-                for (x, y) in av.iter().zip(bv.iter()) {
-                    let c = x.tlc_compare(ev, y)?;
-                    if c != Ordering::Equal {
-                        return Ok(c);
-                    }
-                }
-                Ok(Ordering::Equal)
+                record_compare(ev, a, &b)
             }
             (Value::FcnRcd(a), _) => {
                 let Some(b) = other.to_fcn_rcd(ev)? else {
@@ -1017,8 +992,8 @@ pub(crate) fn normalized<'a>(ev: &mut Ev<'_>, set: &'a SetEnumValue) -> EvalResu
 /// name is swapped to the front, then insertion sort, both in place, so the duplicate the
 /// error names is read from the partly sorted array as TLC reads it.
 pub(crate) fn record_normalized<'a>(ev: &mut Ev<'_>, r: &'a RecordValue) -> EvalResult<(&'a [Atom], &'a [Value])> {
-    if let Some((names, values)) = r.norm.get() {
-        return Ok((names, values));
+    if r.norm.get().is_some() {
+        return Ok(r.snapshot());
     }
     let mut names = r.names.to_vec();
     let mut values = r.values.to_vec();
@@ -1055,9 +1030,9 @@ pub(crate) fn record_normalized<'a>(ev: &mut Ev<'_>, r: &'a RecordValue) -> Eval
         names[j] = name;
         values[j] = value;
     }
-    let _ = r.norm.set((names.into_boxed_slice(), values.into_boxed_slice()));
-    let (names, values) = r.norm.get().expect("just published");
-    Ok((names, values))
+    let moved = names[..] != r.names[..];
+    let _ = r.norm.set(moved.then(|| (names.into_boxed_slice(), values.into_boxed_slice())));
+    Ok(r.snapshot())
 }
 
 /// `FcnRcdValue.normalize()` / `sort()` (`FcnRcdValue.java:714-749`), the same algorithm over
@@ -1243,6 +1218,31 @@ fn fcn_compare(ev: &mut Ev<'_>, a: &FcnRcdValue, b: &FcnRcdValue) -> EvalResult<
             values_compare(ev, av, bv)
         }
     }
+}
+
+/// `SetEnumValue.compareTo` once the other operand is a SetEnum: size, then elementwise.
+fn set_compare(ev: &mut Ev<'_>, a: &SetEnumValue, b: &SetEnumValue) -> EvalResult<Ordering> {
+    let (xs, ys) = (normalized(ev, a)?, normalized(ev, b)?);
+    if xs.len() != ys.len() {
+        return Ok(xs.len().cmp(&ys.len()));
+    }
+    values_compare(ev, xs, ys)
+}
+
+/// `RecordValue.compareTo` once the other operand is a record: length, names, then values.
+fn record_compare(ev: &mut Ev<'_>, a: &RecordValue, b: &RecordValue) -> EvalResult<Ordering> {
+    let (an, av) = record_normalized(ev, a)?;
+    let (bn, bv) = record_normalized(ev, b)?;
+    if an.len() != bn.len() {
+        return Ok(an.len().cmp(&bn.len()));
+    }
+    for (x, y) in an.iter().zip(bn.iter()) {
+        let c = x.tok().cmp(&y.tok());
+        if c != Ordering::Equal {
+            return Ok(c);
+        }
+    }
+    values_compare(ev, av, bv)
 }
 
 fn values_compare(ev: &mut Ev<'_>, av: &[Value], bv: &[Value]) -> EvalResult<Ordering> {
