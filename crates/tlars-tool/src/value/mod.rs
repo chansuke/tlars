@@ -251,7 +251,9 @@ pub(crate) type FcnPairs = (Box<[Value]>, Box<[Value]>);
 pub struct FcnRcdValue {
     pub(crate) domain: FcnDomain,
     pub(crate) values: Box<[Value]>,
-    pub(crate) norm: OnceLock<FcnPairs>,
+    /// Set once normalised: `None` when the explicit domain already is in normal order, so
+    /// a function built normalised does not hold its domain and values twice.
+    pub(crate) norm: OnceLock<Option<FcnPairs>>,
 }
 
 /// Lazy sets. `converted` is `convertAndCache()`'s SetEnum.
@@ -607,7 +609,7 @@ impl Value {
         let (domain, values) = (domain.into_boxed_slice(), values.into_boxed_slice());
         let norm = OnceLock::new();
         if is_norm {
-            let _ = norm.set((domain.clone(), values.clone()));
+            let _ = norm.set(None);
         }
         Arc::new(FcnRcdValue { domain: FcnDomain::Explicit(domain), values, norm })
     }

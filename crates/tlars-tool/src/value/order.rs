@@ -1050,21 +1050,24 @@ pub(crate) fn record_normalized<'a>(ev: &mut Ev<'_>, r: &'a RecordValue) -> Eval
 /// `FcnRcdValue.normalize()` / `sort()` (`FcnRcdValue.java:714-749`), the same algorithm over
 /// an explicit domain. Only the explicit case sorts: an interval domain is already ordered.
 pub(crate) fn fcn_normalized<'a>(ev: &mut Ev<'_>, f: &'a FcnRcdValue) -> EvalResult<(&'a [Value], &'a [Value])> {
-    if let Some((domain, values)) = f.norm.get() {
-        return Ok((domain, values));
-    }
     let super::FcnDomain::Explicit(built) = &f.domain else { unreachable!("an interval domain is normalised") };
-    let mut domain = built.to_vec();
-    let mut values = f.values.to_vec();
-    fcn_sort(ev, &mut domain, &mut values)?;
-    let _ = f.norm.set((domain.into_boxed_slice(), values.into_boxed_slice()));
-    let (domain, values) = f.norm.get().expect("just published");
-    Ok((domain, values))
+    if f.norm.get().is_none() {
+        let mut domain = built.to_vec();
+        let mut values = f.values.to_vec();
+        let moved = fcn_sort(ev, &mut domain, &mut values)?;
+        let _ = f.norm.set(moved.then(|| (domain.into_boxed_slice(), values.into_boxed_slice())));
+    }
+    match f.norm.get() {
+        Some(Some((domain, values))) => Ok((domain, values)),
+        _ => Ok((built, &f.values)),
+    }
 }
 
 /// `FcnRcdValue.sort()` in place. `toString` runs it over a private copy, so a function the
-/// evaluator never normalises keeps printing in construction order.
-pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Value]) -> EvalResult<()> {
+/// evaluator never normalises keeps printing in construction order. `true` when an element
+/// moved.
+pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Value]) -> EvalResult<bool> {
+    let mut moved = false;
     let duplicate = |ev: &mut Ev<'_>, v: &Value| -> EvalResult<EvalError> {
         let shown = v.to_tlc_string(ev)?;
         Ok(EvalError::detailed(format!("The value\n{shown}\noccurs multiple times in the function domain."), None))
@@ -1075,6 +1078,7 @@ pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Valu
             Ordering::Greater => {
                 domain.swap(0, i);
                 values.swap(0, i);
+                moved = true;
             }
             Ordering::Less => {}
         }
@@ -1091,6 +1095,7 @@ pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Valu
             domain[j] = domain[j - 1].clone();
             values[j] = values[j - 1].clone();
             j -= 1;
+            moved = true;
         }
         if cmp == Ordering::Equal {
             return Err(duplicate(ev, &domain[i].clone())?);
@@ -1098,7 +1103,7 @@ pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Valu
         domain[j] = d;
         values[j] = v;
     }
-    Ok(())
+    Ok(moved)
 }
 
 /// `IntervalValue.equals(IntervalValue)`: every empty interval is the same set. The size
