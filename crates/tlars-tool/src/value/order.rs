@@ -967,6 +967,23 @@ pub(crate) fn normalized<'a>(ev: &mut Ev<'_>, set: &'a SetEnumValue) -> EvalResu
     Ok(set.snapshot())
 }
 
+/// `normalize()` of a set no other value holds yet, sorting its own array in place instead
+/// of copying it, as TLC's `ValueVec.sort` does. The comparisons are the ones
+/// [`normalized`] would make. On failure the set is left empty: its owner drops it with
+/// the error.
+pub(crate) fn normalize_unshared(ev: &mut Ev<'_>, v: &mut Value) -> EvalResult<()> {
+    if let Value::SetEnum(arc) = v
+        && let Some(set) = Arc::get_mut(arc)
+        && set.norm.get().is_none()
+    {
+        let built = std::mem::take(&mut set.built).into_vec();
+        let (out, _) = sort_dedup(ev, built.into_iter())?;
+        set.built = out.into_boxed_slice();
+        let _ = set.norm.set(None);
+    }
+    Ok(())
+}
+
 /// `ValueVec.sort(true)` (`ValueVec.java:172-204`): binary insertion, dedup on
 /// `compareTo == 0` (the element already placed stays). The flag says whether the result is
 /// the input in its own order, nothing moved or dropped.
