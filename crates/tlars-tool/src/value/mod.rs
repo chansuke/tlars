@@ -223,7 +223,9 @@ pub(crate) type RecordFields = (Box<[Atom]>, Box<[Value]>);
 pub struct RecordValue {
     pub(crate) names: Box<[Atom]>,
     pub(crate) values: Box<[Value]>,
-    pub(crate) norm: OnceLock<RecordFields>,
+    /// Set once normalised: `None` when the constructed order already is the sorted one, so
+    /// a record built normalised does not hold its fields twice.
+    pub(crate) norm: OnceLock<Option<RecordFields>>,
     pub(crate) source: Source,
     /// `tlc2.value.impl.CounterExample`, a subclass of `RecordValue` that behaves like one
     /// everywhere but in `TLCExt!ToTrace`, which refuses a record of the same shape, and in
@@ -593,7 +595,7 @@ impl Value {
         let (names, values) = (names.into_boxed_slice(), values.into_boxed_slice());
         let norm = OnceLock::new();
         if is_norm {
-            let _ = norm.set((names.clone(), values.clone()));
+            let _ = norm.set(None);
         }
         Arc::new(RecordValue { names, values, norm, source: Source::none(), counter_example })
     }

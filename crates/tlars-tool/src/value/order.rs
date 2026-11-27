@@ -1017,8 +1017,8 @@ pub(crate) fn normalized<'a>(ev: &mut Ev<'_>, set: &'a SetEnumValue) -> EvalResu
 /// name is swapped to the front, then insertion sort, both in place, so the duplicate the
 /// error names is read from the partly sorted array as TLC reads it.
 pub(crate) fn record_normalized<'a>(ev: &mut Ev<'_>, r: &'a RecordValue) -> EvalResult<(&'a [Atom], &'a [Value])> {
-    if let Some((names, values)) = r.norm.get() {
-        return Ok((names, values));
+    if r.norm.get().is_some() {
+        return Ok(r.snapshot());
     }
     let mut names = r.names.to_vec();
     let mut values = r.values.to_vec();
@@ -1055,9 +1055,9 @@ pub(crate) fn record_normalized<'a>(ev: &mut Ev<'_>, r: &'a RecordValue) -> Eval
         names[j] = name;
         values[j] = value;
     }
-    let _ = r.norm.set((names.into_boxed_slice(), values.into_boxed_slice()));
-    let (names, values) = r.norm.get().expect("just published");
-    Ok((names, values))
+    let moved = names[..] != r.names[..];
+    let _ = r.norm.set(moved.then(|| (names.into_boxed_slice(), values.into_boxed_slice())));
+    Ok(r.snapshot())
 }
 
 /// `FcnRcdValue.normalize()` / `sort()` (`FcnRcdValue.java:714-749`), the same algorithm over
