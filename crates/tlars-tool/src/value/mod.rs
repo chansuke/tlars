@@ -459,10 +459,20 @@ impl Value {
     /// FingerprintException.getNewHead(this, e); } else { throw e; } }` that every method of
     /// every value class carries. The head of the chain is the outermost value, as
     /// `prependNewHead` builds it.
-    #[inline]
+    #[inline(always)]
     pub(crate) fn fp<T>(&self, r: EvalResult<T>) -> EvalResult<T> {
-        let Err(e) = r else { return r };
-        let Some(source) = self.source() else { return Err(e) };
+        match r {
+            Ok(v) => Ok(v),
+            Err(e) => Err(self.fp_chain(e)),
+        }
+    }
+
+    /// The `catch` half of [`Value::fp`], kept out of line so that the success path, which
+    /// every comparison and permutation takes, is not a call.
+    #[cold]
+    #[inline(never)]
+    fn fp_chain(&self, e: EvalError) -> EvalError {
+        let Some(source) = self.source() else { return e };
         let sources = match e.kind {
             crate::error::EvalErrorKind::Fingerprint { ref sources } => {
                 let mut chain = Vec::with_capacity(sources.len() + 1);
@@ -474,7 +484,7 @@ impl Value {
         };
         let mut e = e;
         e.kind = crate::error::EvalErrorKind::Fingerprint { sources };
-        Err(e)
+        e
     }
 
     pub(crate) fn kind(&self) -> ValueKind {
