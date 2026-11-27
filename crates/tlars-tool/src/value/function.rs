@@ -423,8 +423,8 @@ impl FcnRcdValue {
     pub(crate) fn snapshot(&self) -> (Option<&[Value]>, &[Value]) {
         match (&self.domain, self.norm.get()) {
             (FcnDomain::Interval(_), _) => (None, &self.values),
-            (FcnDomain::Explicit(_), Some((domain, values))) => (Some(domain), values),
-            (FcnDomain::Explicit(domain), None) => (Some(domain), &self.values),
+            (FcnDomain::Explicit(_), Some(Some((domain, values)))) => (Some(domain), values),
+            (FcnDomain::Explicit(domain), _) => (Some(domain), &self.values),
         }
     }
 

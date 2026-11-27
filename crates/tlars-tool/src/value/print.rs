@@ -424,7 +424,7 @@ fn is_tuple(ev: &mut Ev<'_>, snap: &mut Snapshot) -> EvalResult<bool> {
         return Ok(false);
     }
     if !snap.is_norm {
-        super::order::fcn_sort(ev, &mut snap.domain, &mut snap.values)?;
+        let _ = super::order::fcn_sort(ev, &mut snap.domain, &mut snap.values)?;
     }
     Ok(snap.domain.iter().enumerate().all(|(i, d)| matches!(d, Value::Int(n) if i64::from(*n) == i as i64 + 1)))
 }

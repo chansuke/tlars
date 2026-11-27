@@ -337,6 +337,11 @@ impl<'t> Ev<'t> {
                         Some(m) => &m[j],
                         None => own,
                     };
+                    // `compareTo` normalises the receiver first, once the other operand has
+                    // become a set, which is free when it already is one.
+                    if matches!(current, crate::value::Value::SetEnum(_)) {
+                        crate::value::order::normalize_unshared(self, &mut vals[j])?;
+                    }
                     cmp = vals[j].tlc_compare(self, current)?;
                     if cmp == std::cmp::Ordering::Greater {
                         abandoned = true;

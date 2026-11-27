@@ -441,7 +441,8 @@ impl Value {
             },
             // `ValueVec.search`: binary search once normalised, `equals` scan before.
             Value::SetEnum(set) => match set.norm.get() {
-                Some(norm) => {
+                Some(_) => {
+                    let norm = set.snapshot();
                     let (mut lo, mut hi) = (0, norm.len());
                     while lo < hi {
                         let mid = lo + (hi - lo) / 2;
@@ -957,17 +958,41 @@ fn any_empty(ev: &mut Ev<'_>, sets: &[Value]) -> EvalResult<bool> {
     Ok(false)
 }
 
-/// `SetEnumValue.normalize()` / `ValueVec.sort(true)`: binary insertion, dedup on
-/// `compareTo == 0` (the element already placed stays). Publishes into `norm` on success
-/// only.
+/// `SetEnumValue.normalize()`. Publishes into `norm` on success only.
 pub(crate) fn normalized<'a>(ev: &mut Ev<'_>, set: &'a SetEnumValue) -> EvalResult<&'a [Value]> {
-    if let Some(norm) = set.norm.get() {
-        return Ok(norm);
+    if set.norm.get().is_none() {
+        let (out, unchanged) = sort_dedup(ev, set.built.iter().cloned())?;
+        let _ = set.norm.set((!unchanged).then(|| out.into_boxed_slice()));
     }
-    let mut out: Vec<Value> = Vec::with_capacity(set.built.len());
-    let mut elems = set.built.iter();
+    Ok(set.snapshot())
+}
+
+/// `normalize()` of a set no other value holds yet, sorting its own array in place instead
+/// of copying it, as TLC's `ValueVec.sort` does. The comparisons are the ones
+/// [`normalized`] would make. On failure the set is left empty: its owner drops it with
+/// the error.
+pub(crate) fn normalize_unshared(ev: &mut Ev<'_>, v: &mut Value) -> EvalResult<()> {
+    if let Value::SetEnum(arc) = v
+        && let Some(set) = Arc::get_mut(arc)
+        && set.norm.get().is_none()
+    {
+        let built = std::mem::take(&mut set.built).into_vec();
+        let (out, _) = sort_dedup(ev, built.into_iter())?;
+        set.built = out.into_boxed_slice();
+        let _ = set.norm.set(None);
+    }
+    Ok(())
+}
+
+/// `ValueVec.sort(true)` (`ValueVec.java:172-204`): binary insertion, dedup on
+/// `compareTo == 0` (the element already placed stays). The flag says whether the result is
+/// the input in its own order, nothing moved or dropped.
+fn sort_dedup(ev: &mut Ev<'_>, elems: impl ExactSizeIterator<Item = Value>) -> EvalResult<(Vec<Value>, bool)> {
+    let mut out: Vec<Value> = Vec::with_capacity(elems.len());
+    let mut unchanged = true;
+    let mut elems = elems;
     if let Some(first) = elems.next() {
-        out.push(first.clone());
+        out.push(first);
     }
     for elem in elems {
         let (mut lo, mut hi, mut idx) = (0, out.len(), 0);
@@ -981,11 +1006,15 @@ pub(crate) fn normalized<'a>(ev: &mut Ev<'_>, set: &'a SetEnumValue) -> EvalResu
                 Ordering::Greater => lo = idx + 1,
             }
         }
-        if cmp != Ordering::Equal {
-            out.insert(if cmp == Ordering::Less { idx } else { idx + 1 }, elem.clone());
+        if cmp == Ordering::Equal {
+            unchanged = false;
+        } else {
+            let at = if cmp == Ordering::Less { idx } else { idx + 1 };
+            unchanged &= at == out.len();
+            out.insert(at, elem);
         }
     }
-    Ok(set.norm.get_or_init(|| out.into_boxed_slice()))
+    Ok((out, unchanged))
 }
 
 /// `RecordValue.normalize()` / `sort()` (`RecordValue.java:619-651`): the smallest field
@@ -1038,21 +1067,24 @@ pub(crate) fn record_normalized<'a>(ev: &mut Ev<'_>, r: &'a RecordValue) -> Eval
 /// `FcnRcdValue.normalize()` / `sort()` (`FcnRcdValue.java:714-749`), the same algorithm over
 /// an explicit domain. Only the explicit case sorts: an interval domain is already ordered.
 pub(crate) fn fcn_normalized<'a>(ev: &mut Ev<'_>, f: &'a FcnRcdValue) -> EvalResult<(&'a [Value], &'a [Value])> {
-    if let Some((domain, values)) = f.norm.get() {
-        return Ok((domain, values));
-    }
     let super::FcnDomain::Explicit(built) = &f.domain else { unreachable!("an interval domain is normalised") };
-    let mut domain = built.to_vec();
-    let mut values = f.values.to_vec();
-    fcn_sort(ev, &mut domain, &mut values)?;
-    let _ = f.norm.set((domain.into_boxed_slice(), values.into_boxed_slice()));
-    let (domain, values) = f.norm.get().expect("just published");
-    Ok((domain, values))
+    if f.norm.get().is_none() {
+        let mut domain = built.to_vec();
+        let mut values = f.values.to_vec();
+        let moved = fcn_sort(ev, &mut domain, &mut values)?;
+        let _ = f.norm.set(moved.then(|| (domain.into_boxed_slice(), values.into_boxed_slice())));
+    }
+    match f.norm.get() {
+        Some(Some((domain, values))) => Ok((domain, values)),
+        _ => Ok((built, &f.values)),
+    }
 }
 
 /// `FcnRcdValue.sort()` in place. `toString` runs it over a private copy, so a function the
-/// evaluator never normalises keeps printing in construction order.
-pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Value]) -> EvalResult<()> {
+/// evaluator never normalises keeps printing in construction order. `true` when an element
+/// moved.
+pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Value]) -> EvalResult<bool> {
+    let mut moved = false;
     let duplicate = |ev: &mut Ev<'_>, v: &Value| -> EvalResult<EvalError> {
         let shown = v.to_tlc_string(ev)?;
         Ok(EvalError::detailed(format!("The value\n{shown}\noccurs multiple times in the function domain."), None))
@@ -1063,6 +1095,7 @@ pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Valu
             Ordering::Greater => {
                 domain.swap(0, i);
                 values.swap(0, i);
+                moved = true;
             }
             Ordering::Less => {}
         }
@@ -1079,6 +1112,7 @@ pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Valu
             domain[j] = domain[j - 1].clone();
             values[j] = values[j - 1].clone();
             j -= 1;
+            moved = true;
         }
         if cmp == Ordering::Equal {
             return Err(duplicate(ev, &domain[i].clone())?);
@@ -1086,7 +1120,7 @@ pub(crate) fn fcn_sort(ev: &mut Ev<'_>, domain: &mut [Value], values: &mut [Valu
         domain[j] = d;
         values[j] = v;
     }
-    Ok(())
+    Ok(moved)
 }
 
 /// `IntervalValue.equals(IntervalValue)`: every empty interval is the same set. The size
